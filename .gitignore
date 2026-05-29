@@ -1,0 +1,4 @@
+build/
+.DS_Store
+temp/
+namespace_builder.gd
