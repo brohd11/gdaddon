@@ -19,7 +19,10 @@ func resolvePaths(args []string) (yamlFile, projectRoot string, err error) {
 
 	switch len(args) {
 	case 0:
-		yamlFile = filepath.Join(cwd, "addon_manifest.yml")
+		yamlFile, err = findManifest(cwd)
+		if err != nil {
+			return "", "", err
+		}
 		projectRoot = getGitDirectory()
 	case 1:
 		yamlFile = args[0]
@@ -46,6 +49,53 @@ func resolvePaths(args []string) (yamlFile, projectRoot string, err error) {
 	}
 
 	return yamlFile, projectRoot, nil
+}
+
+// maxManifestDepth limits how deep findManifest descends from the start dir.
+const maxManifestDepth = 5
+
+// findManifest walks the tree rooted at start (up to maxManifestDepth dirs deep,
+// including hidden dirs but skipping ".godot") looking for an addon manifest. It
+// returns the path of the first match in a shallow-first traversal.
+func findManifest(start string) (string, error) {
+	names := map[string]bool{"addon_manifest.yml": true, "addon_manifest.yaml": true}
+
+	var found string
+	err := filepath.WalkDir(start, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		if d.IsDir() {
+			if path != start && d.Name() == ".godot" {
+				return filepath.SkipDir
+			}
+			if depth(start, path) > maxManifestDepth {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if names[d.Name()] {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("error searching for manifest: %w", err)
+	}
+	if found == "" {
+		return "", fmt.Errorf("no addon_manifest.yml found within %d directories of %s", maxManifestDepth, start)
+	}
+	return found, nil
+}
+
+// depth returns how many directory levels path is below base.
+func depth(base, path string) int {
+	rel, err := filepath.Rel(base, path)
+	if err != nil || rel == "." {
+		return 0
+	}
+	return len(strings.Split(rel, string(filepath.Separator)))
 }
 
 func getGitDirectory() string {

@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -43,10 +44,19 @@ const (
 	modeInstalling
 )
 
-// rows reserved below a list for footer/status/log, and for the header above.
+// layout constants. headerHeight is the persistent context box above the list;
+// maxOutputLines caps how tall the output pane grows before it starts scrolling.
 const (
-	reserve      = 8
-	headerHeight = 5 // border (2) + 3 content lines
+	headerHeight   = 5 // border (2) + 3 content lines
+	maxOutputLines = 8
+)
+
+// focusArea tracks which pane receives navigation keys.
+type focusArea int
+
+const (
+	focusList focusArea = iota
+	focusOutput
 )
 
 // ---------- list items ----------
@@ -152,6 +162,8 @@ type model struct {
 	addons   list.Model
 	versions list.Model
 	spinner  spinner.Model
+	output   viewport.Model
+	focus    focusArea
 
 	selected addon.Addon
 	pick     versionItem
@@ -162,11 +174,13 @@ type model struct {
 }
 
 var (
-	statusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(lipgloss.Color("212"))
-	logStyle    = lipgloss.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("245"))
-	boxStyle    = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
-	headerStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
-	labelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	statusStyle  = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(lipgloss.Color("212"))
+	logStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	boxStyle     = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
+	headerStyle  = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
+	labelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	borderColor  = lipgloss.Color("240")
+	focusedColor = lipgloss.Color("212")
 )
 
 func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
@@ -178,11 +192,18 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	l.SetShowStatusBar(false)
-	enterVersions := func() []key.Binding {
-		return []key.Binding{key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "versions"))}
+	// Help is rendered manually below the status/output panes so it stays the
+	// bottom-most element; see View.
+	l.SetShowHelp(false)
+	browseKeys := func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "versions")),
+			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "output")),
+			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear log")),
+		}
 	}
-	l.AdditionalShortHelpKeys = enterVersions
-	l.AdditionalFullHelpKeys = enterVersions
+	l.AdditionalShortHelpKeys = browseKeys
+	l.AdditionalFullHelpKeys = browseKeys
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -201,6 +222,7 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 		hasProject:   exists,
 		addons:       l,
 		spinner:      sp,
+		output:       viewport.New(0, 0),
 	}
 }
 
@@ -210,13 +232,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.addons.SetSize(msg.Width, m.listHeight())
-		// m.versions is a zero-value list until a version list is built in
-		// releasesMsg; SetSize on it would nil-panic. It's created with the
-		// current size there, so we only need to resize it while it's in use.
-		if m.mode == modeVersions {
-			m.versions.SetSize(msg.Width, m.listHeight())
-		}
+		m.refreshSizes()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -237,6 +253,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vl := list.New(items, list.NewDefaultDelegate(), m.width, m.listHeight())
 		vl.Title = "Versions · " + m.selected.Name
 		vl.SetShowStatusBar(false)
+		vl.SetShowHelp(false)
 		versionKeys := func() []key.Binding {
 			return []key.Binding{
 				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
@@ -247,20 +264,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vl.AdditionalFullHelpKeys = versionKeys
 		m.versions = vl
 		m.mode = modeVersions
+		m.refreshSizes()
 		return m, nil
 
 	case installEvent:
 		if !msg.done {
-			m.logs = append(m.logs, msg.line)
+			m.appendLog(msg.line)
 			return m, waitForEvent(m.events)
 		}
 		if msg.err != nil {
-			m.logs = append(m.logs, fmt.Sprintf("[%s] error: %v", m.selected.Name, msg.err))
+			m.appendLog(fmt.Sprintf("[%s] error: %v", m.selected.Name, msg.err))
 			m.statusMsg = "install failed"
 			m.mode = modeBrowse
 			return m, nil
 		}
-		m.logs = append(m.logs, fmt.Sprintf("[%s] installed", m.selected.Name))
+		m.appendLog(fmt.Sprintf("[%s] installed", m.selected.Name))
 		return m, m.finishInstall()
 
 	case refreshMsg:
@@ -273,6 +291,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsg = fmt.Sprintf("updated %s → %s", m.selected.Name, msg.version)
 		m.mode = modeBrowse
+		m.refreshSizes()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -286,8 +305,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeBrowse:
 		m.addons, cmd = m.addons.Update(msg)
+		m.refreshSizes()
 	case modeVersions:
 		m.versions, cmd = m.versions.Update(msg)
+		m.refreshSizes()
 	}
 	return m, cmd
 }
@@ -298,6 +319,40 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	// When the output pane holds focus, navigation keys scroll it; everything
+	// else either toggles back or clears.
+	if m.focus == focusOutput {
+		switch k {
+		case "tab", "esc":
+			m.focus = focusList
+			return m, nil
+		case "c":
+			m.clearLogs()
+			return m, nil
+		case "q":
+			return m, tea.Quit
+		}
+		var cmd tea.Cmd
+		m.output, cmd = m.output.Update(msg)
+		return m, cmd
+	}
+
+	// Global keys, available in any mode unless a filter input is capturing
+	// text: tab jumps into the output pane, c clears the log.
+	if !m.filtering() {
+		switch k {
+		case "tab":
+			if m.outputVisible() {
+				m.focus = focusOutput
+				m.output.GotoBottom()
+			}
+			return m, nil
+		case "c":
+			m.clearLogs()
+			return m, nil
+		}
+	}
+
 	switch m.mode {
 	case modeBrowse:
 		// While the filter input is active, let the list consume keys so typing
@@ -305,6 +360,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.addons.FilterState() == list.Filtering {
 			var cmd tea.Cmd
 			m.addons, cmd = m.addons.Update(msg)
+			m.refreshSizes()
 			return m, cmd
 		}
 		switch k {
@@ -322,6 +378,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.addons, cmd = m.addons.Update(msg)
+		m.refreshSizes()
 		return m, cmd
 
 	case modeFetching:
@@ -343,13 +400,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.versions, cmd = m.versions.Update(msg)
+		m.refreshSizes()
 		return m, cmd
 
 	case modeConfirm:
 		switch k {
 		case "y", "Y", "enter":
 			m.mode = modeInstalling
-			m.logs = nil
 			return m.startInstall()
 		case "n", "N", "esc":
 			m.mode = modeVersions
@@ -364,13 +421,87 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // listHeight is the rows available to a list, leaving room for the header
-// above and the footer/status/log below.
+// above and the status line / output pane below (each only when present).
 func (m model) listHeight() int {
-	h := m.height - reserve - headerHeight
+	used := headerHeight
+	if m.statusMsg != "" {
+		used++
+	}
+	used += m.outputBoxHeight()
+	used += m.helpHeight()
+	h := m.height - used
 	if h < 1 {
 		h = 1
 	}
 	return h
+}
+
+// helpView renders a list's help bar on its own, so it can be placed below the
+// status and output panes.
+func helpView(l list.Model) string {
+	return l.Styles.HelpStyle.Render(l.Help.View(l))
+}
+
+// helpHeight is the row count of the active list's help bar (0 when no list is
+// on screen).
+func (m model) helpHeight() int {
+	switch m.mode {
+	case modeBrowse:
+		return lipgloss.Height(helpView(m.addons))
+	case modeVersions:
+		return lipgloss.Height(helpView(m.versions))
+	}
+	return 0
+}
+
+// filtering reports whether the active list's filter input is capturing text,
+// in which case global single-key shortcuts must not steal keystrokes.
+func (m model) filtering() bool {
+	switch m.mode {
+	case modeBrowse:
+		return m.addons.FilterState() == list.Filtering
+	case modeVersions:
+		return m.versions.FilterState() == list.Filtering
+	}
+	return false
+}
+
+// refreshSizes re-lays out the lists and output pane for the current window
+// size and log volume. Safe to call before the first WindowSizeMsg.
+func (m *model) refreshSizes() {
+	if m.width == 0 {
+		return
+	}
+	lh := m.listHeight()
+	m.addons.SetSize(m.width, lh)
+	// versions is a zero-value list until built in releasesMsg; only size it
+	// while it's the active screen.
+	if m.mode == modeVersions {
+		m.versions.SetSize(m.width, lh)
+	}
+	m.output.Width = m.outputInnerWidth()
+	m.output.Height = m.outputContentHeight()
+	m.output.SetContent(m.logContent())
+}
+
+// appendLog records a line and keeps the output pane scrolled to the newest
+// entry unless the user is actively scrolling it.
+func (m *model) appendLog(line string) {
+	m.logs = append(m.logs, line)
+	m.refreshSizes()
+	if m.focus != focusOutput {
+		m.output.GotoBottom()
+	}
+}
+
+// clearLogs empties the output pane and the status line, and returns focus to
+// the list.
+func (m *model) clearLogs() {
+	m.logs = nil
+	m.statusMsg = ""
+	m.focus = focusList
+	m.output.SetContent("")
+	m.refreshSizes()
 }
 
 func (m model) View() string {
@@ -380,20 +511,28 @@ func (m model) View() string {
 		body = fmt.Sprintf("\n  %s fetching versions for %s…\n", m.spinner.View(), m.selected.Name)
 
 	case modeVersions:
-		body = m.versions.View()
+		body = m.versions.View() + "\n" + helpView(m.versions)
 
 	case modeConfirm:
 		body = m.confirmView()
 
 	case modeInstalling:
-		body = fmt.Sprintf("\n  %s installing %s…\n\n", m.spinner.View(), m.selected.Name) + m.logView()
+		body = fmt.Sprintf("\n  %s installing %s…\n", m.spinner.View(), m.selected.Name)
+		if len(m.logs) > 0 {
+			body += "\n" + m.outputView()
+		}
 
 	default: // modeBrowse
-		body = m.addons.View() + "\n"
+		// Order bottom-up: list, then status, then output, then the help bar
+		// as the final (lowest) element.
+		body = m.addons.View()
 		if m.statusMsg != "" {
-			body += statusStyle.Render(m.statusMsg) + "\n"
+			body += "\n" + statusStyle.Render(m.statusMsg)
 		}
-		body += m.logView()
+		if len(m.logs) > 0 {
+			body += "\n" + m.outputView()
+		}
+		body += "\n" + helpView(m.addons)
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body)
@@ -480,16 +619,84 @@ func indentLines(s, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m model) logView() string {
-	logs := m.logs
-	if len(logs) > reserve-2 {
-		logs = logs[len(logs)-(reserve-2):]
+// outputInnerWidth is the text width inside the output box (full width minus
+// the side borders and the 1-col padding on each side).
+func (m model) outputInnerWidth() int {
+	w := m.width - 2 - 2 - 2 // header margin parity, side borders, padding
+	if w < 10 {
+		w = 10
 	}
+	return w
+}
+
+// outputContentHeight is the number of log lines shown before scrolling kicks in.
+func (m model) outputContentHeight() int {
+	n := len(m.logs)
+	if n > maxOutputLines {
+		n = maxOutputLines
+	}
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// outputVisible reports whether the output pane is currently on screen.
+func (m model) outputVisible() bool {
+	return len(m.logs) > 0 && (m.mode == modeBrowse || m.mode == modeInstalling)
+}
+
+// outputBoxHeight is the total rows the output pane occupies (content + the top
+// and bottom border lines), or 0 when there is nothing to show.
+func (m model) outputBoxHeight() int {
+	if !m.outputVisible() {
+		return 0
+	}
+	return m.outputContentHeight() + 2
+}
+
+// logContent renders the log lines for the viewport.
+func (m model) logContent() string {
 	var b strings.Builder
-	for _, l := range logs {
-		b.WriteString(logStyle.Render(l) + "\n")
+	for i, l := range m.logs {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(logStyle.Render(l))
 	}
 	return b.String()
+}
+
+// outputView draws the scrollable log inside a bordered box whose top edge is
+// interrupted by an "Output" legend (and a scroll hint while focused).
+func (m model) outputView() string {
+	color := borderColor
+	label := "Output"
+	if m.focus == focusOutput {
+		color = focusedColor
+		label = "Output · ↑/↓ scroll · tab/esc back"
+	}
+
+	inner := m.outputInnerWidth()
+	box := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderTop(false).
+		BorderForeground(color).
+		Padding(0, 1).
+		Width(inner + 2) // inner text + the 1-col padding on each side
+	content := box.Render(m.output.View())
+
+	// Hand-draw the top border so the legend can sit mid-line. The run between
+	// the corners is the same width as the bottom border: inner + 2 (padding).
+	legend := "─ " + label + " "
+	fill := (inner + 2) - lipgloss.Width(legend)
+	if fill < 0 {
+		fill = 0
+	}
+	top := lipgloss.NewStyle().Foreground(color).
+		Render("┌" + legend + strings.Repeat("─", fill) + "┐")
+
+	return top + "\n" + content
 }
 
 // ---------- commands ----------

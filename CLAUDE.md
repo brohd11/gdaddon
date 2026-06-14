@@ -29,7 +29,7 @@ Build outputs go to `build/<platform>/gdutil[.exe]`.
 ## Running
 
 ```bash
-gdutil addon_install                                        # addon_manifest.yml + git root auto-detected
+gdutil addon_install                                        # manifest found via filesystem walk + git root auto-detected
 gdutil addon_install path/to/addon_manifest.yml             # explicit manifest
 gdutil addon_install path/to/addon_manifest.yml /godot/proj # explicit manifest + project root
 ```
