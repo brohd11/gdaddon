@@ -56,3 +56,33 @@ func TestUpdateEntryPreservesFormatting(t *testing.T) {
 		t.Errorf("blank line between entries lost; got:\n%s", got)
 	}
 }
+
+func TestUpdateEntryEmptyURLPreservesURL(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origURL := "url: https://github.com/TokisanGames/Terrain3D/releases/download/v1.0.1/Terrain3D_v1.0.1.zip"
+	if err := UpdateEntry(path, "Terrain3D", "", "1.0.2"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(mustRead(t, path))
+	if !strings.Contains(got, origURL) {
+		t.Errorf("url should be untouched when url arg is empty; got:\n%s", got)
+	}
+	if !strings.Contains(got, `version: "1.0.2"`) {
+		t.Errorf("version not updated; got:\n%s", got)
+	}
+}
+
+func mustRead(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}

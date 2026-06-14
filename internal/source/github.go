@@ -71,6 +71,17 @@ func AvailableVersions(ctx context.Context, rawURL string) (*Listing, error) {
 	return listing, nil
 }
 
+// Branches lists the repo's branches as branch-HEAD archive assets, newest
+// commits tracked live. Fetched lazily (only when the user opens HEAD) to avoid
+// spending an extra API call on every version listing.
+func Branches(ctx context.Context, rawURL string) ([]Asset, error) {
+	ref, err := parseGitHub(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	return fetchBranches(ctx, ref.Owner, ref.Repo)
+}
+
 func parseGitHub(rawURL string) (repoRef, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -106,15 +117,15 @@ type ghRelease struct {
 	} `json:"assets"`
 }
 
-func fetchReleases(ctx context.Context, owner, repo string) ([]Release, error) {
-	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=30", owner, repo)
-
+// ghGetJSON performs a GitHub API GET and decodes the JSON body into out,
+// applying the shared headers, timeout, optional token, and rate-limit handling.
+func ghGetJSON(ctx context.Context, endpoint string, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "gdutil")
@@ -124,19 +135,25 @@ func fetchReleases(ctx context.Context, owner, repo string) ([]Release, error) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-		return nil, fmt.Errorf("github API rate-limited (set GITHUB_TOKEN to raise the limit)")
+		return fmt.Errorf("github API rate-limited (set GITHUB_TOKEN to raise the limit)")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("github API returned %s", resp.Status)
+		return fmt.Errorf("github API returned %s", resp.Status)
 	}
 
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func fetchReleases(ctx context.Context, owner, repo string) ([]Release, error) {
+	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=30", owner, repo)
+
 	var raw []ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	if err := ghGetJSON(ctx, endpoint, &raw); err != nil {
 		return nil, err
 	}
 
@@ -150,14 +167,33 @@ func fetchReleases(ctx context.Context, owner, repo string) ([]Release, error) {
 			}
 			rel.Assets = append(rel.Assets, Asset{Name: a.Name, URL: a.URL})
 		}
-		// Releases with no usable .zip asset still have a source archive.
-		if len(rel.Assets) == 0 {
-			rel.Assets = append(rel.Assets, Asset{
-				Name: "(source archive)",
-				URL:  fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.zip", owner, repo, r.TagName),
-			})
-		}
+		// Every release also offers GitHub's generated source archive, appended
+		// last. For releases with no uploaded .zip it's the only option.
+		rel.Assets = append(rel.Assets, Asset{
+			Name: "Source code.zip",
+			URL:  fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.zip", owner, repo, r.TagName),
+		})
 		releases = append(releases, rel)
 	}
 	return releases, nil
+}
+
+func fetchBranches(ctx context.Context, owner, repo string) ([]Asset, error) {
+	endpoint := fmt.Sprintf("https://api.github.com/repos/%s/%s/branches?per_page=100", owner, repo)
+
+	var raw []struct {
+		Name string `json:"name"`
+	}
+	if err := ghGetJSON(ctx, endpoint, &raw); err != nil {
+		return nil, err
+	}
+
+	branches := make([]Asset, 0, len(raw))
+	for _, b := range raw {
+		branches = append(branches, Asset{
+			Name: b.Name,
+			URL:  fmt.Sprintf("https://github.com/%s/%s/archive/refs/heads/%s.zip", owner, repo, b.Name),
+		})
+	}
+	return branches, nil
 }

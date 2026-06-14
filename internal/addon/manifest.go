@@ -15,6 +15,8 @@ func LocalVersion(fullPath string) string {
 // UpdateEntry rewrites a single manifest entry's url and version in place.
 // It edits only those two lines (inserting them if absent), leaving every other
 // line — blank lines, comments, indentation, quoting — byte-for-byte intact.
+// An empty url leaves the existing url line untouched (used after install/update,
+// where we pin the new version but keep the user's original source url).
 // It assumes the flat manifest shape: top-level entry keys at column 0 with
 // indented url/path/version fields beneath them.
 func UpdateEntry(manifestPath, name, url, version string) error {
@@ -58,7 +60,9 @@ func UpdateEntry(manifestPath, name, url, version string) error {
 		indent = ind
 		switch key {
 		case "url":
-			lines[i] = ind + "url: " + url
+			if url != "" {
+				lines[i] = ind + "url: " + url
+			}
 			urlDone = true
 		case "version":
 			lines[i] = ind + `version: "` + version + `"`
@@ -67,7 +71,7 @@ func UpdateEntry(manifestPath, name, url, version string) error {
 	}
 
 	var inserts []string
-	if !urlDone {
+	if !urlDone && url != "" {
 		inserts = append(inserts, indent+"url: "+url)
 	}
 	if !versionDone {

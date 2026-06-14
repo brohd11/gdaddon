@@ -40,8 +40,11 @@ const (
 	modeBrowse mode = iota
 	modeFetching
 	modeVersions
+	modeFetchingBranches
+	modeSubmenu
 	modeConfirm
 	modeInstalling
+	modeInstallingAll
 )
 
 // layout constants. headerHeight is the persistent context box above the list;
@@ -49,6 +52,7 @@ const (
 const (
 	headerHeight   = 5 // border (2) + 3 content lines
 	maxOutputLines = 8
+	footerSpacer   = 1 // blank line below the help bar so the layout bottom is static
 )
 
 // focusArea tracks which pane receives navigation keys.
@@ -61,6 +65,14 @@ const (
 
 // ---------- list items ----------
 
+// installAllItem is the entry pinned to the top of the browse list; selecting it
+// runs the manifest install (the equivalent of the addon_install CLI).
+type installAllItem struct{}
+
+func (installAllItem) Title() string       { return "↧ Install / update all" }
+func (installAllItem) FilterValue() string { return "install all" }
+func (installAllItem) Description() string { return "download everything per the manifest" }
+
 type item struct{ status addon.Status }
 
 func (i item) Title() string       { return i.status.Addon.Name }
@@ -72,6 +84,9 @@ func (i item) Description() string {
 	case addon.StateInvalid:
 		return "✗ invalid — missing url or path"
 	case addon.StateMissing:
+		if s.Addon.Version != "" {
+			return "• not installed — target v" + s.Addon.Version
+		}
 		return "• not installed"
 	case addon.StateInstalled:
 		return fmt.Sprintf("✓ installed v%s", s.LocalVersion)
@@ -87,6 +102,30 @@ func (i item) Description() string {
 	return ""
 }
 
+// headItem is the top-of-list entry that opens the branch (refs/heads) submenu.
+type headItem struct{}
+
+func (headItem) Title() string       { return "HEAD" }
+func (headItem) FilterValue() string { return "HEAD" }
+func (headItem) Description() string { return "track a branch (refs/heads)" }
+
+// releaseItem is one release in the top-level versions list. Selecting it either
+// drops straight into confirm (single asset) or opens the asset submenu.
+type releaseItem struct{ rel source.Release }
+
+func (r releaseItem) Title() string       { return r.rel.Tag }
+func (r releaseItem) FilterValue() string { return r.rel.Tag }
+
+func (r releaseItem) Description() string {
+	d := fmt.Sprintf("%d asset(s)", len(r.rel.Assets))
+	if r.rel.Prerelease {
+		d += " · prerelease"
+	}
+	return d
+}
+
+// versionItem is a leaf choice (a branch or a release asset) shown in a submenu
+// and carried in m.pick through confirm/install.
 type versionItem struct {
 	tag        string
 	asset      source.Asset
@@ -98,14 +137,14 @@ func (v versionItem) Title() string {
 	if v.branch {
 		return "branch: " + v.tag
 	}
-	return v.tag
+	return v.asset.Name
 }
 
 func (v versionItem) Description() string {
-	d := v.asset.Name
 	if v.branch {
-		d = "latest commit · " + d
+		return "latest commit · " + v.asset.Name
 	}
+	d := v.tag
 	if v.prerelease {
 		d += " · prerelease"
 	}
@@ -114,17 +153,30 @@ func (v versionItem) Description() string {
 
 func (v versionItem) FilterValue() string { return v.tag + " " + v.asset.Name }
 
-func versionItems(l *source.Listing) []list.Item {
-	var items []list.Item
-	if l.Branch != nil {
-		for _, a := range l.Branch.Assets {
-			items = append(items, versionItem{tag: l.Branch.Tag, asset: a, branch: true})
-		}
-	}
+// versionTopItems builds the top-level versions list: HEAD first, then one entry
+// per release (newest first).
+func versionTopItems(l *source.Listing) []list.Item {
+	items := []list.Item{headItem{}}
 	for _, r := range l.Releases {
-		for _, a := range r.Assets {
-			items = append(items, versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease})
-		}
+		items = append(items, releaseItem{rel: r})
+	}
+	return items
+}
+
+// assetItems builds the per-release asset submenu.
+func assetItems(r source.Release) []list.Item {
+	items := make([]list.Item, 0, len(r.Assets))
+	for _, a := range r.Assets {
+		items = append(items, versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease})
+	}
+	return items
+}
+
+// branchItems builds the HEAD/branch submenu.
+func branchItems(branches []source.Asset) []list.Item {
+	items := make([]list.Item, 0, len(branches))
+	for _, b := range branches {
+		items = append(items, versionItem{tag: b.Name, asset: b, branch: true})
 	}
 	return items
 }
@@ -147,6 +199,15 @@ type refreshMsg struct {
 	version  string
 }
 
+type branchesMsg struct {
+	branches []source.Asset
+	err      error
+}
+
+type installedAllMsg struct {
+	statuses []addon.Status
+}
+
 // ---------- model ----------
 
 type model struct {
@@ -161,12 +222,15 @@ type model struct {
 	mode     mode
 	addons   list.Model
 	versions list.Model
+	submenu  list.Model
 	spinner  spinner.Model
 	output   viewport.Model
 	focus    focusArea
 
-	selected addon.Addon
-	pick     versionItem
+	listing       *source.Listing
+	selected      addon.Addon
+	selectedLocal string // installed version of selected addon, for the versions title
+	pick          versionItem
 
 	events    chan installEvent
 	logs      []string
@@ -184,9 +248,12 @@ var (
 )
 
 func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
-	items := make([]list.Item, len(statuses))
-	for i, s := range statuses {
-		items[i] = item{status: s}
+	// installAllItem is pinned first; the addons follow (offset by 1 — see
+	// applyStatuses which writes back into the same layout).
+	items := make([]list.Item, 0, len(statuses)+1)
+	items = append(items, installAllItem{})
+	for _, s := range statuses {
+		items = append(items, item{status: s})
 	}
 
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
@@ -198,6 +265,7 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 	browseKeys := func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "versions")),
+			key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "install all")),
 			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "output")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear log")),
 		}
@@ -226,13 +294,38 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 	}
 }
 
+// newSelectList builds a list styled like the others (no status bar, help drawn
+// separately, esc/enter hints) for the versions and submenu screens.
+func (m model) newSelectList(items []list.Item, title string) list.Model {
+	l := list.New(items, list.NewDefaultDelegate(), m.width, m.listHeight())
+	l.Title = title
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	keys := func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		}
+	}
+	l.AdditionalShortHelpKeys = keys
+	l.AdditionalFullHelpKeys = keys
+	return l
+}
+
 func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	nm, cmd := m.update(msg)
+	// Re-lay-out after every message: it's cheap and avoids chasing every spot
+	// that changes content height (help expansion, log growth, mode switches).
+	nm.refreshSizes()
+	return nm, cmd
+}
+
+func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.refreshSizes()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -244,33 +337,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = modeBrowse
 			return m, nil
 		}
-		items := versionItems(msg.listing)
-		if len(items) == 0 {
-			m.statusMsg = "no downloadable .zip versions found"
+		m.listing = msg.listing
+		m.versions = m.newSelectList(versionTopItems(msg.listing), m.versionsTitle())
+		m.mode = modeVersions
+		return m, nil
+
+	case branchesMsg:
+		if msg.err != nil {
+			m.statusMsg = "error: " + msg.err.Error()
 			m.mode = modeBrowse
 			return m, nil
 		}
-		vl := list.New(items, list.NewDefaultDelegate(), m.width, m.listHeight())
-		vl.Title = "Versions · " + m.selected.Name
-		vl.SetShowStatusBar(false)
-		vl.SetShowHelp(false)
-		versionKeys := func() []key.Binding {
-			return []key.Binding{
-				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
-				key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-			}
+		if len(msg.branches) == 0 {
+			m.statusMsg = "no branches found"
+			m.mode = modeVersions
+			return m, nil
 		}
-		vl.AdditionalShortHelpKeys = versionKeys
-		vl.AdditionalFullHelpKeys = versionKeys
-		m.versions = vl
-		m.mode = modeVersions
-		m.refreshSizes()
+		m.submenu = m.newSelectList(branchItems(msg.branches), "Branches · "+m.selected.Name)
+		m.mode = modeSubmenu
 		return m, nil
 
 	case installEvent:
 		if !msg.done {
 			m.appendLog(msg.line)
 			return m, waitForEvent(m.events)
+		}
+		if m.mode == modeInstallingAll {
+			return m, m.finishInstallAll()
 		}
 		if msg.err != nil {
 			m.appendLog(fmt.Sprintf("[%s] error: %v", m.selected.Name, msg.err))
@@ -281,17 +374,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendLog(fmt.Sprintf("[%s] installed", m.selected.Name))
 		return m, m.finishInstall()
 
+	case installedAllMsg:
+		m.applyStatuses(msg.statuses)
+		m.statusMsg = "install complete"
+		m.mode = modeBrowse
+		return m, nil
+
 	case refreshMsg:
-		if msg.statuses != nil {
-			for i, s := range msg.statuses {
-				if i < len(m.addons.Items()) {
-					m.addons.SetItem(i, item{status: s})
-				}
-			}
-		}
+		m.applyStatuses(msg.statuses)
 		m.statusMsg = fmt.Sprintf("updated %s → %s", m.selected.Name, msg.version)
 		m.mode = modeBrowse
-		m.refreshSizes()
 		return m, nil
 
 	case spinner.TickMsg:
@@ -305,15 +397,36 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.mode {
 	case modeBrowse:
 		m.addons, cmd = m.addons.Update(msg)
-		m.refreshSizes()
 	case modeVersions:
 		m.versions, cmd = m.versions.Update(msg)
-		m.refreshSizes()
+	case modeSubmenu:
+		m.submenu, cmd = m.submenu.Update(msg)
 	}
 	return m, cmd
 }
 
-func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+// applyStatuses writes refreshed statuses back into the addons list, offset by 1
+// to skip the pinned installAllItem.
+func (m *model) applyStatuses(statuses []addon.Status) {
+	for i, s := range statuses {
+		idx := i + 1
+		if idx < len(m.addons.Items()) {
+			m.addons.SetItem(idx, item{status: s})
+		}
+	}
+}
+
+// versionsTitle is the header for the versions screen, e.g.
+// "MyAddon - Current:v1.0.0 - Versions".
+func (m model) versionsTitle() string {
+	cur := "none"
+	if m.selectedLocal != "" {
+		cur = "v" + m.selectedLocal
+	}
+	return fmt.Sprintf("%s - Current:%s - Versions", m.selected.Name, cur)
+}
+
+func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 	k := msg.String()
 	if k == "ctrl+c" {
 		return m, tea.Quit
@@ -360,37 +473,65 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.addons.FilterState() == list.Filtering {
 			var cmd tea.Cmd
 			m.addons, cmd = m.addons.Update(msg)
-			m.refreshSizes()
 			return m, cmd
 		}
 		switch k {
 		case "q":
 			return m, tea.Quit
+		case "i":
+			return m.startInstallAll()
 		case "enter":
-			it, ok := m.addons.SelectedItem().(item)
-			if !ok || !it.status.Installable() {
-				return m, nil
+			switch sel := m.addons.SelectedItem().(type) {
+			case installAllItem:
+				return m.startInstallAll()
+			case item:
+				if !sel.status.Installable() {
+					return m, nil
+				}
+				m.selected = sel.status.Addon
+				m.selectedLocal = sel.status.LocalVersion
+				m.statusMsg = ""
+				m.mode = modeFetching
+				return m, tea.Batch(m.spinner.Tick, fetchReleases(m.selected.URL))
 			}
-			m.selected = it.status.Addon
-			m.statusMsg = ""
-			m.mode = modeFetching
-			return m, tea.Batch(m.spinner.Tick, fetchReleases(m.selected.URL))
+			return m, nil
 		}
 		var cmd tea.Cmd
 		m.addons, cmd = m.addons.Update(msg)
-		m.refreshSizes()
 		return m, cmd
 
-	case modeFetching:
+	case modeFetching, modeFetchingBranches:
 		return m, nil
 
 	case modeVersions:
+		if m.versions.FilterState() == list.Filtering {
+			var cmd tea.Cmd
+			m.versions, cmd = m.versions.Update(msg)
+			return m, cmd
+		}
 		switch k {
 		case "esc", "q":
 			m.mode = modeBrowse
 			return m, nil
 		case "enter":
-			v, ok := m.versions.SelectedItem().(versionItem)
+			return m.selectVersion()
+		}
+		var cmd tea.Cmd
+		m.versions, cmd = m.versions.Update(msg)
+		return m, cmd
+
+	case modeSubmenu:
+		if m.submenu.FilterState() == list.Filtering {
+			var cmd tea.Cmd
+			m.submenu, cmd = m.submenu.Update(msg)
+			return m, cmd
+		}
+		switch k {
+		case "esc", "q":
+			m.mode = modeVersions
+			return m, nil
+		case "enter":
+			v, ok := m.submenu.SelectedItem().(versionItem)
 			if !ok {
 				return m, nil
 			}
@@ -399,8 +540,7 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		var cmd tea.Cmd
-		m.versions, cmd = m.versions.Update(msg)
-		m.refreshSizes()
+		m.submenu, cmd = m.submenu.Update(msg)
 		return m, cmd
 
 	case modeConfirm:
@@ -409,15 +549,56 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeInstalling
 			return m.startInstall()
 		case "n", "N", "esc":
-			m.mode = modeVersions
+			// Return to wherever the pick came from: branch picks and multi-asset
+			// releases came via the submenu; single-asset releases came straight
+			// from the versions list.
+			if m.cameFromSubmenu() {
+				m.mode = modeSubmenu
+			} else {
+				m.mode = modeVersions
+			}
 			return m, nil
 		}
 		return m, nil
 
-	case modeInstalling:
+	case modeInstalling, modeInstallingAll:
 		return m, nil
 	}
 	return m, nil
+}
+
+// selectVersion handles an enter press on the top-level versions list: HEAD opens
+// the branch submenu, a single-asset release goes straight to confirm, and a
+// multi-asset release opens the asset submenu.
+func (m model) selectVersion() (model, tea.Cmd) {
+	switch sel := m.versions.SelectedItem().(type) {
+	case headItem:
+		m.mode = modeFetchingBranches
+		return m, tea.Batch(m.spinner.Tick, fetchBranches(m.selected.URL))
+	case releaseItem:
+		if len(sel.rel.Assets) == 1 {
+			m.pick = versionItem{tag: sel.rel.Tag, asset: sel.rel.Assets[0], prerelease: sel.rel.Prerelease}
+			m.mode = modeConfirm
+			return m, nil
+		}
+		m.submenu = m.newSelectList(assetItems(sel.rel), "Assets · "+sel.rel.Tag)
+		m.mode = modeSubmenu
+		return m, nil
+	}
+	return m, nil
+}
+
+// cameFromSubmenu reports whether the current pick was made in a submenu (a
+// branch, or an asset from a multi-asset release) rather than a single-asset
+// release chosen directly from the versions list.
+func (m model) cameFromSubmenu() bool {
+	if m.pick.branch {
+		return true
+	}
+	if r, ok := m.versions.SelectedItem().(releaseItem); ok {
+		return len(r.rel.Assets) > 1
+	}
+	return false
 }
 
 // listHeight is the rows available to a list, leaving room for the header
@@ -429,6 +610,9 @@ func (m model) listHeight() int {
 	}
 	used += m.outputBoxHeight()
 	used += m.helpHeight()
+	if m.mode == modeBrowse {
+		used += footerSpacer
+	}
 	h := m.height - used
 	if h < 1 {
 		h = 1
@@ -450,6 +634,8 @@ func (m model) helpHeight() int {
 		return lipgloss.Height(helpView(m.addons))
 	case modeVersions:
 		return lipgloss.Height(helpView(m.versions))
+	case modeSubmenu:
+		return lipgloss.Height(helpView(m.submenu))
 	}
 	return 0
 }
@@ -462,6 +648,8 @@ func (m model) filtering() bool {
 		return m.addons.FilterState() == list.Filtering
 	case modeVersions:
 		return m.versions.FilterState() == list.Filtering
+	case modeSubmenu:
+		return m.submenu.FilterState() == list.Filtering
 	}
 	return false
 }
@@ -474,10 +662,13 @@ func (m *model) refreshSizes() {
 	}
 	lh := m.listHeight()
 	m.addons.SetSize(m.width, lh)
-	// versions is a zero-value list until built in releasesMsg; only size it
-	// while it's the active screen.
+	// versions/submenu are zero-value lists until built; only size them while
+	// they're the active screen.
 	if m.mode == modeVersions {
 		m.versions.SetSize(m.width, lh)
+	}
+	if m.mode == modeSubmenu {
+		m.submenu.SetSize(m.width, lh)
 	}
 	m.output.Width = m.outputInnerWidth()
 	m.output.Height = m.outputContentHeight()
@@ -510,8 +701,14 @@ func (m model) View() string {
 	case modeFetching:
 		body = fmt.Sprintf("\n  %s fetching versions for %s…\n", m.spinner.View(), m.selected.Name)
 
+	case modeFetchingBranches:
+		body = fmt.Sprintf("\n  %s fetching branches for %s…\n", m.spinner.View(), m.selected.Name)
+
 	case modeVersions:
 		body = m.versions.View() + "\n" + helpView(m.versions)
+
+	case modeSubmenu:
+		body = m.submenu.View() + "\n" + helpView(m.submenu)
 
 	case modeConfirm:
 		body = m.confirmView()
@@ -522,9 +719,15 @@ func (m model) View() string {
 			body += "\n" + m.outputView()
 		}
 
+	case modeInstallingAll:
+		body = fmt.Sprintf("\n  %s installing all addons…\n", m.spinner.View())
+		if len(m.logs) > 0 {
+			body += "\n" + m.outputView()
+		}
+
 	default: // modeBrowse
-		// Order bottom-up: list, then status, then output, then the help bar
-		// as the final (lowest) element.
+		// Order bottom-up: list, then status, then output, then the help bar,
+		// then a blank spacer so the bottom edge stays put.
 		body = m.addons.View()
 		if m.statusMsg != "" {
 			body += "\n" + statusStyle.Render(m.statusMsg)
@@ -533,6 +736,7 @@ func (m model) View() string {
 			body += "\n" + m.outputView()
 		}
 		body += "\n" + helpView(m.addons)
+		body += strings.Repeat("\n", footerSpacer)
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body)
@@ -629,8 +833,13 @@ func (m model) outputInnerWidth() int {
 	return w
 }
 
-// outputContentHeight is the number of log lines shown before scrolling kicks in.
+// outputContentHeight is the viewport height for the log. In browse it's a fixed
+// region the log stretches to fill, so the list/output boundary doesn't shift as
+// lines accumulate; while installing it tracks the streaming output instead.
 func (m model) outputContentHeight() int {
+	if m.mode == modeBrowse {
+		return maxOutputLines
+	}
 	n := len(m.logs)
 	if n > maxOutputLines {
 		n = maxOutputLines
@@ -643,7 +852,7 @@ func (m model) outputContentHeight() int {
 
 // outputVisible reports whether the output pane is currently on screen.
 func (m model) outputVisible() bool {
-	return len(m.logs) > 0 && (m.mode == modeBrowse || m.mode == modeInstalling)
+	return len(m.logs) > 0 && (m.mode == modeBrowse || m.mode == modeInstalling || m.mode == modeInstallingAll)
 }
 
 // outputBoxHeight is the total rows the output pane occupies (content + the top
@@ -708,7 +917,37 @@ func fetchReleases(url string) tea.Cmd {
 	}
 }
 
-func (m model) startInstall() (tea.Model, tea.Cmd) {
+func fetchBranches(url string) tea.Cmd {
+	return func() tea.Msg {
+		branches, err := source.Branches(context.Background(), url)
+		return branchesMsg{branches: branches, err: err}
+	}
+}
+
+// startInstallAll runs the manifest install (Inspect + InstallAll), the same as
+// the addon_install CLI, streaming progress into the output pane.
+func (m model) startInstallAll() (model, tea.Cmd) {
+	m.mode = modeInstallingAll
+	m.events = make(chan installEvent)
+	manifestPath, projectRoot := m.manifestPath, m.projectRoot
+
+	go func(events chan installEvent) {
+		report := func(format string, args ...any) {
+			events <- installEvent{line: fmt.Sprintf(format, args...)}
+		}
+		statuses, err := addon.Inspect(manifestPath, projectRoot)
+		if err != nil {
+			report("error: %v", err)
+		} else {
+			_ = addon.InstallAll(statuses, projectRoot, report)
+		}
+		events <- installEvent{done: true}
+	}(m.events)
+
+	return m, tea.Batch(m.spinner.Tick, waitForEvent(m.events))
+}
+
+func (m model) startInstall() (model, tea.Cmd) {
 	m.events = make(chan installEvent)
 	target := addon.Addon{Name: m.selected.Name, URL: m.pick.asset.URL, Path: m.selected.Path}
 
@@ -742,6 +981,8 @@ func (m model) finishInstall() tea.Cmd {
 		if version == "" {
 			version = fallbackTag
 		}
+		// Record the concrete chosen url alongside the pinned version, so a later
+		// Install-all (or the CLI) reinstalls exactly what was selected here.
 		_ = addon.UpdateEntry(manifestPath, name, url, version)
 
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
@@ -749,5 +990,18 @@ func (m model) finishInstall() tea.Cmd {
 			return refreshMsg{version: version}
 		}
 		return refreshMsg{statuses: statuses, version: version}
+	}
+}
+
+// finishInstallAll re-inspects the manifest after a batch install so the list
+// reflects the new states.
+func (m model) finishInstallAll() tea.Cmd {
+	manifestPath, projectRoot := m.manifestPath, m.projectRoot
+	return func() tea.Msg {
+		statuses, err := addon.Inspect(manifestPath, projectRoot)
+		if err != nil {
+			return installedAllMsg{}
+		}
+		return installedAllMsg{statuses: statuses}
 	}
 }
