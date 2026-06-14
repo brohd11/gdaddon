@@ -203,3 +203,20 @@ func getLocalPluginVersion(addonPath string) string {
 
 	return strings.Trim(key.String(), `'"`)
 }
+
+// ProjectName reads config/name from a Godot project.godot at root. exists
+// reports whether project.godot is present; name may be "" if present but
+// unnamed. A plain line scan is used since project.godot's full syntax (arrays,
+// resource refs) trips strict INI parsers.
+func ProjectName(root string) (name string, exists bool) {
+	data, err := os.ReadFile(filepath.Join(root, "project.godot"))
+	if err != nil {
+		return "", false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "config/name="); ok {
+			return strings.Trim(strings.TrimSpace(rest), `"'`), true
+		}
+	}
+	return "", true
+}

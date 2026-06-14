@@ -42,8 +42,11 @@ const (
 	modeInstalling
 )
 
-// rows reserved below a list for footer/status/log.
-const reserve = 8
+// rows reserved below a list for footer/status/log, and for the header above.
+const (
+	reserve      = 8
+	headerHeight = 5 // border (2) + 3 content lines
+)
 
 // ---------- list items ----------
 
@@ -138,6 +141,9 @@ type refreshMsg struct {
 type model struct {
 	manifestPath string
 	projectRoot  string
+	manifestRel  string
+	projectName  string
+	hasProject   bool
 	width        int
 	height       int
 
@@ -159,6 +165,8 @@ var (
 	statusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(lipgloss.Color("212"))
 	logStyle    = lipgloss.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("245"))
 	boxStyle    = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
+	headerStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
+	labelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 )
 
 func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
@@ -174,9 +182,18 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 
+	rel, err := filepath.Rel(projectRoot, manifestPath)
+	if err != nil {
+		rel = manifestPath
+	}
+	name, exists := addon.ProjectName(projectRoot)
+
 	return model{
 		manifestPath: manifestPath,
 		projectRoot:  projectRoot,
+		manifestRel:  rel,
+		projectName:  name,
+		hasProject:   exists,
 		addons:       l,
 		spinner:      sp,
 	}
@@ -188,12 +205,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.addons.SetSize(msg.Width, msg.Height-reserve)
+		m.addons.SetSize(msg.Width, m.listHeight())
 		// m.versions is a zero-value list until a version list is built in
 		// releasesMsg; SetSize on it would nil-panic. It's created with the
 		// current size there, so we only need to resize it while it's in use.
 		if m.mode == modeVersions {
-			m.versions.SetSize(msg.Width, msg.Height-reserve)
+			m.versions.SetSize(msg.Width, m.listHeight())
 		}
 		return m, nil
 
@@ -212,7 +229,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.mode = modeBrowse
 			return m, nil
 		}
-		vl := list.New(items, list.NewDefaultDelegate(), m.width, m.height-reserve)
+		vl := list.New(items, list.NewDefaultDelegate(), m.width, m.listHeight())
 		vl.Title = "Versions · " + m.selected.Name
 		vl.SetShowStatusBar(false)
 		m.versions = vl
@@ -326,34 +343,121 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// listHeight is the rows available to a list, leaving room for the header
+// above and the footer/status/log below.
+func (m model) listHeight() int {
+	h := m.height - reserve - headerHeight
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
 func (m model) View() string {
+	var body string
 	switch m.mode {
 	case modeFetching:
-		return fmt.Sprintf("\n  %s fetching versions for %s…\n", m.spinner.View(), m.selected.Name)
+		body = fmt.Sprintf("\n  %s fetching versions for %s…\n", m.spinner.View(), m.selected.Name)
 
 	case modeVersions:
-		return m.versions.View() + "\n" + helpStyle.Render("enter select · esc back")
+		body = m.versions.View() + "\n" + helpStyle.Render("enter select · esc back")
 
 	case modeConfirm:
-		return m.confirmView()
+		body = m.confirmView()
 
 	case modeInstalling:
-		return fmt.Sprintf("\n  %s installing %s…\n\n", m.spinner.View(), m.selected.Name) + m.logView()
+		body = fmt.Sprintf("\n  %s installing %s…\n\n", m.spinner.View(), m.selected.Name) + m.logView()
 
 	default: // modeBrowse
-		out := m.addons.View() + "\n" + helpStyle.Render("↑/↓ navigate · enter versions · q quit") + "\n"
+		body = m.addons.View() + "\n" + helpStyle.Render("↑/↓ navigate · enter versions · q quit") + "\n"
 		if m.statusMsg != "" {
-			out += statusStyle.Render(m.statusMsg) + "\n"
+			body += statusStyle.Render(m.statusMsg) + "\n"
 		}
-		return out + m.logView()
+		body += m.logView()
 	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body)
+}
+
+// headerView renders the persistent context box shown on every screen.
+func (m model) headerView() string {
+	name := "No Project File"
+	if m.hasProject {
+		name = m.projectName
+		if name == "" {
+			name = "(unnamed project)"
+		}
+	}
+
+	inner := m.width - 4 // minus border (2) and padding (2)
+	if inner < 20 {
+		inner = 20
+	}
+	valWidth := inner - 10 // minus the "Manifest: " label
+
+	line := func(label, value string) string {
+		return labelStyle.Render(label) + truncLeft(value, valWidth)
+	}
+	body := strings.Join([]string{
+		labelStyle.Render("Project:  ") + name,
+		line("Root:     ", m.projectRoot),
+		line("Manifest: ", m.manifestRel),
+	}, "\n")
+
+	return headerStyle.Width(inner).Render(body)
+}
+
+// truncLeft keeps the right (most informative) end of a path, prefixing "…".
+func truncLeft(s string, max int) string {
+	if max < 4 {
+		max = 4
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return "…" + string(r[len(r)-(max-1):])
 }
 
 func (m model) confirmView() string {
 	v := m.pick
-	body := fmt.Sprintf("Install %s\n\n  version:  %s\n  asset:    %s\n  url:      %s\n\n  (y) confirm    (n) cancel",
-		m.selected.Name, v.tag, v.asset.Name, v.asset.URL)
-	return boxStyle.Render(body)
+
+	// Size the box to the screen and hard-wrap the (space-less) URL to fit.
+	inner := m.width - 10
+	if inner < 24 {
+		inner = 24
+	}
+	urlBlock := indentLines(hardWrap(v.asset.URL, inner-4), "    ")
+
+	body := fmt.Sprintf(
+		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s\n\n  (y) confirm    (n) cancel",
+		m.selected.Name, v.tag, v.asset.Name, m.selected.Path, urlBlock)
+	return boxStyle.Width(inner).Render(body)
+}
+
+// hardWrap breaks s into chunks of at most width runes (URLs have no spaces to
+// word-wrap on, so we break unconditionally).
+func hardWrap(s string, width int) string {
+	if width < 8 {
+		width = 8
+	}
+	r := []rune(s)
+	var b strings.Builder
+	for len(r) > width {
+		b.WriteString(string(r[:width]))
+		b.WriteByte('\n')
+		r = r[width:]
+	}
+	b.WriteString(string(r))
+	return b.String()
+}
+
+func indentLines(s, prefix string) string {
+	lines := strings.Split(s, "\n")
+	for i := range lines {
+		lines[i] = prefix + lines[i]
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m model) logView() string {
