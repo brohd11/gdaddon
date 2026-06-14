@@ -7,8 +7,10 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "gdutil",
-	Short: "Godot development utilities",
+	Use:           "gdutil",
+	Short:         "Godot development utilities",
+	SilenceUsage:  true, // don't dump usage on runtime (non-flag) errors
+	SilenceErrors: false,
 }
 
 func Execute() {
