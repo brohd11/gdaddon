@@ -12,6 +12,7 @@ import (
 	"gdutil/internal/addon"
 	"gdutil/internal/source"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -161,7 +162,6 @@ type model struct {
 }
 
 var (
-	helpStyle   = lipgloss.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("241"))
 	statusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(lipgloss.Color("212"))
 	logStyle    = lipgloss.NewStyle().Padding(0, 1).Foreground(lipgloss.Color("245"))
 	boxStyle    = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
@@ -178,6 +178,11 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	l.SetShowStatusBar(false)
+	enterVersions := func() []key.Binding {
+		return []key.Binding{key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "versions"))}
+	}
+	l.AdditionalShortHelpKeys = enterVersions
+	l.AdditionalFullHelpKeys = enterVersions
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -232,6 +237,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		vl := list.New(items, list.NewDefaultDelegate(), m.width, m.listHeight())
 		vl.Title = "Versions · " + m.selected.Name
 		vl.SetShowStatusBar(false)
+		versionKeys := func() []key.Binding {
+			return []key.Binding{
+				key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+				key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			}
+		}
+		vl.AdditionalShortHelpKeys = versionKeys
+		vl.AdditionalFullHelpKeys = versionKeys
 		m.versions = vl
 		m.mode = modeVersions
 		return m, nil
@@ -287,6 +300,13 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch m.mode {
 	case modeBrowse:
+		// While the filter input is active, let the list consume keys so typing
+		// "q" filters instead of quitting and enter applies the filter.
+		if m.addons.FilterState() == list.Filtering {
+			var cmd tea.Cmd
+			m.addons, cmd = m.addons.Update(msg)
+			return m, cmd
+		}
 		switch k {
 		case "q":
 			return m, tea.Quit
@@ -360,7 +380,7 @@ func (m model) View() string {
 		body = fmt.Sprintf("\n  %s fetching versions for %s…\n", m.spinner.View(), m.selected.Name)
 
 	case modeVersions:
-		body = m.versions.View() + "\n" + helpStyle.Render("enter select · esc back")
+		body = m.versions.View()
 
 	case modeConfirm:
 		body = m.confirmView()
@@ -369,7 +389,7 @@ func (m model) View() string {
 		body = fmt.Sprintf("\n  %s installing %s…\n\n", m.spinner.View(), m.selected.Name) + m.logView()
 
 	default: // modeBrowse
-		body = m.addons.View() + "\n" + helpStyle.Render("↑/↓ navigate · enter versions · q quit") + "\n"
+		body = m.addons.View() + "\n"
 		if m.statusMsg != "" {
 			body += statusStyle.Render(m.statusMsg) + "\n"
 		}
