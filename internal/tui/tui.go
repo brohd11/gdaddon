@@ -49,11 +49,7 @@ const (
 
 // layout constants. headerHeight is the persistent context box above the list;
 // maxOutputLines caps how tall the output pane grows before it starts scrolling.
-const (
-	headerHeight   = 5 // border (2) + 3 content lines
-	maxOutputLines = 8
-	footerSpacer   = 1 // blank line below the help bar so the layout bottom is static
-)
+const headerHeight = 5 // border (2) + 3 content lines
 
 // focusArea tracks which pane receives navigation keys.
 type focusArea int
@@ -238,13 +234,18 @@ type model struct {
 }
 
 var (
-	statusStyle  = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(lipgloss.Color("212"))
-	logStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	boxStyle     = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
-	headerStyle  = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("240"))
-	labelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	borderColor  = lipgloss.Color("240")
+	// mutedColor is the secondary/muted gray (borders, labels, help, list
+	// descriptions); logColor is brighter, near-white, for the output log text.
+	mutedColor   = lipgloss.Color("247")
+	logColor     = lipgloss.Color("252")
+	borderColor  = lipgloss.Color("245")
 	focusedColor = lipgloss.Color("212")
+
+	statusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(focusedColor)
+	logStyle    = lipgloss.NewStyle().Foreground(logColor)
+	boxStyle    = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
+	headerStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(borderColor)
+	labelStyle  = lipgloss.NewStyle().Foreground(mutedColor)
 )
 
 func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
@@ -256,12 +257,9 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 		items = append(items, item{status: s})
 	}
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
+	l := list.New(items, newDelegate(), 0, 0)
 	l.Title = "Godot Addons"
-	l.SetShowStatusBar(false)
-	// Help is rendered manually below the status/output panes so it stays the
-	// bottom-most element; see View.
-	l.SetShowHelp(false)
+	styleList(&l)
 	browseKeys := func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "versions")),
@@ -297,10 +295,9 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 // newSelectList builds a list styled like the others (no status bar, help drawn
 // separately, esc/enter hints) for the versions and submenu screens.
 func (m model) newSelectList(items []list.Item, title string) list.Model {
-	l := list.New(items, list.NewDefaultDelegate(), m.width, m.listHeight())
+	l := list.New(items, newDelegate(), m.width, m.listHeight())
 	l.Title = title
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
+	styleList(&l)
 	keys := func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
@@ -310,6 +307,27 @@ func (m model) newSelectList(items []list.Item, title string) list.Model {
 	l.AdditionalShortHelpKeys = keys
 	l.AdditionalFullHelpKeys = keys
 	return l
+}
+
+// newDelegate is the shared list delegate with brightened description text.
+func newDelegate() list.DefaultDelegate {
+	d := list.NewDefaultDelegate()
+	d.Styles.NormalDesc = d.Styles.NormalDesc.Foreground(mutedColor)
+	d.Styles.DimmedDesc = d.Styles.DimmedDesc.Foreground(mutedColor)
+	return d
+}
+
+// styleList applies the shared list config: hide the built-in status bar and
+// help (help is drawn manually at the bottom), and brighten the help colors.
+func styleList(l *list.Model) {
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.Help.Styles.ShortKey = l.Help.Styles.ShortKey.Foreground(mutedColor)
+	l.Help.Styles.ShortDesc = l.Help.Styles.ShortDesc.Foreground(mutedColor)
+	l.Help.Styles.ShortSeparator = l.Help.Styles.ShortSeparator.Foreground(mutedColor)
+	l.Help.Styles.FullKey = l.Help.Styles.FullKey.Foreground(mutedColor)
+	l.Help.Styles.FullDesc = l.Help.Styles.FullDesc.Foreground(mutedColor)
+	l.Help.Styles.FullSeparator = l.Help.Styles.FullSeparator.Foreground(mutedColor)
 }
 
 func (m model) Init() tea.Cmd { return nil }
@@ -338,7 +356,7 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			return m, nil
 		}
 		m.listing = msg.listing
-		m.versions = m.newSelectList(versionTopItems(msg.listing), m.versionsTitle())
+		m.versions = m.newSelectList(versionTopItems(msg.listing), m.headerTitle("Versions"))
 		m.mode = modeVersions
 		return m, nil
 
@@ -353,7 +371,7 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			m.mode = modeVersions
 			return m, nil
 		}
-		m.submenu = m.newSelectList(branchItems(msg.branches), "Branches · "+m.selected.Name)
+		m.submenu = m.newSelectList(branchItems(msg.branches), m.headerTitle("Branches"))
 		m.mode = modeSubmenu
 		return m, nil
 
@@ -416,14 +434,34 @@ func (m *model) applyStatuses(statuses []addon.Status) {
 	}
 }
 
-// versionsTitle is the header for the versions screen, e.g.
-// "MyAddon - Current:v1.0.0 - Versions".
-func (m model) versionsTitle() string {
+// headerTitle is the shared header for the selected addon's screens, e.g.
+// "MyAddon - Current:v1.0.0 - Versions" (section being Versions/Branches/Assets…).
+// An empty section yields just "MyAddon - Current:v1.0.0".
+func (m model) headerTitle(section string) string {
 	cur := "none"
 	if m.selectedLocal != "" {
 		cur = "v" + m.selectedLocal
 	}
-	return fmt.Sprintf("%s - Current:%s - Versions", m.selected.Name, cur)
+	base := fmt.Sprintf("%s - Current:%s", m.selected.Name, cur)
+	if section == "" {
+		return base
+	}
+	return base + " - " + section
+}
+
+// crumb renders the addon breadcrumb as a list-title-styled bar, so screens
+// without their own list title (fetching, confirm) keep a consistent header.
+func (m model) crumb(section string) string {
+	return m.addons.Styles.TitleBar.Render(m.addons.Styles.Title.Render(m.headerTitle(section)))
+}
+
+// pickSection describes the chosen asset for the confirm breadcrumb, e.g.
+// "Assets v1.0.0 - addon.zip" or "Branches - main".
+func (m model) pickSection() string {
+	if m.pick.branch {
+		return "Branches - " + m.pick.tag
+	}
+	return fmt.Sprintf("Assets %s - %s", m.pick.tag, m.pick.asset.Name)
 }
 
 func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
@@ -581,7 +619,7 @@ func (m model) selectVersion() (model, tea.Cmd) {
 			m.mode = modeConfirm
 			return m, nil
 		}
-		m.submenu = m.newSelectList(assetItems(sel.rel), "Assets · "+sel.rel.Tag)
+		m.submenu = m.newSelectList(assetItems(sel.rel), m.headerTitle("Assets "+sel.rel.Tag))
 		m.mode = modeSubmenu
 		return m, nil
 	}
@@ -610,9 +648,6 @@ func (m model) listHeight() int {
 	}
 	used += m.outputBoxHeight()
 	used += m.helpHeight()
-	if m.mode == modeBrowse {
-		used += footerSpacer
-	}
 	h := m.height - used
 	if h < 1 {
 		h = 1
@@ -626,18 +661,36 @@ func helpView(l list.Model) string {
 	return l.Styles.HelpStyle.Render(l.Help.View(l))
 }
 
-// helpHeight is the row count of the active list's help bar (0 when no list is
-// on screen).
-func (m model) helpHeight() int {
+// helpBar is the always-visible bottom bar. Interactive list screens show their
+// real key help; confirm and non-interactive screens render in the same help
+// format (key/desc styling, • separator) so the bar — and the layout — stays put.
+func (m model) helpBar() string {
 	switch m.mode {
 	case modeBrowse:
-		return lipgloss.Height(helpView(m.addons))
+		return helpView(m.addons)
 	case modeVersions:
-		return lipgloss.Height(helpView(m.versions))
+		return helpView(m.versions)
 	case modeSubmenu:
-		return lipgloss.Height(helpView(m.submenu))
+		return helpView(m.submenu)
+	case modeConfirm:
+		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
+			key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm")),
+			key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+		}))
+	default: // fetching / installing — non-interactive
+		return m.staticHelp(m.addons.Help.Styles.ShortDesc.Render("non-interactive · working…"))
 	}
-	return 0
+}
+
+// staticHelp wraps a pre-rendered help string in the list's HelpStyle so it
+// aligns with the real help bars.
+func (m model) staticHelp(s string) string {
+	return m.addons.Styles.HelpStyle.Render(s)
+}
+
+// helpHeight is the row count of the (always-visible) help bar.
+func (m model) helpHeight() int {
+	return lipgloss.Height(m.helpBar())
 }
 
 // filtering reports whether the active list's filter input is capturing text,
@@ -696,50 +749,65 @@ func (m *model) clearLogs() {
 }
 
 func (m model) View() string {
-	var body string
+	body := m.bodyView()
+	// Pad the body so the always-visible help bar sits at the very bottom.
+	if pad := (m.height - headerHeight - m.helpHeight()) - lipgloss.Height(body); pad > 0 {
+		body = lipgloss.JoinVertical(lipgloss.Left, body, blanks(pad))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body, m.helpBar())
+}
+
+// bodyView renders the mode-specific content between the header and the help
+// bar (which View appends).
+func (m model) bodyView() string {
 	switch m.mode {
 	case modeFetching:
-		body = fmt.Sprintf("\n  %s fetching versions for %s…\n", m.spinner.View(), m.selected.Name)
+		return lipgloss.JoinVertical(lipgloss.Left, m.crumb(""),
+			fmt.Sprintf("  %s fetching versions…", m.spinner.View()))
 
 	case modeFetchingBranches:
-		body = fmt.Sprintf("\n  %s fetching branches for %s…\n", m.spinner.View(), m.selected.Name)
+		return lipgloss.JoinVertical(lipgloss.Left, m.crumb(""),
+			fmt.Sprintf("  %s fetching branches…", m.spinner.View()))
 
 	case modeVersions:
-		body = m.versions.View() + "\n" + helpView(m.versions)
+		return m.versions.View()
 
 	case modeSubmenu:
-		body = m.submenu.View() + "\n" + helpView(m.submenu)
+		return m.submenu.View()
 
 	case modeConfirm:
-		body = m.confirmView()
+		return lipgloss.JoinVertical(lipgloss.Left, m.crumb(m.pickSection()), m.confirmView())
 
-	case modeInstalling:
-		body = fmt.Sprintf("\n  %s installing %s…\n", m.spinner.View(), m.selected.Name)
-		if len(m.logs) > 0 {
-			body += "\n" + m.outputView()
+	case modeInstalling, modeInstallingAll:
+		label := "installing all addons…"
+		if m.mode == modeInstalling {
+			label = "installing " + m.selected.Name + "…"
 		}
-
-	case modeInstallingAll:
-		body = fmt.Sprintf("\n  %s installing all addons…\n", m.spinner.View())
-		if len(m.logs) > 0 {
-			body += "\n" + m.outputView()
+		progress := fmt.Sprintf("\n  %s %s", m.spinner.View(), label)
+		if !m.outputVisible() {
+			return progress
 		}
+		// Push the output box to the bottom (just above the help bar) with a
+		// flexible filler, so it sits cleanly at the bottom and grows upward as
+		// lines stream in.
+		out := m.outputView()
+		filler := (m.height - headerHeight - m.helpHeight()) - lipgloss.Height(progress) - lipgloss.Height(out)
+		if filler < 1 {
+			filler = 1
+		}
+		return lipgloss.JoinVertical(lipgloss.Left, progress, blanks(filler), out)
 
 	default: // modeBrowse
-		// Order bottom-up: list, then status, then output, then the help bar,
-		// then a blank spacer so the bottom edge stays put.
-		body = m.addons.View()
+		// Order bottom-up: list, then status, then output.
+		body := m.addons.View()
 		if m.statusMsg != "" {
-			body += "\n" + statusStyle.Render(m.statusMsg)
+			body = lipgloss.JoinVertical(lipgloss.Left, body, statusStyle.Render(m.statusMsg))
 		}
 		if len(m.logs) > 0 {
-			body += "\n" + m.outputView()
+			body = lipgloss.JoinVertical(lipgloss.Left, body, m.outputView())
 		}
-		body += "\n" + helpView(m.addons)
-		body += strings.Repeat("\n", footerSpacer)
+		return body
 	}
-
-	return lipgloss.JoinVertical(lipgloss.Left, m.headerView(), body)
 }
 
 // headerView renders the persistent context box shown on every screen.
@@ -793,7 +861,7 @@ func (m model) confirmView() string {
 	urlBlock := indentLines(hardWrap(v.asset.URL, inner-4), "    ")
 
 	body := fmt.Sprintf(
-		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s\n\n  (y) confirm    (n) cancel",
+		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s",
 		m.selected.Name, v.tag, v.asset.Name, m.selected.Path, urlBlock)
 	return boxStyle.Width(inner).Render(body)
 }
@@ -815,6 +883,15 @@ func hardWrap(s string, width int) string {
 	return b.String()
 }
 
+// blanks returns an n-line block of empty lines (height n) for use as a flexible
+// filler/spacer in JoinVertical stacks.
+func blanks(n int) string {
+	if n < 1 {
+		return ""
+	}
+	return strings.Repeat("\n", n-1)
+}
+
 func indentLines(s, prefix string) string {
 	lines := strings.Split(s, "\n")
 	for i := range lines {
@@ -833,19 +910,13 @@ func (m model) outputInnerWidth() int {
 	return w
 }
 
-// outputContentHeight is the viewport height for the log. In browse it's a fixed
-// region the log stretches to fill, so the list/output boundary doesn't shift as
-// lines accumulate; while installing it tracks the streaming output instead.
+// outputContentHeight is the viewport height for the log: a fixed ~25% of the
+// terminal height, the same in every mode, so the log stretches to fill a stable
+// region (and scrolls past it) instead of growing line by line.
 func (m model) outputContentHeight() int {
-	if m.mode == modeBrowse {
-		return maxOutputLines
-	}
-	n := len(m.logs)
-	if n > maxOutputLines {
-		n = maxOutputLines
-	}
-	if n < 1 {
-		n = 1
+	n := m.height / 4
+	if n < 3 {
+		n = 3
 	}
 	return n
 }
