@@ -49,6 +49,8 @@ const (
 	modeNewPluginInput
 	modeNewPluginConfirm
 	modeImport
+	modeArchiveConfirm
+	modeArchiving
 	modeInstalling
 	modeInstallingAll
 )
@@ -273,11 +275,6 @@ type installedAllMsg struct {
 	statuses []addon.Status
 }
 
-type archivedMsg struct {
-	tag string
-	err error
-}
-
 // ---------- model ----------
 
 type model struct {
@@ -309,6 +306,12 @@ type model struct {
 
 	installedPath    string // resolved path from the last single install, for finishInstall
 	installedVersion string // version from the last single install's plugin.cfg
+	taskDone         bool   // a streaming task (archive) finished; awaiting dismissal
+
+	archiveRepoID  string         // pending archive: repo identity
+	archiveTag     string         // pending archive: version tag
+	archivePending []source.Asset // pending archive: assets to download
+	archiveReturn  mode           // screen to return to when the archive is cancelled
 
 	pendingName string // New Plugin: name (entered or derived) awaiting confirm
 	pendingURL  string // New Plugin: normalized url awaiting confirm
@@ -481,6 +484,17 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			m.appendLog(msg.line)
 			return m, waitForEvent(m.events)
 		}
+		if m.mode == modeArchiving {
+			// Stay on the log screen so the result (or error) is readable; the user
+			// dismisses with esc (handled in handleKey).
+			m.taskDone = true
+			if msg.err != nil {
+				m.appendLog("archive failed: " + msg.err.Error())
+			} else {
+				m.appendLog("archived " + m.archiveTag)
+			}
+			return m, nil
+		}
 		if m.mode == modeInstallingAll {
 			return m, m.finishInstallAll()
 		}
@@ -505,21 +519,6 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		m.applyStatuses(msg.statuses)
 		m.statusMsg = fmt.Sprintf("updated %s → %s", m.selected.Name, msg.version)
 		m.mode = modeBrowse
-		return m, nil
-
-	case archivedMsg:
-		if msg.err != nil {
-			m.statusMsg = "archive failed: " + msg.err.Error()
-		} else {
-			m.statusMsg = "archived " + msg.tag
-			// Rebuild the version list from the raw upstream listing so the new
-			// archive entry shows without double-merging existing archived assets.
-			if repoID, err := source.RepoID(m.selected.URL); err == nil {
-				archived, _ := archive.List(repoID)
-				m.listing = archive.Merge(cloneListing(m.ghListing), archived)
-				m.versions.SetItems(versionTopItems(m.listing))
-			}
-		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -762,6 +761,36 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 		}
 		return m, nil
 
+	case modeArchiveConfirm:
+		switch k {
+		case "y", "Y", "enter":
+			return m.startArchive()
+		case "n", "N", "esc":
+			m.statusMsg = ""
+			m.mode = m.archiveReturn
+			return m, nil
+		}
+		return m, nil
+
+	case modeArchiving:
+		// Non-interactive while downloading; once done, esc/enter returns to the
+		// versions list (rebuilt so the new archived packages show).
+		if !m.taskDone {
+			return m, nil
+		}
+		switch k {
+		case "esc", "enter", "q":
+			if repoID, err := source.RepoID(m.selected.URL); err == nil {
+				archived, _ := archive.List(repoID)
+				m.listing = archive.Merge(cloneListing(m.ghListing), archived)
+				m.versions.SetItems(versionTopItems(m.listing))
+			}
+			m.statusMsg = ""
+			m.mode = modeVersions
+			return m, nil
+		}
+		return m, nil
+
 	case modeNewPluginInput:
 		switch k {
 		case "esc":
@@ -933,11 +962,18 @@ func (m model) helpBar() string {
 		return helpView(m.submenu)
 	case modeImport:
 		return helpView(m.imports)
-	case modeConfirm:
+	case modeConfirm, modeArchiveConfirm:
 		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
 			key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm")),
 			key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
 		}))
+	case modeArchiving:
+		if m.taskDone {
+			return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
+				key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+			}))
+		}
+		return m.staticHelp(m.addons.Help.Styles.ShortDesc.Render("non-interactive · working…"))
 	case modeNewPluginInput:
 		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
 			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "field")),
@@ -1078,6 +1114,16 @@ func (m model) bodyView() string {
 	case modeConfirm:
 		return lipgloss.JoinVertical(lipgloss.Left, m.crumb(m.pickSection()), m.confirmView())
 
+	case modeArchiveConfirm:
+		return lipgloss.JoinVertical(lipgloss.Left, m.crumb("Archive "+m.archiveTag), m.archiveConfirmView())
+
+	case modeArchiving:
+		label := "archiving " + m.archiveTag + "…"
+		if m.taskDone {
+			label = "done — esc to go back"
+		}
+		return m.taskView(label)
+
 	case modeImport:
 		return m.imports.View()
 
@@ -1092,19 +1138,7 @@ func (m model) bodyView() string {
 		if m.mode == modeInstalling {
 			label = "installing " + m.selected.Name + "…"
 		}
-		progress := fmt.Sprintf("\n  %s %s", m.spinner.View(), label)
-		if !m.outputVisible() {
-			return progress
-		}
-		// Push the output box to the bottom (just above the help bar) with a
-		// flexible filler, so it sits cleanly at the bottom and grows upward as
-		// lines stream in.
-		out := m.outputView()
-		filler := (m.height - headerHeight - m.helpHeight()) - lipgloss.Height(progress) - lipgloss.Height(out)
-		if filler < 1 {
-			filler = 1
-		}
-		return lipgloss.JoinVertical(lipgloss.Left, progress, blanks(filler), out)
+		return m.taskView(label)
 
 	default: // modeBrowse
 		// Order bottom-up: list, then status, then output.
@@ -1169,17 +1203,53 @@ func (m model) confirmWidth() int {
 	return inner
 }
 
+// box renders body inside the shared bordered confirm/summary box, sized to the
+// screen. Reused by the install confirm, New Plugin confirm, and archive confirm.
+func (m model) box(body string) string {
+	return boxStyle.Width(m.confirmWidth()).Render(body)
+}
+
+// taskView renders a streaming-task screen: a spinner (or • once done) + label,
+// with the output log box anchored to the bottom and growing upward. Shared by
+// install, install-all, and archive.
+func (m model) taskView(label string) string {
+	glyph := m.spinner.View()
+	if m.taskDone {
+		glyph = "•"
+	}
+	progress := fmt.Sprintf("\n  %s %s", glyph, label)
+	if !m.outputVisible() {
+		return progress
+	}
+	out := m.outputView()
+	filler := (m.height - headerHeight - m.helpHeight()) - lipgloss.Height(progress) - lipgloss.Height(out)
+	if filler < 1 {
+		filler = 1
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, progress, blanks(filler), out)
+}
+
 func (m model) confirmView() string {
 	v := m.pick
 
-	// Size the box to the screen and hard-wrap the (space-less) URL to fit.
-	inner := m.confirmWidth()
-	urlBlock := indentLines(hardWrap(v.asset.URL, inner-4), "    ")
+	// Hard-wrap the (space-less) URL to fit inside the box.
+	urlBlock := indentLines(hardWrap(v.asset.URL, m.confirmWidth()-4), "    ")
 
-	body := fmt.Sprintf(
+	return m.box(fmt.Sprintf(
 		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s",
-		m.selected.Name, v.tag, v.asset.Name, m.selected.Path, urlBlock)
-	return boxStyle.Width(inner).Render(body)
+		m.selected.Name, v.tag, v.asset.Name, m.selected.Path, urlBlock))
+}
+
+// archiveConfirmView summarizes what will be downloaded into the local archive.
+func (m model) archiveConfirmView() string {
+	root, _ := archive.Dir()
+	lines := make([]string, len(m.archivePending))
+	for i, a := range m.archivePending {
+		lines[i] = "    • " + strings.TrimSuffix(a.Name, " - archived")
+	}
+	return m.box(fmt.Sprintf(
+		"Archive %s\n\n  version:   %s\n  packages:\n%s\n\n  into:      %s",
+		m.selected.Name, m.archiveTag, strings.Join(lines, "\n"), root))
 }
 
 // targetToggle renders the Project◄ ►Global switch with the active side
@@ -1225,17 +1295,15 @@ func (m model) newPluginFormView() string {
 
 // newPluginConfirmView reviews the entered values and the target before writing.
 func (m model) newPluginConfirmView() string {
-	inner := m.confirmWidth()
-	urlBlock := indentLines(hardWrap(m.pendingURL, inner-4), "    ")
+	urlBlock := indentLines(hardWrap(m.pendingURL, m.confirmWidth()-4), "    ")
 
 	path := m.pendingPath
 	if path == "" {
 		path = "(derived on install)"
 	}
-	body := fmt.Sprintf(
+	return m.box(fmt.Sprintf(
 		"Add plugin\n\n  name:     %s\n  url:\n%s\n  path:     %s\n\n  add to:   %s",
-		m.pendingName, urlBlock, path, m.targetToggle())
-	return boxStyle.Width(inner).Render(body)
+		m.pendingName, urlBlock, path, m.targetToggle()))
 }
 
 // hardWrap breaks s into chunks of at most width runes (URLs have no spaces to
@@ -1295,7 +1363,7 @@ func (m model) outputContentHeight() int {
 
 // outputVisible reports whether the output pane is currently on screen.
 func (m model) outputVisible() bool {
-	return len(m.logs) > 0 && (m.mode == modeBrowse || m.mode == modeInstalling || m.mode == modeInstallingAll)
+	return len(m.logs) > 0 && (m.mode == modeBrowse || m.mode == modeInstalling || m.mode == modeInstallingAll || m.mode == modeArchiving)
 }
 
 // outputBoxHeight is the total rows the output pane occupies (content + the top
@@ -1410,20 +1478,28 @@ func (m model) archiveSelection(sel list.Item) (model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.statusMsg = "archiving " + tag + "…"
-	return m, archiveAssets(repoID, tag, remote)
+	m.archiveRepoID = repoID
+	m.archiveTag = tag
+	m.archivePending = remote
+	m.archiveReturn = m.mode
+	m.mode = modeArchiveConfirm
+	return m, nil
 }
 
-// archiveAssets downloads and stores each asset, reporting the outcome.
-func archiveAssets(repoID, tag string, assets []source.Asset) tea.Cmd {
-	return func() tea.Msg {
+// startArchive downloads and stores the pending assets, streaming progress into
+// the log screen (shared task machinery — see runTask).
+func (m model) startArchive() (model, tea.Cmd) {
+	repoID, tag, assets := m.archiveRepoID, m.archiveTag, m.archivePending
+	return m.runTask(modeArchiving, func(report addon.Reporter, done chan<- installEvent) {
 		for _, a := range assets {
+			report("downloading %s …", strings.TrimSuffix(a.Name, " - archived"))
 			if err := archive.Archive(repoID, tag, a); err != nil {
-				return archivedMsg{tag: tag, err: err}
+				done <- installEvent{done: true, err: err}
+				return
 			}
 		}
-		return archivedMsg{tag: tag}
-	}
+		done <- installEvent{done: true}
+	})
 }
 
 func fetchBranches(url string) tea.Cmd {
@@ -1433,42 +1509,46 @@ func fetchBranches(url string) tea.Cmd {
 	}
 }
 
-// startInstallAll runs the manifest install (Inspect + InstallAll), the same as
-// the addon_install CLI, streaming progress into the output pane.
-func (m model) startInstallAll() (model, tea.Cmd) {
-	m.mode = modeInstallingAll
+// runTask switches to a streaming-log screen (taskMode), runs `run` in the
+// background piping report() lines into the output log, and waits for the first
+// event. `run` sends the terminating installEvent itself (with any done payload
+// like err/path/version). Shared by install, install-all, and archive.
+func (m model) runTask(taskMode mode, run func(report addon.Reporter, done chan<- installEvent)) (model, tea.Cmd) {
+	m.mode = taskMode
+	m.taskDone = false
 	m.events = make(chan installEvent)
-	manifestPath, projectRoot := m.manifestPath, m.projectRoot
+	ch := m.events
+	go func() {
+		report := addon.Reporter(func(format string, args ...any) {
+			ch <- installEvent{line: fmt.Sprintf(format, args...)}
+		})
+		run(report, ch)
+	}()
+	return m, tea.Batch(m.spinner.Tick, waitForEvent(ch))
+}
 
-	go func(events chan installEvent) {
-		report := func(format string, args ...any) {
-			events <- installEvent{line: fmt.Sprintf(format, args...)}
-		}
+// startInstallAll runs the manifest install (Inspect + InstallAll), the same as
+// the non-interactive CLI, streaming progress into the output pane.
+func (m model) startInstallAll() (model, tea.Cmd) {
+	manifestPath, projectRoot := m.manifestPath, m.projectRoot
+	return m.runTask(modeInstallingAll, func(report addon.Reporter, done chan<- installEvent) {
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
 			report("error: %v", err)
 		} else {
 			_ = addon.InstallAll(manifestPath, statuses, projectRoot, report)
 		}
-		events <- installEvent{done: true}
-	}(m.events)
-
-	return m, tea.Batch(m.spinner.Tick, waitForEvent(m.events))
+		done <- installEvent{done: true}
+	})
 }
 
 func (m model) startInstall() (model, tea.Cmd) {
-	m.events = make(chan installEvent)
 	target := addon.Addon{Name: m.selected.Name, URL: m.pick.asset.URL, Path: m.selected.Path}
-
-	go func(events chan installEvent) {
-		report := func(format string, args ...any) {
-			events <- installEvent{line: fmt.Sprintf(format, args...)}
-		}
-		res, err := addon.Install(target, m.projectRoot, report)
-		events <- installEvent{done: true, err: err, path: res.Path, version: res.Version}
-	}(m.events)
-
-	return m, tea.Batch(m.spinner.Tick, waitForEvent(m.events))
+	projectRoot := m.projectRoot
+	return m.runTask(modeInstalling, func(report addon.Reporter, done chan<- installEvent) {
+		res, err := addon.Install(target, projectRoot, report)
+		done <- installEvent{done: true, err: err, path: res.Path, version: res.Version}
+	})
 }
 
 func waitForEvent(events chan installEvent) tea.Cmd {
