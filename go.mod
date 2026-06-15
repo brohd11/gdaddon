@@ -1,4 +1,4 @@
-module gdutil
+module gdaddon
 
 go 1.26.3
 

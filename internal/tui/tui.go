@@ -9,12 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gdutil/internal/addon"
-	"gdutil/internal/source"
+	"gdaddon/internal/addon"
+	"gdaddon/internal/source"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -38,17 +39,26 @@ type mode int
 
 const (
 	modeBrowse mode = iota
+	modeActions
 	modeFetching
 	modeVersions
 	modeFetchingBranches
 	modeSubmenu
 	modeConfirm
+	modeNewPluginInput
+	modeNewPluginConfirm
+	modeImport
 	modeInstalling
 	modeInstallingAll
 )
 
-// layout constants. headerHeight is the persistent context box above the list;
-// maxOutputLines caps how tall the output pane grows before it starts scrolling.
+// add targets for the New Plugin confirm toggle.
+const (
+	targetProject = iota
+	targetGlobal
+)
+
+// headerHeight is the persistent context box above the list.
 const headerHeight = 5 // border (2) + 3 content lines
 
 // focusArea tracks which pane receives navigation keys.
@@ -61,13 +71,53 @@ const (
 
 // ---------- list items ----------
 
-// installAllItem is the entry pinned to the top of the browse list; selecting it
-// runs the manifest install (the equivalent of the addon_install CLI).
-type installAllItem struct{}
+// menuItem is the entry pinned to the top of the browse list; selecting it opens
+// the Actions submenu (install all, add plugin, future config).
+type menuItem struct{}
 
-func (installAllItem) Title() string       { return "↧ Install / update all" }
-func (installAllItem) FilterValue() string { return "install all" }
-func (installAllItem) Description() string { return "download everything per the manifest" }
+func (menuItem) Title() string       { return "☰ Actions" }
+func (menuItem) FilterValue() string { return "actions menu" }
+func (menuItem) Description() string { return "install all · new / import plugin" }
+
+// actionKind identifies a row in the Actions submenu.
+type actionKind int
+
+const (
+	actInstallAll actionKind = iota
+	actNewPlugin
+	actImportPlugin
+)
+
+// actionItem is one row in the Actions submenu.
+type actionItem struct {
+	title string
+	desc  string
+	kind  actionKind
+}
+
+func (a actionItem) Title() string       { return a.title }
+func (a actionItem) FilterValue() string { return a.title }
+func (a actionItem) Description() string { return a.desc }
+
+// actionItems builds the Actions submenu rows.
+func actionItems() []list.Item {
+	return []list.Item{
+		actionItem{title: "↧ Install / update all", desc: "download everything per the manifest", kind: actInstallAll},
+		actionItem{title: "+ New Plugin", desc: "add a plugin to the project or your global list", kind: actNewPlugin},
+		actionItem{title: "⬇ Import Plugin", desc: "add a plugin from your global list", kind: actImportPlugin},
+	}
+}
+
+// importItem is one row in the Import Plugin picker (an entry from the global
+// list); selecting it copies the entry into the project manifest.
+type importItem struct {
+	name string
+	url  string
+}
+
+func (i importItem) Title() string       { return i.name }
+func (i importItem) FilterValue() string { return i.name }
+func (i importItem) Description() string { return i.url }
 
 type item struct{ status addon.Status }
 
@@ -185,9 +235,11 @@ type releasesMsg struct {
 }
 
 type installEvent struct {
-	line string
-	done bool
-	err  error
+	line    string
+	done    bool
+	err     error
+	path    string // resolved install path (single-install done event)
+	version string // version read from the installed plugin.cfg
 }
 
 type refreshMsg struct {
@@ -217,16 +269,26 @@ type model struct {
 
 	mode     mode
 	addons   list.Model
+	actions  list.Model
 	versions list.Model
 	submenu  list.Model
+	imports  list.Model
 	spinner  spinner.Model
 	output   viewport.Model
+	input    textinput.Model
 	focus    focusArea
 
 	listing       *source.Listing
 	selected      addon.Addon
 	selectedLocal string // installed version of selected addon, for the versions title
 	pick          versionItem
+
+	installedPath    string // resolved path from the last single install, for finishInstall
+	installedVersion string // version from the last single install's plugin.cfg
+
+	pendingName string // New Plugin: derived name awaiting confirm
+	pendingURL  string // New Plugin: normalized url awaiting confirm
+	addTarget   int    // New Plugin confirm toggle: targetProject / targetGlobal
 
 	events    chan installEvent
 	logs      []string
@@ -248,28 +310,31 @@ var (
 	labelStyle  = lipgloss.NewStyle().Foreground(mutedColor)
 )
 
-func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
-	// installAllItem is pinned first; the addons follow (offset by 1 — see
-	// applyStatuses which writes back into the same layout).
+// addonListItems builds the browse list contents: the pinned Actions menu first,
+// then one row per addon (so addon index i lives at list index i+1 — see
+// applyStatuses).
+func addonListItems(statuses []addon.Status) []list.Item {
 	items := make([]list.Item, 0, len(statuses)+1)
-	items = append(items, installAllItem{})
+	items = append(items, menuItem{})
 	for _, s := range statuses {
 		items = append(items, item{status: s})
 	}
+	return items
+}
 
-	l := list.New(items, newDelegate(), 0, 0)
+func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
+	l := list.New(addonListItems(statuses), newDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	styleList(&l)
-	browseKeys := func() []key.Binding {
+	// The browse short help is rendered custom (see browseHelpView) to stay
+	// uncluttered; these extras only show in the full (?) help.
+	l.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "versions")),
-			key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "install all")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
 			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "output")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear log")),
 		}
 	}
-	l.AdditionalShortHelpKeys = browseKeys
-	l.AdditionalFullHelpKeys = browseKeys
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
@@ -390,6 +455,8 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			return m, nil
 		}
 		m.appendLog(fmt.Sprintf("[%s] installed", m.selected.Name))
+		m.installedPath = msg.path
+		m.installedVersion = msg.version
 		return m, m.finishInstall()
 
 	case installedAllMsg:
@@ -419,6 +486,10 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		m.versions, cmd = m.versions.Update(msg)
 	case modeSubmenu:
 		m.submenu, cmd = m.submenu.Update(msg)
+	case modeImport:
+		m.imports, cmd = m.imports.Update(msg)
+	case modeNewPluginInput:
+		m.input, cmd = m.input.Update(msg)
 	}
 	return m, cmd
 }
@@ -453,6 +524,12 @@ func (m model) headerTitle(section string) string {
 // without their own list title (fetching, confirm) keep a consistent header.
 func (m model) crumb(section string) string {
 	return m.addons.Styles.TitleBar.Render(m.addons.Styles.Title.Render(m.headerTitle(section)))
+}
+
+// titleBar renders a plain list-title-styled bar for screens that aren't tied to
+// a selected addon (New Plugin / Import), keeping a consistent header.
+func (m model) titleBar(text string) string {
+	return m.addons.Styles.TitleBar.Render(m.addons.Styles.Title.Render(text))
 }
 
 // pickSection describes the chosen asset for the confirm breadcrumb, e.g.
@@ -516,12 +593,12 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 		switch k {
 		case "q":
 			return m, tea.Quit
-		case "i":
-			return m.startInstallAll()
 		case "enter":
 			switch sel := m.addons.SelectedItem().(type) {
-			case installAllItem:
-				return m.startInstallAll()
+			case menuItem:
+				m.actions = m.newSelectList(actionItems(), "Actions")
+				m.mode = modeActions
+				return m, nil
 			case item:
 				if !sel.status.Installable() {
 					return m, nil
@@ -536,6 +613,35 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.addons, cmd = m.addons.Update(msg)
+		return m, cmd
+
+	case modeActions:
+		if m.actions.FilterState() == list.Filtering {
+			var cmd tea.Cmd
+			m.actions, cmd = m.actions.Update(msg)
+			return m, cmd
+		}
+		switch k {
+		case "esc", "q":
+			m.mode = modeBrowse
+			return m, nil
+		case "enter":
+			a, ok := m.actions.SelectedItem().(actionItem)
+			if !ok {
+				return m, nil
+			}
+			switch a.kind {
+			case actInstallAll:
+				return m.startInstallAll()
+			case actNewPlugin:
+				return m.startNewPlugin()
+			case actImportPlugin:
+				return m.startImport()
+			}
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.actions, cmd = m.actions.Update(msg)
 		return m, cmd
 
 	case modeFetching, modeFetchingBranches:
@@ -599,6 +705,60 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 		}
 		return m, nil
 
+	case modeNewPluginInput:
+		switch k {
+		case "esc":
+			m.mode = modeActions
+			return m, nil
+		case "enter":
+			value := strings.TrimSpace(m.input.Value())
+			if value == "" {
+				return m, nil
+			}
+			m.pendingURL = addon.NormalizeRepoURL(value)
+			m.pendingName = addon.DeriveName(value)
+			m.addTarget = targetProject
+			m.mode = modeNewPluginConfirm
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		return m, cmd
+
+	case modeNewPluginConfirm:
+		switch k {
+		case "left", "h", "right", "l":
+			if m.addTarget == targetProject {
+				m.addTarget = targetGlobal
+			} else {
+				m.addTarget = targetProject
+			}
+			return m, nil
+		case "esc":
+			m.mode = modeNewPluginInput
+			return m, nil
+		case "enter":
+			return m.commitNewPlugin()
+		}
+		return m, nil
+
+	case modeImport:
+		if m.imports.FilterState() == list.Filtering {
+			var cmd tea.Cmd
+			m.imports, cmd = m.imports.Update(msg)
+			return m, cmd
+		}
+		switch k {
+		case "esc", "q":
+			m.mode = modeBrowse
+			return m, nil
+		case "enter":
+			return m.commitImport()
+		}
+		var cmd tea.Cmd
+		m.imports, cmd = m.imports.Update(msg)
+		return m, cmd
+
 	case modeInstalling, modeInstallingAll:
 		return m, nil
 	}
@@ -661,21 +821,54 @@ func helpView(l list.Model) string {
 	return l.Styles.HelpStyle.Render(l.Help.View(l))
 }
 
+// browseHelpView renders a decluttered short help for the browse screen
+// (navigation + select + quit + more); filter, output, and clear-log live only
+// in the full (?) help. The full help is unchanged.
+func (m model) browseHelpView() string {
+	l := m.addons
+	if l.Help.ShowAll {
+		return l.Styles.HelpStyle.Render(l.Help.FullHelpView(l.FullHelp()))
+	}
+	short := []key.Binding{
+		l.KeyMap.CursorUp,
+		l.KeyMap.CursorDown,
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+		l.KeyMap.Quit,
+		l.KeyMap.ShowFullHelp,
+	}
+	return l.Styles.HelpStyle.Render(l.Help.ShortHelpView(short))
+}
+
 // helpBar is the always-visible bottom bar. Interactive list screens show their
 // real key help; confirm and non-interactive screens render in the same help
 // format (key/desc styling, • separator) so the bar — and the layout — stays put.
 func (m model) helpBar() string {
 	switch m.mode {
 	case modeBrowse:
-		return helpView(m.addons)
+		return m.browseHelpView()
+	case modeActions:
+		return helpView(m.actions)
 	case modeVersions:
 		return helpView(m.versions)
 	case modeSubmenu:
 		return helpView(m.submenu)
+	case modeImport:
+		return helpView(m.imports)
 	case modeConfirm:
 		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
 			key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm")),
 			key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+		}))
+	case modeNewPluginInput:
+		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "next")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+		}))
+	case modeNewPluginConfirm:
+		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
+			key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "target")),
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "add")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}))
 	default: // fetching / installing — non-interactive
 		return m.staticHelp(m.addons.Help.Styles.ShortDesc.Render("non-interactive · working…"))
@@ -699,10 +892,18 @@ func (m model) filtering() bool {
 	switch m.mode {
 	case modeBrowse:
 		return m.addons.FilterState() == list.Filtering
+	case modeActions:
+		return m.actions.FilterState() == list.Filtering
 	case modeVersions:
 		return m.versions.FilterState() == list.Filtering
 	case modeSubmenu:
 		return m.submenu.FilterState() == list.Filtering
+	case modeImport:
+		return m.imports.FilterState() == list.Filtering
+	case modeNewPluginInput:
+		// The URL text input captures keys, so the global tab/c shortcuts must
+		// not steal characters typed into it.
+		return true
 	}
 	return false
 }
@@ -715,13 +916,22 @@ func (m *model) refreshSizes() {
 	}
 	lh := m.listHeight()
 	m.addons.SetSize(m.width, lh)
-	// versions/submenu are zero-value lists until built; only size them while
-	// they're the active screen.
+	// actions/versions/submenu are zero-value lists until built; only size them
+	// while they're the active screen.
+	if m.mode == modeActions {
+		m.actions.SetSize(m.width, lh)
+	}
 	if m.mode == modeVersions {
 		m.versions.SetSize(m.width, lh)
 	}
 	if m.mode == modeSubmenu {
 		m.submenu.SetSize(m.width, lh)
+	}
+	if m.mode == modeImport {
+		m.imports.SetSize(m.width, lh)
+	}
+	if m.mode == modeNewPluginInput {
+		m.input.Width = m.outputInnerWidth()
 	}
 	m.output.Width = m.outputInnerWidth()
 	m.output.Height = m.outputContentHeight()
@@ -761,6 +971,9 @@ func (m model) View() string {
 // bar (which View appends).
 func (m model) bodyView() string {
 	switch m.mode {
+	case modeActions:
+		return m.actions.View()
+
 	case modeFetching:
 		return lipgloss.JoinVertical(lipgloss.Left, m.crumb(""),
 			fmt.Sprintf("  %s fetching versions…", m.spinner.View()))
@@ -777,6 +990,16 @@ func (m model) bodyView() string {
 
 	case modeConfirm:
 		return lipgloss.JoinVertical(lipgloss.Left, m.crumb(m.pickSection()), m.confirmView())
+
+	case modeImport:
+		return m.imports.View()
+
+	case modeNewPluginInput:
+		return lipgloss.JoinVertical(lipgloss.Left, m.titleBar("New Plugin"),
+			boxStyle.Width(m.confirmWidth()).Render("Enter a repo URL to add:\n\n"+m.input.View()))
+
+	case modeNewPluginConfirm:
+		return lipgloss.JoinVertical(lipgloss.Left, m.titleBar("New Plugin"), m.newPluginConfirmView())
 
 	case modeInstalling, modeInstallingAll:
 		label := "installing all addons…"
@@ -850,19 +1073,49 @@ func truncLeft(s string, max int) string {
 	return "…" + string(r[len(r)-(max-1):])
 }
 
-func (m model) confirmView() string {
-	v := m.pick
-
-	// Size the box to the screen and hard-wrap the (space-less) URL to fit.
+// confirmWidth is the inner width of the boxed confirm/input screens, sized to
+// the terminal with a sane floor.
+func (m model) confirmWidth() int {
 	inner := m.width - 10
 	if inner < 24 {
 		inner = 24
 	}
+	return inner
+}
+
+func (m model) confirmView() string {
+	v := m.pick
+
+	// Size the box to the screen and hard-wrap the (space-less) URL to fit.
+	inner := m.confirmWidth()
 	urlBlock := indentLines(hardWrap(v.asset.URL, inner-4), "    ")
 
 	body := fmt.Sprintf(
 		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s",
 		m.selected.Name, v.tag, v.asset.Name, m.selected.Path, urlBlock)
+	return boxStyle.Width(inner).Render(body)
+}
+
+// newPluginConfirmView shows the derived entry and a Project◄ ►Global target
+// toggle. The active side is highlighted; for Project the derived install path is
+// shown too.
+func (m model) newPluginConfirmView() string {
+	inner := m.confirmWidth()
+	urlBlock := indentLines(hardWrap(m.pendingURL, inner-4), "    ")
+
+	active := lipgloss.NewStyle().Foreground(focusedColor).Bold(true)
+	dim := lipgloss.NewStyle().Foreground(mutedColor)
+	project, global := dim.Render("Project"), dim.Render("Global")
+	if m.addTarget == targetProject {
+		project = active.Render("Project")
+	} else {
+		global = active.Render("Global")
+	}
+	toggle := fmt.Sprintf("%s  ◄ ►  %s", project, global)
+
+	body := fmt.Sprintf(
+		"Add plugin\n\n  name:     %s\n  url:\n%s\n\n  add to:   %s",
+		m.pendingName, urlBlock, toggle)
 	return boxStyle.Width(inner).Render(body)
 }
 
@@ -1010,7 +1263,7 @@ func (m model) startInstallAll() (model, tea.Cmd) {
 		if err != nil {
 			report("error: %v", err)
 		} else {
-			_ = addon.InstallAll(statuses, projectRoot, report)
+			_ = addon.InstallAll(manifestPath, statuses, projectRoot, report)
 		}
 		events <- installEvent{done: true}
 	}(m.events)
@@ -1026,8 +1279,8 @@ func (m model) startInstall() (model, tea.Cmd) {
 		report := func(format string, args ...any) {
 			events <- installEvent{line: fmt.Sprintf(format, args...)}
 		}
-		err := addon.Install(target, m.projectRoot, report)
-		events <- installEvent{done: true, err: err}
+		res, err := addon.Install(target, m.projectRoot, report)
+		events <- installEvent{done: true, err: err, path: res.Path, version: res.Version}
 	}(m.events)
 
 	return m, tea.Batch(m.spinner.Tick, waitForEvent(m.events))
@@ -1039,22 +1292,21 @@ func waitForEvent(events chan installEvent) tea.Cmd {
 	}
 }
 
-// finishInstall pins the freshly installed version into the manifest and
-// re-inspects so the list reflects the new state.
+// finishInstall pins the freshly installed url, resolved path, and version into
+// the manifest and re-inspects so the list reflects the new state.
 func (m model) finishInstall() tea.Cmd {
 	manifestPath, projectRoot := m.manifestPath, m.projectRoot
-	name, path, url := m.selected.Name, m.selected.Path, m.pick.asset.URL
-	fallbackTag := strings.TrimPrefix(m.pick.tag, "v")
+	name, url := m.selected.Name, m.pick.asset.URL
+	path := m.installedPath
+	version := m.installedVersion
+	if version == "" {
+		version = strings.TrimPrefix(m.pick.tag, "v")
+	}
 
 	return func() tea.Msg {
-		fullPath, _ := filepath.Abs(filepath.Join(projectRoot, path))
-		version := addon.LocalVersion(fullPath)
-		if version == "" {
-			version = fallbackTag
-		}
-		// Record the concrete chosen url alongside the pinned version, so a later
-		// Install-all (or the CLI) reinstalls exactly what was selected here.
-		_ = addon.UpdateEntry(manifestPath, name, url, version)
+		// Record the concrete chosen url alongside the resolved path + version, so
+		// a later Install-all (or the CLI) reinstalls exactly what was selected.
+		_ = addon.UpdateEntry(manifestPath, name, url, path, version)
 
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
@@ -1062,6 +1314,99 @@ func (m model) finishInstall() tea.Cmd {
 		}
 		return refreshMsg{statuses: statuses, version: version}
 	}
+}
+
+// startNewPlugin opens the URL prompt for adding a new manifest entry.
+func (m model) startNewPlugin() (model, tea.Cmd) {
+	ti := textinput.New()
+	ti.Placeholder = "https://github.com/owner/repo"
+	ti.Prompt = "url: "
+	ti.Focus()
+	m.input = ti
+	m.statusMsg = ""
+	m.mode = modeNewPluginInput
+	return m, textinput.Blink
+}
+
+// commitNewPlugin writes the pending entry to the project manifest or the global
+// list (per addTarget), refreshes the browse list when it touched the project,
+// and returns to browse with a status line. Both are quick local file writes.
+func (m model) commitNewPlugin() (model, tea.Cmd) {
+	name, url := m.pendingName, m.pendingURL
+	if m.addTarget == targetGlobal {
+		path, err := addon.GlobalListPath()
+		if err == nil {
+			err = addon.AddEntry(path, name, url, "")
+		}
+		if err != nil {
+			m.statusMsg = "error: " + err.Error()
+		} else {
+			m.statusMsg = fmt.Sprintf("added %s to global list", name)
+		}
+		m.mode = modeBrowse
+		return m, nil
+	}
+
+	if err := addon.AddEntry(m.manifestPath, name, url, ""); err != nil {
+		m.statusMsg = "error: " + err.Error()
+		m.mode = modeBrowse
+		return m, nil
+	}
+	m.reloadAddons()
+	m.statusMsg = "added " + name
+	m.mode = modeBrowse
+	return m, nil
+}
+
+// startImport loads the global plugin list and opens the picker, or reports an
+// empty/missing list and returns to browse.
+func (m model) startImport() (model, tea.Cmd) {
+	path, err := addon.GlobalListPath()
+	var addons []addon.Addon
+	if err == nil {
+		addons, err = addon.Parse(path)
+	}
+	if err != nil || len(addons) == 0 {
+		m.statusMsg = "no global plugins yet — add one via New Plugin → Global"
+		m.mode = modeBrowse
+		return m, nil
+	}
+	items := make([]list.Item, 0, len(addons))
+	for _, a := range addons {
+		items = append(items, importItem{name: a.Name, url: a.URL})
+	}
+	m.imports = m.newSelectList(items, "Import Plugin")
+	m.statusMsg = ""
+	m.mode = modeImport
+	return m, nil
+}
+
+// commitImport copies the selected global entry into the project manifest
+// (deriving the install path), refreshes the list, and returns to browse.
+func (m model) commitImport() (model, tea.Cmd) {
+	sel, ok := m.imports.SelectedItem().(importItem)
+	if !ok {
+		return m, nil
+	}
+	if err := addon.AddEntry(m.manifestPath, sel.name, sel.url, ""); err != nil {
+		m.statusMsg = "error: " + err.Error()
+		m.mode = modeBrowse
+		return m, nil
+	}
+	m.reloadAddons()
+	m.statusMsg = "imported " + sel.name
+	m.mode = modeBrowse
+	return m, nil
+}
+
+// reloadAddons re-inspects the manifest and rebuilds the browse list, so newly
+// added rows appear (SetItems handles the row-count change, unlike applyStatuses).
+func (m *model) reloadAddons() {
+	statuses, err := addon.Inspect(m.manifestPath, m.projectRoot)
+	if err != nil {
+		return
+	}
+	m.addons.SetItems(addonListItems(statuses))
 }
 
 // finishInstallAll re-inspects the manifest after a batch install so the list

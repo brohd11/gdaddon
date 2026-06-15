@@ -124,3 +124,28 @@ func TestLiveAvailableVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestRepoID(t *testing.T) {
+	want := "github.com/brohd11/godot-plugin-devtools"
+	urls := []string{
+		"https://github.com/brohd11/godot-plugin-devtools.git",
+		"https://github.com/brohd11/godot-plugin-devtools",
+		"https://github.com/brohd11/godot-plugin-devtools/releases/download/0.2.1/plugin-devtools-0.2.1.zip",
+		"https://github.com/brohd11/godot-plugin-devtools/archive/refs/heads/main.zip",
+		"https://github.com/brohd11/godot-plugin-devtools/archive/refs/tags/v0.2.1.zip",
+		"https://github.com/BroHD11/Godot-Plugin-Devtools.git", // case-insensitive
+	}
+	for _, u := range urls {
+		got, err := RepoID(u)
+		if err != nil {
+			t.Errorf("RepoID(%q) error: %v", u, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("RepoID(%q) = %q, want %q", u, got, want)
+		}
+	}
+	if _, err := RepoID("https://gitlab.com/u/repo.git"); err == nil {
+		t.Errorf("expected error for non-github url")
+	}
+}

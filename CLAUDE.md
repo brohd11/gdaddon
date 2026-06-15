@@ -4,18 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`gdutil` — a Go CLI (built with [Cobra](https://github.com/spf13/cobra)) that collects Godot development utilities as subcommands.
+`gdaddon` — a Go CLI (built with [Cobra](https://github.com/spf13/cobra)) for
+browsing and installing Godot addons from a YAML manifest (`.zip` or `.git`, with
+version pinning via `plugin.cfg`).
 
-Current subcommands:
-- `addon_install` — installs Godot addons from a YAML manifest (`.zip` or `.git`, with version pinning via `plugin.cfg`)
+It's a single command, not a suite of subcommands:
+- no args → launches the interactive TUI (browse, pick versions/branches/assets, install/update)
+- `--install` → runs the non-interactive install (inspect manifest + install/update all), then exits
 
-A companion Godot EditorScript (`namespace_builder.gd`) also lives here — it runs inside the Godot editor to auto-generate GDScript namespace preload files and is a candidate for a future `namespace_build` subcommand.
+A companion Godot EditorScript (`namespace_builder.gd`) also lives here — it runs
+inside the Godot editor to auto-generate GDScript namespace preload files.
 
 ## Build commands
 
 ```bash
 # Build for current platform only
-go build -o build/mac-arm64/gdutil .
+go build -o build/mac-arm64/gdaddon .
 
 # Cross-compile all targets (mac-arm64, mac-x86_64, linux, windows)
 make
@@ -24,14 +28,15 @@ make
 make clean
 ```
 
-Build outputs go to `build/<platform>/gdutil[.exe]`.
+Build outputs go to `build/<platform>/gdaddon[.exe]`.
 
 ## Running
 
 ```bash
-gdutil addon_install                                        # manifest found via filesystem walk + git root auto-detected
-gdutil addon_install path/to/addon_manifest.yml             # explicit manifest
-gdutil addon_install path/to/addon_manifest.yml /godot/proj # explicit manifest + project root
+gdaddon                                         # TUI; manifest found via filesystem walk + git root auto-detected
+gdaddon path/to/addon_manifest.yml              # TUI with explicit manifest
+gdaddon path/to/addon_manifest.yml /godot/proj  # TUI with explicit manifest + project root
+gdaddon --install                               # non-interactive install of everything in the manifest
 ```
 
 ## Addon manifest format
@@ -46,21 +51,23 @@ my_addon:
 ## Architecture
 
 ```
-main.go          — calls cmd.Execute()
+main.go              — calls cmd.Execute()
 cmd/
-  root.go        — defines the root `gdutil` cobra command and Execute()
-  addon_install.go — addon_install subcommand + all install logic
+  root.go            — the single `gdaddon` cobra command: TUI by default, --install for non-interactive
+  paths.go           — resolvePaths (manifest filesystem-walk + git-root detection)
+internal/
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, plugin.cfg version read, manifest UpdateEntry
+  source/            — resolves remote versions from a URL (github.go: releases, branches, source archives)
+  tui/               — bubbletea front-end (tui.go)
 ```
 
-Adding a new subcommand: create `cmd/<name>.go`, define a `*cobra.Command`, and register it via `rootCmd.AddCommand(...)` in an `init()` function.
-
-Key functions in `cmd/addon_install.go`:
-- `runAddonInstall()` — cobra RunE handler; resolves manifest path and project root, then calls `installAddons`.
-- `installAddons()` — parses YAML, skips already-installed versions, dispatches to zip or git installer.
-- `downloadAndExtractZip()` — downloads to temp file, extracts, finds the target subfolder by name.
-- `cloneGitRepo()` — shallow-clones (`--depth 1`); if the repo has an `addons/` folder, extracts the target subdirectory; otherwise installs the full repo. Strips `.git` from the destination.
-- `getLocalPluginVersion()` — reads `plugin.cfg` (INI via `gopkg.in/ini.v1`) to compare against the YAML-pinned version.
+Key packages/functions:
+- `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…).
+- `addon.Install` / `addon.InstallAll` — dispatch on URL suffix (`.zip` download-and-extract vs `.git` shallow clone) and report progress via a callback.
+- `addon.UpdateEntry` — rewrites a single manifest entry's url/version in place (empty url leaves the url line untouched).
+- `source.AvailableVersions` / `source.Branches` — GitHub releases (each with uploaded `.zip`s + a generated source archive) and branch-HEAD archives.
 
 ## Installing the binary
 
-`install_unix.sh` symlinks the built binary into `~/.local/bin/godot_addon_installer`. Update `GO_DIR` inside the script if your repo path differs from `~/dotfiles/.misc/scripts/go/godot_addon_installer`.
+`install_unix.sh` symlinks the built binary into `~/.local/bin/gdaddon`. Update
+`GO_DIR` inside the script if your repo path differs.

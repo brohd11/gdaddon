@@ -26,7 +26,7 @@ func TestUpdateEntryPreservesFormatting(t *testing.T) {
 	}
 
 	newURL := "https://github.com/TokisanGames/Terrain3D/releases/download/v1.0.2-stable/Terrain3D_v1.0.2-stable.zip"
-	if err := UpdateEntry(path, "Terrain3D", newURL, "1.0.2"); err != nil {
+	if err := UpdateEntry(path, "Terrain3D", newURL, "", "1.0.2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -65,7 +65,7 @@ func TestUpdateEntryEmptyURLPreservesURL(t *testing.T) {
 	}
 
 	origURL := "url: https://github.com/TokisanGames/Terrain3D/releases/download/v1.0.1/Terrain3D_v1.0.1.zip"
-	if err := UpdateEntry(path, "Terrain3D", "", "1.0.2"); err != nil {
+	if err := UpdateEntry(path, "Terrain3D", "", "", "1.0.2"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -75,6 +75,33 @@ func TestUpdateEntryEmptyURLPreservesURL(t *testing.T) {
 	}
 	if !strings.Contains(got, `version: "1.0.2"`) {
 		t.Errorf("version not updated; got:\n%s", got)
+	}
+}
+
+func TestUpdateEntryInsertsPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	// A url-only entry (no path/version yet), as written by AddEntry.
+	const urlOnly = "Libby:\n    url: https://github.com/u/Libby.git\n"
+	if err := os.WriteFile(path, []byte(urlOnly), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Empty url leaves the url untouched; path + version are inserted.
+	if err := UpdateEntry(path, "Libby", "", "addons/libby", "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+
+	got := string(mustRead(t, path))
+	t.Logf("\n%s", got)
+	if !strings.Contains(got, "url: https://github.com/u/Libby.git") {
+		t.Errorf("url should be untouched; got:\n%s", got)
+	}
+	if !strings.Contains(got, "\n    path: addons/libby") {
+		t.Errorf("path not inserted; got:\n%s", got)
+	}
+	if !strings.Contains(got, `version: "1.0.0"`) {
+		t.Errorf("version not inserted; got:\n%s", got)
 	}
 }
 

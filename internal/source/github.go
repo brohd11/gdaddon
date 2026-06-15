@@ -31,9 +31,9 @@ type Release struct {
 // Listing is everything selectable for a manifest URL: the repo's releases
 // (newest first) and, when the URL tracked a branch, a branch-HEAD option.
 type Listing struct {
-	Owner  string
-	Repo   string
-	Branch *Release // branch-HEAD archive, if the URL pointed at refs/heads/<branch>
+	Owner    string
+	Repo     string
+	Branch   *Release // branch-HEAD archive, if the URL pointed at refs/heads/<branch>
 	Releases []Release
 }
 
@@ -82,6 +82,18 @@ func Branches(ctx context.Context, rawURL string) ([]Asset, error) {
 	return fetchBranches(ctx, ref.Owner, ref.Repo)
 }
 
+// RepoID is the canonical identity of a repo URL — "github.com/<owner>/<repo>",
+// lowercased — independent of which form the URL took (.git, a release-download
+// asset, or an archive/refs URL). Used to detect that two manifest entries point
+// at the same repository. Returns an error for non-github URLs.
+func RepoID(rawURL string) (string, error) {
+	ref, err := parseGitHub(rawURL)
+	if err != nil {
+		return "", err
+	}
+	return "github.com/" + strings.ToLower(ref.Owner) + "/" + strings.ToLower(ref.Repo), nil
+}
+
 func parseGitHub(rawURL string) (repoRef, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -128,7 +140,7 @@ func ghGetJSON(ctx context.Context, endpoint string, out any) error {
 		return err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "gdutil")
+	req.Header.Set("User-Agent", "gdaddon")
 	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}

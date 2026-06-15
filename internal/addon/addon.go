@@ -93,8 +93,13 @@ func Inspect(manifestPath, baseDir string) ([]Status, error) {
 }
 
 func statusFor(a Addon, baseDir string) Status {
-	if a.URL == "" || a.Path == "" {
+	if a.URL == "" {
 		return Status{Addon: a, State: StateInvalid}
+	}
+	// A url-only entry's install location is unknown until it's installed (the
+	// path is derived from the package contents then), so treat it as missing.
+	if a.Path == "" {
+		return Status{Addon: a, State: StateMissing}
 	}
 
 	fullPath, err := filepath.Abs(filepath.Join(baseDir, a.Path))
@@ -124,14 +129,15 @@ func statusFor(a Addon, baseDir string) Status {
 }
 
 // InstallAll applies the manifest's skip/update policy: already-installed and
-// unversioned-present entries are skipped, mismatches are updated. This mirrors
-// the original non-interactive `addon_install` behavior.
-func InstallAll(statuses []Status, baseDir string, report Reporter) error {
+// unversioned-present entries are skipped, mismatches are updated. After a
+// successful install it pins the resolved path + version back into the manifest
+// (entries start url-only; this records where they landed).
+func InstallAll(manifestPath string, statuses []Status, baseDir string, report Reporter) error {
 	for _, s := range statuses {
 		a := s.Addon
 		switch s.State {
 		case StateInvalid:
-			report("Skipping %s: missing 'url' or 'path'", a.Name)
+			report("Skipping %s: missing 'url'", a.Name)
 			continue
 		case StateInstalled:
 			report("[%s] v%s is already installed. Skipping...", a.Name, s.LocalVersion)
@@ -147,37 +153,64 @@ func InstallAll(statuses []Status, baseDir string, report Reporter) error {
 			report("[%s] Version mismatch! Local is %s, YAML wants %s. Updating...", a.Name, old, a.Version)
 		}
 
-		if err := Install(a, baseDir, report); err != nil {
+		res, err := Install(a, baseDir, report)
+		if err != nil {
 			report("[%s] Error: %v", a.Name, err)
+			continue
+		}
+		if res.Path != "" {
+			_ = UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version)
 		}
 	}
 	return nil
 }
 
-// Install fetches a single addon and installs it to baseDir/a.Path, replacing
-// any existing install at that path. It dispatches on the URL suffix.
-func Install(a Addon, baseDir string, report Reporter) error {
-	if a.URL == "" || a.Path == "" {
-		return fmt.Errorf("missing 'url' or 'path'")
+// InstallResult reports where a single addon landed so the manifest entry can be
+// pinned. Path is the project-root-relative install path and Version is read from
+// the installed plugin.cfg; both are empty when the install can't be tracked to a
+// single folder (a package that ships several top-level addons).
+type InstallResult struct {
+	Path    string
+	Version string
+}
+
+// Install fetches a single addon and installs it under baseDir. The destination
+// is the entry's explicit path when set, otherwise it's derived from the
+// package's plugin.cfg layout (see resolveInstall). Existing folders at each
+// destination are replaced.
+func Install(a Addon, baseDir string, report Reporter) (InstallResult, error) {
+	if a.URL == "" {
+		return InstallResult{}, fmt.Errorf("missing 'url'")
 	}
 
-	fullPath, err := filepath.Abs(filepath.Join(baseDir, a.Path))
+	stagingRoot, cleanup, err := fetchToStaging(a.URL, a.Name, report)
 	if err != nil {
-		return fmt.Errorf("could not resolve path: %w", err)
+		return InstallResult{}, err
+	}
+	defer cleanup()
+
+	placements := resolveInstall(stagingRoot, a.Name, a.Path)
+	for _, p := range placements {
+		dest, err := filepath.Abs(filepath.Join(baseDir, p.destRel))
+		if err != nil {
+			return InstallResult{}, fmt.Errorf("could not resolve path: %w", err)
+		}
+		os.RemoveAll(dest)
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return InstallResult{}, err
+		}
+		if err := copyDir(p.src, dest); err != nil {
+			return InstallResult{}, err
+		}
+		report("  -> Successfully installed to %s", p.destRel)
 	}
 
-	if _, err := os.Stat(fullPath); err == nil {
-		os.RemoveAll(fullPath)
+	// Only a single-folder install can be pinned to a path/version.
+	if len(placements) == 1 {
+		dest := filepath.Join(baseDir, placements[0].destRel)
+		return InstallResult{Path: placements[0].destRel, Version: getLocalPluginVersion(dest)}, nil
 	}
-
-	switch {
-	case strings.HasSuffix(a.URL, ".zip"):
-		return downloadAndExtractZip(a.URL, fullPath, a.Name, report)
-	case strings.HasSuffix(a.URL, ".git"):
-		return cloneGitRepo(a.URL, fullPath, a.Name, a.Path, report)
-	default:
-		return fmt.Errorf("URL must end in '.zip' or '.git'. Found: %s", a.URL)
-	}
+	return InstallResult{}, nil
 }
 
 func getLocalPluginVersion(addonPath string) string {

@@ -11,126 +11,164 @@ import (
 	"strings"
 )
 
-func downloadAndExtractZip(url, targetPath, addonName string, report Reporter) error {
+// fetchToStaging downloads (.zip) or clones (.git) the addon into a temporary
+// staging directory and returns its content root: for zips, GitHub's single
+// "repo-tag/" wrapper folder is unwrapped so the layout matches a git checkout.
+// The returned cleanup removes all temp artifacts.
+func fetchToStaging(url, addonName string, report Reporter) (stagingRoot string, cleanup func(), err error) {
+	switch {
+	case strings.HasSuffix(url, ".zip"):
+		return fetchZip(url, addonName, report)
+	case strings.HasSuffix(url, ".git"):
+		return fetchGit(url, addonName, report)
+	default:
+		return "", func() {}, fmt.Errorf("URL must end in '.zip' or '.git'. Found: %s", url)
+	}
+}
+
+func fetchZip(url, addonName string, report Reporter) (string, func(), error) {
 	report("[%s] Downloading ZIP from %s...", addonName, url)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return err
+		return "", func() {}, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return "", func() {}, err
 	}
 	defer resp.Body.Close()
 
 	tmpFile, err := os.CreateTemp("", "godot-addon-*.zip")
 	if err != nil {
-		return err
+		return "", func() {}, err
 	}
 	defer os.Remove(tmpFile.Name())
 
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		return err
+		return "", func() {}, err
 	}
 	tmpFile.Close()
 
 	extractDir, err := os.MkdirTemp("", "godot-addon-extract-*")
 	if err != nil {
-		return err
+		return "", func() {}, err
 	}
-	defer os.RemoveAll(extractDir)
+	cleanup := func() { os.RemoveAll(extractDir) }
 
 	report("[%s] Extracting...", addonName)
 	if err := unzip(tmpFile.Name(), extractDir); err != nil {
-		return err
+		cleanup()
+		return "", func() {}, err
 	}
 
-	targetFolderName := filepath.Base(targetPath)
-	foundSource := ""
+	// Unwrap a single top-level folder (GitHub archives wrap content in repo-tag/).
+	root := extractDir
+	if entries, err := os.ReadDir(extractDir); err == nil && len(entries) == 1 && entries[0].IsDir() {
+		root = filepath.Join(extractDir, entries[0].Name())
+	}
+	return root, cleanup, nil
+}
 
-	filepath.Walk(extractDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || foundSource != "" {
+func fetchGit(url, addonName string, report Reporter) (string, func(), error) {
+	report("[%s] Cloning repository...", addonName)
+
+	tempDir, err := os.MkdirTemp("", "godot-addon-clone-*")
+	if err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { os.RemoveAll(tempDir) }
+
+	cmd := exec.Command("git", "clone", "--depth", "1", url, tempDir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		report("  -> Failed to clone %s:\n%s", addonName, string(out))
+		cleanup()
+		return "", func() {}, err
+	}
+	os.RemoveAll(filepath.Join(tempDir, ".git"))
+	return tempDir, cleanup, nil
+}
+
+// placement is one source folder in the staging tree and the project-root-relative
+// path it should be installed to.
+type placement struct {
+	src     string
+	destRel string
+}
+
+// pluginDirs returns every directory under root that directly contains a
+// plugin.cfg, pruned so a match nested inside another match is dropped (a
+// sub-addon is managed by its parent addon, not installed on its own).
+func pluginDirs(root string) []string {
+	var dirs []string
+	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
 			return nil
 		}
-		if info.IsDir() && info.Name() == targetFolderName {
-			foundSource = path
+		if info.Name() == "plugin.cfg" {
+			dirs = append(dirs, filepath.Dir(path))
 		}
 		return nil
 	})
 
-	if foundSource != "" {
-		if err := copyDir(foundSource, targetPath); err != nil {
-			return err
-		}
-	} else {
-		entries, err := os.ReadDir(extractDir)
-		if err != nil {
-			return err
-		}
-		if len(entries) == 1 && entries[0].IsDir() {
-			if err := copyDir(filepath.Join(extractDir, entries[0].Name()), targetPath); err != nil {
-				return err
+	var pruned []string
+	for _, d := range dirs {
+		nested := false
+		for _, other := range dirs {
+			if other != d && isUnder(d, other) {
+				nested = true
+				break
 			}
-		} else {
-			if err := copyDir(extractDir, targetPath); err != nil {
-				return err
-			}
+		}
+		if !nested {
+			pruned = append(pruned, d)
 		}
 	}
-
-	report("  -> Successfully installed to %s", targetPath)
-	return nil
+	return pruned
 }
 
-func cloneGitRepo(url, fullPath, addonName, targetDir string, report Reporter) error {
-	report("[%s] Cloning repository...", addonName)
-
-	tempDir := fullPath + "_temp"
-	os.RemoveAll(tempDir)
-
-	cmd := exec.Command("git", "clone", "--depth", "1", url, tempDir)
-	out, err := cmd.CombinedOutput()
+// isUnder reports whether path is a descendant of base.
+func isUnder(path, base string) bool {
+	rel, err := filepath.Rel(base, path)
 	if err != nil {
-		report("  -> Failed to clone %s:\n%s", addonName, string(out))
-		return err
+		return false
+	}
+	return rel != "." && !strings.HasPrefix(rel, "..")
+}
+
+// resolveInstall decides where the staged content should land, relative to the
+// project root. An explicit definedPath always wins (a user-set or
+// previously-recorded path is the source of truth); otherwise the destination is
+// derived from the addon's own plugin.cfg folder name, falling back to the
+// manifest name when the addon is the whole package.
+func resolveInstall(stagingRoot, name, definedPath string) []placement {
+	dirs := pluginDirs(stagingRoot)
+
+	if definedPath != "" {
+		src := stagingRoot
+		if len(dirs) == 1 && dirs[0] != stagingRoot {
+			src = dirs[0]
+		}
+		return []placement{{src: src, destRel: definedPath}}
 	}
 
-	addonsPath := filepath.Join(tempDir, "addons")
-
-	if _, err := os.Stat(addonsPath); os.IsNotExist(err) {
-		report("  -> No 'addons' folder detected. Installing full repository...")
-		os.RemoveAll(fullPath)
-		if err := os.Rename(tempDir, fullPath); err != nil {
-			return err
+	switch len(dirs) {
+	case 0:
+		return []placement{{src: stagingRoot, destRel: DefaultPath(name)}}
+	case 1:
+		if dirs[0] == stagingRoot {
+			return []placement{{src: stagingRoot, destRel: DefaultPath(name)}}
 		}
-		report("  -> Successfully installed to %s", fullPath)
-	} else {
-		var sourceDir string
-		if targetDir != "" {
-			sourceDir = filepath.Clean(filepath.Join(tempDir, targetDir))
-		} else {
-			sourceDir = tempDir
+		return []placement{{src: dirs[0], destRel: DefaultPath(filepath.Base(dirs[0]))}}
+	default:
+		out := make([]placement, 0, len(dirs))
+		for _, d := range dirs {
+			out = append(out, placement{src: d, destRel: DefaultPath(filepath.Base(d))})
 		}
-
-		if _, err := os.Stat(sourceDir); err == nil {
-			report("  -> Detected 'addons'. Extracting target: '%s'", targetDir)
-			os.RemoveAll(fullPath)
-			if err := os.Rename(sourceDir, fullPath); err != nil {
-				return err
-			}
-			report("  -> Successfully installed '%s' to %s", targetDir, fullPath)
-		} else {
-			return fmt.Errorf("target directory '%s' was not found in the repository", targetDir)
-		}
+		return out
 	}
-
-	os.RemoveAll(tempDir)
-	os.RemoveAll(filepath.Join(fullPath, ".git"))
-
-	return nil
 }
 
 func unzip(src, dest string) error {

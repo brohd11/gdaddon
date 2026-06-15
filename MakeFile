@@ -1,5 +1,5 @@
 
-APP_NAME = gdutil
+APP_NAME = gdaddon
 OUT_DIR = build
  
 .PHONY: all clean

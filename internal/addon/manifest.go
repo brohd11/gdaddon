@@ -12,14 +12,14 @@ func LocalVersion(fullPath string) string {
 	return getLocalPluginVersion(fullPath)
 }
 
-// UpdateEntry rewrites a single manifest entry's url and version in place.
-// It edits only those two lines (inserting them if absent), leaving every other
-// line — blank lines, comments, indentation, quoting — byte-for-byte intact.
-// An empty url leaves the existing url line untouched (used after install/update,
-// where we pin the new version but keep the user's original source url).
+// UpdateEntry rewrites a single manifest entry's url, path, and version in place.
+// It edits only those lines (inserting them if absent), leaving every other line
+// — blank lines, comments, indentation, quoting — byte-for-byte intact. An empty
+// url or path leaves that existing line untouched (e.g. after install/update we
+// pin the resolved path + version but keep the user's original source url).
 // It assumes the flat manifest shape: top-level entry keys at column 0 with
 // indented url/path/version fields beneath them.
-func UpdateEntry(manifestPath, name, url, version string) error {
+func UpdateEntry(manifestPath, name, url, path, version string) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return err
@@ -51,7 +51,7 @@ func UpdateEntry(manifestPath, name, url, version string) error {
 	}
 
 	indent := "    "
-	urlDone, versionDone := false, false
+	urlDone, pathDone, versionDone := false, false, false
 	for i := keyIdx + 1; i < end; i++ {
 		ind, key, ok := splitField(lines[i])
 		if !ok {
@@ -64,6 +64,11 @@ func UpdateEntry(manifestPath, name, url, version string) error {
 				lines[i] = ind + "url: " + url
 			}
 			urlDone = true
+		case "path":
+			if path != "" {
+				lines[i] = ind + "path: " + path
+			}
+			pathDone = true
 		case "version":
 			lines[i] = ind + `version: "` + version + `"`
 			versionDone = true
@@ -73,6 +78,9 @@ func UpdateEntry(manifestPath, name, url, version string) error {
 	var inserts []string
 	if !urlDone && url != "" {
 		inserts = append(inserts, indent+"url: "+url)
+	}
+	if !pathDone && path != "" {
+		inserts = append(inserts, indent+"path: "+path)
 	}
 	if !versionDone {
 		inserts = append(inserts, indent+`version: "`+version+`"`)

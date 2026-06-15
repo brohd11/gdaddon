@@ -1,0 +1,111 @@
+package addon
+
+import (
+	"os"
+	"path/filepath"
+	"sort"
+	"testing"
+)
+
+// mkPlugin creates dir (relative to root) with a minimal plugin.cfg inside it.
+func mkPlugin(t *testing.T, root, dir string) {
+	t.Helper()
+	full := filepath.Join(root, dir)
+	if err := os.MkdirAll(full, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(full, "plugin.cfg"), []byte("[plugin]\nversion=\"1.0.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func destSet(ps []placement) []string {
+	out := make([]string, len(ps))
+	for i, p := range ps {
+		out[i] = p.destRel
+	}
+	sort.Strings(out)
+	return out
+}
+
+func TestResolveInstall(t *testing.T) {
+	t.Run("addon under addons/", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/my_addon")
+		ps := resolveInstall(root, "Whatever", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
+			t.Fatalf("got %+v", ps)
+		}
+		if filepath.Base(ps[0].src) != "my_addon" {
+			t.Errorf("src should be the plugin folder, got %s", ps[0].src)
+		}
+	})
+
+	t.Run("nested sub-addon pruned", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/my_addon")
+		mkPlugin(t, root, "addons/my_addon/sub")
+		ps := resolveInstall(root, "Whatever", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
+			t.Fatalf("nested sub-addon should be pruned; got %+v", ps)
+		}
+	})
+
+	t.Run("two top-level addons -> dump all", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/a")
+		mkPlugin(t, root, "addons/b")
+		ps := resolveInstall(root, "Whatever", "")
+		got := destSet(ps)
+		if len(got) != 2 || got[0] != "addons/a" || got[1] != "addons/b" {
+			t.Fatalf("got %v", got)
+		}
+	})
+
+	t.Run("plugin.cfg at staging root -> use name", func(t *testing.T) {
+		root := t.TempDir()
+		os.WriteFile(filepath.Join(root, "plugin.cfg"), []byte("[plugin]\n"), 0o644)
+		ps := resolveInstall(root, "CoolPlugin", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/CoolPlugin" || ps[0].src != root {
+			t.Fatalf("got %+v", ps)
+		}
+	})
+
+	t.Run("no plugin.cfg -> name fallback", func(t *testing.T) {
+		root := t.TempDir()
+		os.WriteFile(filepath.Join(root, "README.md"), []byte("hi"), 0o644)
+		ps := resolveInstall(root, "Mystery", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/Mystery" || ps[0].src != root {
+			t.Fatalf("got %+v", ps)
+		}
+	})
+
+	t.Run("explicit path wins", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/my_addon")
+		ps := resolveInstall(root, "Whatever", "addons/addon_lib/my_addon")
+		if len(ps) != 1 || ps[0].destRel != "addons/addon_lib/my_addon" {
+			t.Fatalf("got %+v", ps)
+		}
+		if filepath.Base(ps[0].src) != "my_addon" {
+			t.Errorf("src should be the detected plugin folder, got %s", ps[0].src)
+		}
+	})
+}
+
+func TestInspectURLOnlyIsMissing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	os.WriteFile(path, []byte("Libby:\n    url: https://github.com/u/Libby.git\n"), 0o644)
+
+	statuses, err := Inspect(path, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 1 {
+		t.Fatalf("expected 1 status, got %d", len(statuses))
+	}
+	if statuses[0].State != StateMissing {
+		t.Errorf("url-only entry should be StateMissing, got %v", statuses[0].State)
+	}
+}
