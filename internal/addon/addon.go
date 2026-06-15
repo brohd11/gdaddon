@@ -214,8 +214,8 @@ func Install(a Addon, baseDir string, report Reporter) (InstallResult, error) {
 }
 
 func getLocalPluginVersion(addonPath string) string {
-	cfgPath := filepath.Join(addonPath, "plugin.cfg")
-	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+	cfgPath := pluginCfgPath(addonPath)
+	if cfgPath == "" {
 		return ""
 	}
 

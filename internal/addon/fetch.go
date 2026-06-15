@@ -98,17 +98,17 @@ type placement struct {
 	destRel string
 }
 
-// pluginDirs returns every directory under root that directly contains a
-// plugin.cfg, pruned so a match nested inside another match is dropped (a
+// pluginDirs returns every directory under root that holds an addon config file
+// (see hasPluginCfg), pruned so a match nested inside another match is dropped (a
 // sub-addon is managed by its parent addon, not installed on its own).
 func pluginDirs(root string) []string {
 	var dirs []string
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
+		if err != nil || !info.IsDir() {
 			return nil
 		}
-		if info.Name() == "plugin.cfg" {
-			dirs = append(dirs, filepath.Dir(path))
+		if hasPluginCfg(path) {
+			dirs = append(dirs, path)
 		}
 		return nil
 	})
@@ -141,8 +141,8 @@ func isUnder(path, base string) bool {
 // resolveInstall decides where the staged content should land, relative to the
 // project root. An explicit definedPath always wins (a user-set or
 // previously-recorded path is the source of truth); otherwise the destination is
-// derived from the addon's own plugin.cfg folder name, falling back to the
-// manifest name when the addon is the whole package.
+// derived from the addon's own config folder name, falling back to the manifest
+// name when the addon is the whole package.
 func resolveInstall(stagingRoot, name, definedPath string) []placement {
 	dirs := pluginDirs(stagingRoot)
 

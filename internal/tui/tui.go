@@ -52,10 +52,20 @@ const (
 	modeInstallingAll
 )
 
-// add targets for the New Plugin confirm toggle.
+// add targets for the New Plugin target toggle.
 const (
 	targetProject = iota
 	targetGlobal
+)
+
+// rows of the New Plugin form (url/name/path text fields + the target toggle).
+// URL is first because it's the only mandatory field.
+const (
+	fldURL = iota
+	fldName
+	fldPath
+	fldTarget
+	fldCount
 )
 
 // headerHeight is the persistent context box above the list.
@@ -113,6 +123,7 @@ func actionItems() []list.Item {
 type importItem struct {
 	name string
 	url  string
+	path string
 }
 
 func (i importItem) Title() string       { return i.name }
@@ -267,16 +278,17 @@ type model struct {
 	width        int
 	height       int
 
-	mode     mode
-	addons   list.Model
-	actions  list.Model
-	versions list.Model
-	submenu  list.Model
-	imports  list.Model
-	spinner  spinner.Model
-	output   viewport.Model
-	input    textinput.Model
-	focus    focusArea
+	mode      mode
+	addons    list.Model
+	actions   list.Model
+	versions  list.Model
+	submenu   list.Model
+	imports   list.Model
+	spinner   spinner.Model
+	output    viewport.Model
+	inputs    []textinput.Model // New Plugin form fields: name, url, path
+	formFocus int               // focused row: fldName/fldURL/fldPath/fldTarget
+	focus     focusArea
 
 	listing       *source.Listing
 	selected      addon.Addon
@@ -286,9 +298,10 @@ type model struct {
 	installedPath    string // resolved path from the last single install, for finishInstall
 	installedVersion string // version from the last single install's plugin.cfg
 
-	pendingName string // New Plugin: derived name awaiting confirm
+	pendingName string // New Plugin: name (entered or derived) awaiting confirm
 	pendingURL  string // New Plugin: normalized url awaiting confirm
-	addTarget   int    // New Plugin confirm toggle: targetProject / targetGlobal
+	pendingPath string // New Plugin: optional explicit path awaiting confirm
+	addTarget   int    // New Plugin target toggle: targetProject / targetGlobal
 
 	events    chan installEvent
 	logs      []string
@@ -489,7 +502,9 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 	case modeImport:
 		m.imports, cmd = m.imports.Update(msg)
 	case modeNewPluginInput:
-		m.input, cmd = m.input.Update(msg)
+		if m.formFocus != fldTarget {
+			m.inputs[m.formFocus], cmd = m.inputs[m.formFocus].Update(msg)
+		}
 	}
 	return m, cmd
 }
@@ -710,19 +725,40 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 		case "esc":
 			m.mode = modeActions
 			return m, nil
-		case "enter":
-			value := strings.TrimSpace(m.input.Value())
-			if value == "" {
+		case "up", "shift+tab":
+			m.formFocus = (m.formFocus - 1 + fldCount) % fldCount
+			return m, m.syncFormFocus()
+		case "down", "tab":
+			m.formFocus = (m.formFocus + 1) % fldCount
+			return m, m.syncFormFocus()
+		case "left", "right", "h", "l":
+			// On the target row these toggle Project↔Global; on text rows they fall
+			// through to the input (cursor movement / literal characters).
+			if m.formFocus == fldTarget {
+				m.addTarget = (m.addTarget + 1) % 2
 				return m, nil
 			}
-			m.pendingURL = addon.NormalizeRepoURL(value)
-			m.pendingName = addon.DeriveName(value)
-			m.addTarget = targetProject
+		case "enter":
+			url := strings.TrimSpace(m.inputs[fldURL].Value())
+			if url == "" {
+				m.formFocus = fldURL
+				return m, m.syncFormFocus()
+			}
+			m.pendingURL = addon.NormalizeRepoURL(url)
+			if name := strings.TrimSpace(m.inputs[fldName].Value()); name != "" {
+				m.pendingName = name
+			} else {
+				m.pendingName = addon.DeriveName(url)
+			}
+			m.pendingPath = strings.TrimSpace(m.inputs[fldPath].Value())
 			m.mode = modeNewPluginConfirm
 			return m, nil
 		}
+		if m.formFocus == fldTarget {
+			return m, nil
+		}
 		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
+		m.inputs[m.formFocus], cmd = m.inputs[m.formFocus].Update(msg)
 		return m, cmd
 
 	case modeNewPluginConfirm:
@@ -861,6 +897,8 @@ func (m model) helpBar() string {
 		}))
 	case modeNewPluginInput:
 		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
+			key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "field")),
+			key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "target")),
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "next")),
 			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		}))
@@ -868,7 +906,7 @@ func (m model) helpBar() string {
 		return m.staticHelp(m.addons.Help.ShortHelpView([]key.Binding{
 			key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "target")),
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "add")),
-			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		}))
 	default: // fetching / installing — non-interactive
 		return m.staticHelp(m.addons.Help.Styles.ShortDesc.Render("non-interactive · working…"))
@@ -931,7 +969,13 @@ func (m *model) refreshSizes() {
 		m.imports.SetSize(m.width, lh)
 	}
 	if m.mode == modeNewPluginInput {
-		m.input.Width = m.outputInnerWidth()
+		w := m.confirmWidth() - 12 // box room minus the label column
+		if w < 10 {
+			w = 10
+		}
+		for i := range m.inputs {
+			m.inputs[i].Width = w
+		}
 	}
 	m.output.Width = m.outputInnerWidth()
 	m.output.Height = m.outputContentHeight()
@@ -995,8 +1039,7 @@ func (m model) bodyView() string {
 		return m.imports.View()
 
 	case modeNewPluginInput:
-		return lipgloss.JoinVertical(lipgloss.Left, m.titleBar("New Plugin"),
-			boxStyle.Width(m.confirmWidth()).Render("Enter a repo URL to add:\n\n"+m.input.View()))
+		return lipgloss.JoinVertical(lipgloss.Left, m.titleBar("New Plugin"), m.newPluginFormView())
 
 	case modeNewPluginConfirm:
 		return lipgloss.JoinVertical(lipgloss.Left, m.titleBar("New Plugin"), m.newPluginConfirmView())
@@ -1096,13 +1139,9 @@ func (m model) confirmView() string {
 	return boxStyle.Width(inner).Render(body)
 }
 
-// newPluginConfirmView shows the derived entry and a Project◄ ►Global target
-// toggle. The active side is highlighted; for Project the derived install path is
-// shown too.
-func (m model) newPluginConfirmView() string {
-	inner := m.confirmWidth()
-	urlBlock := indentLines(hardWrap(m.pendingURL, inner-4), "    ")
-
+// targetToggle renders the Project◄ ►Global switch with the active side
+// highlighted.
+func (m model) targetToggle() string {
 	active := lipgloss.NewStyle().Foreground(focusedColor).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(mutedColor)
 	project, global := dim.Render("Project"), dim.Render("Global")
@@ -1111,11 +1150,48 @@ func (m model) newPluginConfirmView() string {
 	} else {
 		global = active.Render("Global")
 	}
-	toggle := fmt.Sprintf("%s  ◄ ►  %s", project, global)
+	return fmt.Sprintf("%s  ◄ ►  %s", project, global)
+}
 
+// newPluginFormView renders the single-page New Plugin form: name/url/path text
+// fields and the target toggle, with a ▸ marker on the focused row.
+func (m model) newPluginFormView() string {
+	inner := m.confirmWidth()
+	label := lipgloss.NewStyle().Foreground(mutedColor)
+	marker := func(focused bool) string {
+		if focused {
+			return lipgloss.NewStyle().Foreground(focusedColor).Render("▸ ")
+		}
+		return "  "
+	}
+	field := func(row int, lbl string) string {
+		return marker(m.formFocus == row) + label.Render(lbl) + m.inputs[row].View()
+	}
+
+	body := strings.Join([]string{
+		"Add plugin",
+		"",
+		field(fldURL, "URL:     "),
+		field(fldName, "Name:    "),
+		field(fldPath, "Path:    "),
+		"",
+		marker(m.formFocus == fldTarget) + label.Render("Add to:  ") + m.targetToggle(),
+	}, "\n")
+	return boxStyle.Width(inner).Render(body)
+}
+
+// newPluginConfirmView reviews the entered values and the target before writing.
+func (m model) newPluginConfirmView() string {
+	inner := m.confirmWidth()
+	urlBlock := indentLines(hardWrap(m.pendingURL, inner-4), "    ")
+
+	path := m.pendingPath
+	if path == "" {
+		path = "(derived on install)"
+	}
 	body := fmt.Sprintf(
-		"Add plugin\n\n  name:     %s\n  url:\n%s\n\n  add to:   %s",
-		m.pendingName, urlBlock, toggle)
+		"Add plugin\n\n  name:     %s\n  url:\n%s\n  path:     %s\n\n  add to:   %s",
+		m.pendingName, urlBlock, path, m.targetToggle())
 	return boxStyle.Width(inner).Render(body)
 }
 
@@ -1316,27 +1392,51 @@ func (m model) finishInstall() tea.Cmd {
 	}
 }
 
-// startNewPlugin opens the URL prompt for adding a new manifest entry.
+// startNewPlugin opens the New Plugin form (name/url/path + target toggle).
 func (m model) startNewPlugin() (model, tea.Cmd) {
-	ti := textinput.New()
-	ti.Placeholder = "https://github.com/owner/repo"
-	ti.Prompt = "url: "
-	ti.Focus()
-	m.input = ti
+	mk := func(placeholder string) textinput.Model {
+		ti := textinput.New()
+		ti.Placeholder = placeholder
+		ti.Prompt = "" // labels are rendered separately in the form view
+		return ti
+	}
+	// Order matches the fld* indices: url, name, path.
+	m.inputs = []textinput.Model{
+		mk("https://github.com/owner/repo"),
+		mk("(optional — derived from url)"),
+		mk("(optional — derived on install)"),
+	}
+	m.addTarget = targetProject
+	m.formFocus = fldURL
+	cmd := m.syncFormFocus()
 	m.statusMsg = ""
 	m.mode = modeNewPluginInput
-	return m, textinput.Blink
+	return m, cmd
+}
+
+// syncFormFocus focuses the textinput at formFocus and blurs the rest (the
+// target row focuses none), returning the cursor-blink command.
+func (m *model) syncFormFocus() tea.Cmd {
+	var cmd tea.Cmd
+	for i := range m.inputs {
+		if i == m.formFocus {
+			cmd = m.inputs[i].Focus()
+		} else {
+			m.inputs[i].Blur()
+		}
+	}
+	return cmd
 }
 
 // commitNewPlugin writes the pending entry to the project manifest or the global
 // list (per addTarget), refreshes the browse list when it touched the project,
 // and returns to browse with a status line. Both are quick local file writes.
 func (m model) commitNewPlugin() (model, tea.Cmd) {
-	name, url := m.pendingName, m.pendingURL
+	name, url, path := m.pendingName, m.pendingURL, m.pendingPath
 	if m.addTarget == targetGlobal {
-		path, err := addon.GlobalListPath()
+		globalPath, err := addon.GlobalListPath()
 		if err == nil {
-			err = addon.AddEntry(path, name, url, "")
+			err = addon.AddEntry(globalPath, name, url, path)
 		}
 		if err != nil {
 			m.statusMsg = "error: " + err.Error()
@@ -1347,7 +1447,7 @@ func (m model) commitNewPlugin() (model, tea.Cmd) {
 		return m, nil
 	}
 
-	if err := addon.AddEntry(m.manifestPath, name, url, ""); err != nil {
+	if err := addon.AddEntry(m.manifestPath, name, url, path); err != nil {
 		m.statusMsg = "error: " + err.Error()
 		m.mode = modeBrowse
 		return m, nil
@@ -1373,7 +1473,7 @@ func (m model) startImport() (model, tea.Cmd) {
 	}
 	items := make([]list.Item, 0, len(addons))
 	for _, a := range addons {
-		items = append(items, importItem{name: a.Name, url: a.URL})
+		items = append(items, importItem{name: a.Name, url: a.URL, path: a.Path})
 	}
 	m.imports = m.newSelectList(items, "Import Plugin")
 	m.statusMsg = ""
@@ -1388,7 +1488,7 @@ func (m model) commitImport() (model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	if err := addon.AddEntry(m.manifestPath, sel.name, sel.url, ""); err != nil {
+	if err := addon.AddEntry(m.manifestPath, sel.name, sel.url, sel.path); err != nil {
 		m.statusMsg = "error: " + err.Error()
 		m.mode = modeBrowse
 		return m, nil

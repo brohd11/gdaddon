@@ -7,17 +7,21 @@ import (
 	"testing"
 )
 
-// mkPlugin creates dir (relative to root) with a minimal plugin.cfg inside it.
-func mkPlugin(t *testing.T, root, dir string) {
+// mkCfg creates dir (relative to root) with a minimal config file (cfgName)
+// inside it.
+func mkCfg(t *testing.T, root, dir, cfgName string) {
 	t.Helper()
 	full := filepath.Join(root, dir)
 	if err := os.MkdirAll(full, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(full, "plugin.cfg"), []byte("[plugin]\nversion=\"1.0.0\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(full, cfgName), []byte("[plugin]\nversion=\"1.0.0\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
+
+// mkPlugin creates dir (relative to root) with a minimal plugin.cfg inside it.
+func mkPlugin(t *testing.T, root, dir string) { mkCfg(t, root, dir, "plugin.cfg") }
 
 func destSet(ps []placement) []string {
 	out := make([]string, len(ps))
@@ -48,6 +52,25 @@ func TestResolveInstall(t *testing.T) {
 		ps := resolveInstall(root, "Whatever", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
 			t.Fatalf("nested sub-addon should be pruned; got %+v", ps)
+		}
+	})
+
+	t.Run("version.cfg library detected", func(t *testing.T) {
+		root := t.TempDir()
+		mkCfg(t, root, "addons/my_lib", "version.cfg")
+		ps := resolveInstall(root, "Whatever", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/my_lib" {
+			t.Fatalf("version.cfg folder not detected; got %+v", ps)
+		}
+	})
+
+	t.Run("version.cfg nested under plugin.cfg pruned", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/my_addon")
+		mkCfg(t, root, "addons/my_addon/lib", "version.cfg")
+		ps := resolveInstall(root, "Whatever", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
+			t.Fatalf("nested version.cfg should be pruned; got %+v", ps)
 		}
 	})
 
