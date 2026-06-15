@@ -27,8 +27,42 @@ func fetchToStaging(url, addonName string, report Reporter) (stagingRoot string,
 }
 
 func fetchZip(url, addonName string, report Reporter) (string, func(), error) {
-	report("[%s] Downloading ZIP from %s...", addonName, url)
+	zipPath, zipCleanup, err := obtainZip(url, addonName, report)
+	if err != nil {
+		return "", func() {}, err
+	}
+	defer zipCleanup()
 
+	extractDir, err := os.MkdirTemp("", "godot-addon-extract-*")
+	if err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { os.RemoveAll(extractDir) }
+
+	report("[%s] Extracting...", addonName)
+	if err := unzip(zipPath, extractDir); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+
+	// Unwrap a single top-level folder (GitHub archives wrap content in repo-tag/).
+	root := extractDir
+	if entries, err := os.ReadDir(extractDir); err == nil && len(entries) == 1 && entries[0].IsDir() {
+		root = filepath.Join(extractDir, entries[0].Name())
+	}
+	return root, cleanup, nil
+}
+
+// obtainZip returns a path to the zip to extract: a local archive file is used in
+// place (cleanup is a no-op so the user's archive isn't deleted); a remote url is
+// downloaded to a temp file (cleanup removes it).
+func obtainZip(url, addonName string, report Reporter) (zipPath string, cleanup func(), err error) {
+	if info, err := os.Stat(url); err == nil && !info.IsDir() {
+		report("[%s] Using local archive %s...", addonName, url)
+		return url, func() {}, nil
+	}
+
+	report("[%s] Downloading ZIP from %s...", addonName, url)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return "", func() {}, err
@@ -45,31 +79,13 @@ func fetchZip(url, addonName string, report Reporter) (string, func(), error) {
 	if err != nil {
 		return "", func() {}, err
 	}
-	defer os.Remove(tmpFile.Name())
-
 	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
 		return "", func() {}, err
 	}
 	tmpFile.Close()
-
-	extractDir, err := os.MkdirTemp("", "godot-addon-extract-*")
-	if err != nil {
-		return "", func() {}, err
-	}
-	cleanup := func() { os.RemoveAll(extractDir) }
-
-	report("[%s] Extracting...", addonName)
-	if err := unzip(tmpFile.Name(), extractDir); err != nil {
-		cleanup()
-		return "", func() {}, err
-	}
-
-	// Unwrap a single top-level folder (GitHub archives wrap content in repo-tag/).
-	root := extractDir
-	if entries, err := os.ReadDir(extractDir); err == nil && len(entries) == 1 && entries[0].IsDir() {
-		root = filepath.Join(extractDir, entries[0].Name())
-	}
-	return root, cleanup, nil
+	return tmpFile.Name(), func() { os.Remove(tmpFile.Name()) }, nil
 }
 
 func fetchGit(url, addonName string, report Reporter) (string, func(), error) {

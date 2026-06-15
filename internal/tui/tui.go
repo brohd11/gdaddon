@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"gdaddon/internal/addon"
+	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -188,7 +189,12 @@ type versionItem struct {
 	asset      source.Asset
 	prerelease bool
 	branch     bool
+	archived   bool // asset comes from the local archive (local-file URL)
 }
+
+// isArchived reports whether an asset is a local archive entry (local-file URL)
+// rather than a remote download.
+func isArchived(a source.Asset) bool { return !strings.HasPrefix(a.URL, "http") }
 
 func (v versionItem) Title() string {
 	if v.branch {
@@ -224,7 +230,7 @@ func versionTopItems(l *source.Listing) []list.Item {
 func assetItems(r source.Release) []list.Item {
 	items := make([]list.Item, 0, len(r.Assets))
 	for _, a := range r.Assets {
-		items = append(items, versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease})
+		items = append(items, versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease, archived: isArchived(a)})
 	}
 	return items
 }
@@ -233,7 +239,7 @@ func assetItems(r source.Release) []list.Item {
 func branchItems(branches []source.Asset) []list.Item {
 	items := make([]list.Item, 0, len(branches))
 	for _, b := range branches {
-		items = append(items, versionItem{tag: b.Name, asset: b, branch: true})
+		items = append(items, versionItem{tag: b.Name, asset: b, branch: true, archived: isArchived(b)})
 	}
 	return items
 }
@@ -267,6 +273,11 @@ type installedAllMsg struct {
 	statuses []addon.Status
 }
 
+type archivedMsg struct {
+	tag string
+	err error
+}
+
 // ---------- model ----------
 
 type model struct {
@@ -290,7 +301,8 @@ type model struct {
 	formFocus int               // focused row: fldName/fldURL/fldPath/fldTarget
 	focus     focusArea
 
-	listing       *source.Listing
+	ghListing     *source.Listing // raw upstream listing (nil when offline/delisted)
+	listing       *source.Listing // ghListing merged with archived packages
 	selected      addon.Addon
 	selectedLocal string // installed version of selected addon, for the versions title
 	pick          versionItem
@@ -372,20 +384,23 @@ func newModel(manifestPath, projectRoot string, statuses []addon.Status) model {
 
 // newSelectList builds a list styled like the others (no status bar, help drawn
 // separately, esc/enter hints) for the versions and submenu screens.
-func (m model) newSelectList(items []list.Item, title string) list.Model {
+func (m model) newSelectList(items []list.Item, title string, extra ...key.Binding) list.Model {
 	l := list.New(items, newDelegate(), m.width, m.listHeight())
 	l.Title = title
 	styleList(&l)
 	keys := func() []key.Binding {
-		return []key.Binding{
+		return append([]key.Binding{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
 			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-		}
+		}, extra...)
 	}
 	l.AdditionalShortHelpKeys = keys
 	l.AdditionalFullHelpKeys = keys
 	return l
 }
+
+// archiveKey is the version-screen hint for the archive action.
+var archiveKey = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive"))
 
 // newDelegate is the shared list delegate with brightened description text.
 func newDelegate() list.DefaultDelegate {
@@ -428,13 +443,21 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case releasesMsg:
-		if msg.err != nil {
+		// Fold in locally archived packages. If the upstream fetch failed but the
+		// archive has entries, fall back to an archive-only listing — the whole
+		// point of the archive (a delisted/offline repo can still be reinstalled).
+		var archived []source.Release
+		if repoID, err := source.RepoID(m.selected.URL); err == nil {
+			archived, _ = archive.List(repoID)
+		}
+		if msg.err != nil && len(archived) == 0 {
 			m.statusMsg = "error: " + msg.err.Error()
 			m.mode = modeBrowse
 			return m, nil
 		}
-		m.listing = msg.listing
-		m.versions = m.newSelectList(versionTopItems(msg.listing), m.headerTitle("Versions"))
+		m.ghListing = msg.listing // nil when the fetch failed
+		m.listing = archive.Merge(cloneListing(m.ghListing), archived)
+		m.versions = m.newSelectList(versionTopItems(m.listing), m.headerTitle("Versions"), archiveKey)
 		m.mode = modeVersions
 		return m, nil
 
@@ -449,7 +472,7 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 			m.mode = modeVersions
 			return m, nil
 		}
-		m.submenu = m.newSelectList(branchItems(msg.branches), m.headerTitle("Branches"))
+		m.submenu = m.newSelectList(branchItems(msg.branches), m.headerTitle("Branches"), archiveKey)
 		m.mode = modeSubmenu
 		return m, nil
 
@@ -482,6 +505,21 @@ func (m model) update(msg tea.Msg) (model, tea.Cmd) {
 		m.applyStatuses(msg.statuses)
 		m.statusMsg = fmt.Sprintf("updated %s → %s", m.selected.Name, msg.version)
 		m.mode = modeBrowse
+		return m, nil
+
+	case archivedMsg:
+		if msg.err != nil {
+			m.statusMsg = "archive failed: " + msg.err.Error()
+		} else {
+			m.statusMsg = "archived " + msg.tag
+			// Rebuild the version list from the raw upstream listing so the new
+			// archive entry shows without double-merging existing archived assets.
+			if repoID, err := source.RepoID(m.selected.URL); err == nil {
+				archived, _ := archive.List(repoID)
+				m.listing = archive.Merge(cloneListing(m.ghListing), archived)
+				m.versions.SetItems(versionTopItems(m.listing))
+			}
+		}
 		return m, nil
 
 	case spinner.TickMsg:
@@ -674,6 +712,8 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 			return m, nil
 		case "enter":
 			return m.selectVersion()
+		case "a":
+			return m.archiveSelection(m.versions.SelectedItem())
 		}
 		var cmd tea.Cmd
 		m.versions, cmd = m.versions.Update(msg)
@@ -697,6 +737,8 @@ func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
 			m.pick = v
 			m.mode = modeConfirm
 			return m, nil
+		case "a":
+			return m.archiveSelection(m.submenu.SelectedItem())
 		}
 		var cmd tea.Cmd
 		m.submenu, cmd = m.submenu.Update(msg)
@@ -811,11 +853,12 @@ func (m model) selectVersion() (model, tea.Cmd) {
 		return m, tea.Batch(m.spinner.Tick, fetchBranches(m.selected.URL))
 	case releaseItem:
 		if len(sel.rel.Assets) == 1 {
-			m.pick = versionItem{tag: sel.rel.Tag, asset: sel.rel.Assets[0], prerelease: sel.rel.Prerelease}
+			a := sel.rel.Assets[0]
+			m.pick = versionItem{tag: sel.rel.Tag, asset: a, prerelease: sel.rel.Prerelease, archived: isArchived(a)}
 			m.mode = modeConfirm
 			return m, nil
 		}
-		m.submenu = m.newSelectList(assetItems(sel.rel), m.headerTitle("Assets "+sel.rel.Tag))
+		m.submenu = m.newSelectList(assetItems(sel.rel), m.headerTitle("Assets "+sel.rel.Tag), archiveKey)
 		m.mode = modeSubmenu
 		return m, nil
 	}
@@ -1317,6 +1360,72 @@ func fetchReleases(url string) tea.Cmd {
 	}
 }
 
+// cloneListing copies a listing's release/asset slices so merging archived assets
+// in doesn't mutate the cached upstream listing. A nil listing clones to nil.
+func cloneListing(l *source.Listing) *source.Listing {
+	if l == nil {
+		return nil
+	}
+	c := *l
+	c.Releases = make([]source.Release, len(l.Releases))
+	for i, r := range l.Releases {
+		r.Assets = append([]source.Asset(nil), r.Assets...)
+		c.Releases[i] = r
+	}
+	return &c
+}
+
+// archiveSelection saves the package(s) for the selected version-list item into
+// the local archive without installing. A release archives all its remote assets;
+// a leaf asset/branch archives just that one. HEAD (no concrete asset) is ignored.
+func (m model) archiveSelection(sel list.Item) (model, tea.Cmd) {
+	repoID, err := source.RepoID(m.selected.URL)
+	if err != nil {
+		m.statusMsg = "cannot archive: " + err.Error()
+		return m, nil
+	}
+
+	var tag string
+	var assets []source.Asset
+	switch it := sel.(type) {
+	case releaseItem:
+		tag = it.rel.Tag
+		assets = it.rel.Assets
+	case versionItem:
+		tag = it.tag
+		assets = []source.Asset{it.asset}
+	default:
+		return m, nil // HEAD or anything without a concrete package
+	}
+
+	// Drop already-archived (local) assets; nothing to fetch for those.
+	var remote []source.Asset
+	for _, a := range assets {
+		if !isArchived(a) {
+			remote = append(remote, a)
+		}
+	}
+	if len(remote) == 0 {
+		m.statusMsg = tag + " already archived"
+		return m, nil
+	}
+
+	m.statusMsg = "archiving " + tag + "…"
+	return m, archiveAssets(repoID, tag, remote)
+}
+
+// archiveAssets downloads and stores each asset, reporting the outcome.
+func archiveAssets(repoID, tag string, assets []source.Asset) tea.Cmd {
+	return func() tea.Msg {
+		for _, a := range assets {
+			if err := archive.Archive(repoID, tag, a); err != nil {
+				return archivedMsg{tag: tag, err: err}
+			}
+		}
+		return archivedMsg{tag: tag}
+	}
+}
+
 func fetchBranches(url string) tea.Cmd {
 	return func() tea.Msg {
 		branches, err := source.Branches(context.Background(), url)
@@ -1373,6 +1482,11 @@ func waitForEvent(events chan installEvent) tea.Cmd {
 func (m model) finishInstall() tea.Cmd {
 	manifestPath, projectRoot := m.manifestPath, m.projectRoot
 	name, url := m.selected.Name, m.pick.asset.URL
+	// Installing from the local archive must not pin the machine-specific archive
+	// path as the manifest url — keep the entry's canonical repo url instead.
+	if m.pick.archived {
+		url = ""
+	}
 	path := m.installedPath
 	version := m.installedVersion
 	if version == "" {

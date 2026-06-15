@@ -62,3 +62,31 @@ func TestInstallZipEndToEnd(t *testing.T) {
 		t.Errorf("wrapper folder should not be installed")
 	}
 }
+
+func TestInstallLocalZip(t *testing.T) {
+	// A local archive zip (as produced by the archive feature) installs without
+	// any network access.
+	data := buildZip(t, map[string]string{
+		"MyRepo-1.0.0/addons/my_addon/plugin.cfg": "[plugin]\nversion=\"1.0.0\"\n",
+	})
+	zipPath := filepath.Join(t.TempDir(), "pkg.zip")
+	if err := os.WriteFile(zipPath, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	project := t.TempDir()
+	res, err := Install(Addon{Name: "Whatever", URL: zipPath}, project, func(string, ...any) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Path != "addons/my_addon" || res.Version != "1.0.0" {
+		t.Errorf("got Path=%q Version=%q", res.Path, res.Version)
+	}
+	if _, err := os.Stat(filepath.Join(project, "addons/my_addon/plugin.cfg")); err != nil {
+		t.Errorf("plugin.cfg not installed from local zip: %v", err)
+	}
+	// The source archive must be left intact (cleanup is a no-op for local zips).
+	if _, err := os.Stat(zipPath); err != nil {
+		t.Errorf("local archive zip should not be deleted: %v", err)
+	}
+}

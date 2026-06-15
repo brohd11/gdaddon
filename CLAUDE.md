@@ -56,16 +56,18 @@ cmd/
   root.go            — the single `gdaddon` cobra command: TUI by default, --install for non-interactive
   paths.go           — resolvePaths (manifest filesystem-walk + git-root detection)
 internal/
-  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, plugin.cfg version read, manifest UpdateEntry
-  source/            — resolves remote versions from a URL (github.go: releases, branches, source archives)
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, ~/.gdaddon global list
+  source/            — resolves remote versions from a URL (github.go: releases, branches, source archives; RepoID)
+  archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips, merge into a listing
   tui/               — bubbletea front-end (tui.go)
 ```
 
 Key packages/functions:
-- `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…).
-- `addon.Install` / `addon.InstallAll` — dispatch on URL suffix (`.zip` download-and-extract vs `.git` shallow clone) and report progress via a callback.
-- `addon.UpdateEntry` — rewrites a single manifest entry's url/version in place (empty url leaves the url line untouched).
-- `source.AvailableVersions` / `source.Branches` — GitHub releases (each with uploaded `.zip`s + a generated source archive) and branch-HEAD archives.
+- `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing.
+- `addon.Install` / `addon.InstallAll` — fetch (`.zip` download / `.git` clone / **local `.zip` path** for archived packages), derive the install dir from the package's `plugin.cfg`/`version.cfg` (`internal/addon/cfg.go`), and report progress via a callback. `Install` returns the resolved path+version.
+- `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`).
+- `source.AvailableVersions` / `source.Branches` / `source.RepoID` — GitHub releases (uploaded `.zip`s + a generated source archive), branch-HEAD archives, and canonical repo identity.
+- `archive.Archive` / `archive.List` / `archive.Merge` — save a downloaded asset zip, read archived packages back as "- archived" releases (local-file URLs), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails).
 
 ## Installing the binary
 
