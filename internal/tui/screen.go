@@ -25,3 +25,10 @@ type filterer interface{ filtering() bool }
 // it (browse + the task screens), used for sizing and for whether tab focuses
 // the output.
 type outputViewer interface{ wantsOutput() bool }
+
+// rootHandler lets a tab's root screen handle app-level result messages itself,
+// so the router stays tab-agnostic (it only owns the stack). browse uses this to
+// refresh its addon list. Returns whether the message was consumed.
+type rootHandler interface {
+	handleRoot(sh *shared, msg tea.Msg) (handled bool)
+}

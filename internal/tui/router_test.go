@@ -7,11 +7,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// newTestRouter builds a router around the browse root with no real project on
-// disk (statuses nil → just the pinned Actions row).
+// newTestRouter builds a router with the Browse + Actions tabs and no real project
+// on disk (statuses nil → an empty browse list).
 func newTestRouter() router {
 	sh := newShared("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test")
-	return newRouter(sh, newBrowseScreen(nil))
+	return newRouter(sh, []tabEntry{
+		{title: "Browse", root: newBrowseScreen(nil)},
+		{title: "Actions", root: newActionsScreen()},
+	})
 }
 
 func sized(tm tea.Model) tea.Model {
@@ -50,18 +53,29 @@ func TestRouterRenders(t *testing.T) {
 	}
 }
 
-// TestRouterEnterAndBack walks browse → Actions (enter on the pinned menu row) →
-// back (esc), exercising push/pop through the router.
-func TestRouterEnterAndBack(t *testing.T) {
+// TestTabSwitch walks Browse → Actions (]) → Browse ([), exercising top-level tab
+// switching through the router's global keys.
+func TestTabSwitch(t *testing.T) {
 	tm := sized(newTestRouter())
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	if _, ok := tm.(router).top().(*actionsScreen); !ok {
-		t.Fatalf("after enter want *actionsScreen, got %T", tm.(router).top())
+		t.Fatalf("after ] want *actionsScreen, got %T", tm.(router).top())
 	}
 	_ = tm.View()
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
 	if _, ok := tm.(router).top().(*browseScreen); !ok {
-		t.Fatalf("after esc want *browseScreen, got %T", tm.(router).top())
+		t.Fatalf("after [ want *browseScreen, got %T", tm.(router).top())
+	}
+}
+
+// TestTabSwitchGatedAtDepth confirms [ / ] only switch tabs at the root: after
+// drilling into a sub-screen, the tab key is ignored.
+func TestTabSwitchGatedAtDepth(t *testing.T) {
+	tm := sized(newTestRouter())
+	tm, _ = tm.Update(pushMsg{s: newNewPluginForm()}) // depth 2 on the Browse tab
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	if _, ok := tm.(router).top().(*newPluginForm); !ok {
+		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(router).top())
 	}
 }
 

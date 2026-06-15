@@ -77,9 +77,17 @@ var (
 
 	statusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(focusedColor)
 	logStyle    = lipgloss.NewStyle().Foreground(logColor)
-	boxStyle    = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
-	headerStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(borderColor)
-	labelStyle  = lipgloss.NewStyle().Foreground(mutedColor)
+
+	// tab strip: sits under the header, active tab highlighted, inactive muted,
+	// closed off from the content below by a full-width rule. The switch keys are
+	// shown in the help bar (rootHelp), not here.
+	tabStripStyle  = lipgloss.NewStyle().Padding(0, 1)
+	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(focusedColor)
+	tabStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(mutedColor)
+	tabRuleStyle   = lipgloss.NewStyle().Foreground(borderColor)
+	boxStyle       = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
+	headerStyle    = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(borderColor)
+	labelStyle     = lipgloss.NewStyle().Foreground(mutedColor)
 
 	// listStyles are the default bubbles list styles, reused to render
 	// breadcrumb/title bars and static help so they align with the real lists.
@@ -182,6 +190,35 @@ func (s *shared) box(body string) string {
 // the status and output panes.
 func helpView(l list.Model) string {
 	return l.Styles.HelpStyle.Render(l.Help.View(l))
+}
+
+// helpMode selects a tab root's help-bar preset. The zero value is the decluttered
+// minimal bar (nav · select · quit · more); helpTabbed adds the [ ] tab-switch hint.
+type helpMode int
+
+const (
+	helpMinimal helpMode = iota
+	helpTabbed
+)
+
+// rootHelp renders a tab root's decluttered short help for the given preset; the
+// full (?) help still lists everything via the list's own FullHelp. Tab roots use
+// this instead of helpView so secondary keys (filter, output, clear) stay out of
+// the short bar.
+func rootHelp(l list.Model, mode helpMode) string {
+	if l.Help.ShowAll {
+		return l.Styles.HelpStyle.Render(l.Help.FullHelpView(l.FullHelp()))
+	}
+	short := []key.Binding{
+		l.KeyMap.CursorUp,
+		l.KeyMap.CursorDown,
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+	}
+	if mode == helpTabbed {
+		short = append(short, tabSwitchKey)
+	}
+	short = append(short, l.KeyMap.Quit, l.KeyMap.ShowFullHelp)
+	return l.Styles.HelpStyle.Render(l.Help.ShortHelpView(short))
 }
 
 // bindingHelp renders a set of key bindings as a static help bar aligned with

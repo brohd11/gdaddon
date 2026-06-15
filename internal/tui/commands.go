@@ -67,7 +67,7 @@ func waitForEvent(events chan installEvent) tea.Cmd {
 }
 
 // finishInstallCmd pins the freshly installed url, resolved path, and version
-// into the manifest and re-inspects, returning installDoneMsg for the router to
+// into the manifest and re-inspects, returning msgRootRefresh for the router to
 // apply to the browse list.
 func finishInstallCmd(sh *shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
 	manifestPath, projectRoot := sh.manifestPath, sh.projectRoot
@@ -82,13 +82,14 @@ func finishInstallCmd(sh *shared, selected addon.Addon, pick versionItem, instPa
 		version = strings.TrimPrefix(pick.tag, "v")
 	}
 
+	status := "updated " + name + " → " + version
 	return func() tea.Msg {
 		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version)
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
-			return installDoneMsg{name: name, version: version}
+			return msgRootRefresh{status: status}
 		}
-		return installDoneMsg{statuses: statuses, name: name, version: version}
+		return msgRootRefresh{status: status, statuses: statuses}
 	}
 }
 
@@ -98,19 +99,19 @@ func finishInstallAllCmd(sh *shared) tea.Cmd {
 	return func() tea.Msg {
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
-			return installAllDoneMsg{}
+			return msgRootRefresh{status: "install complete"}
 		}
-		return installAllDoneMsg{statuses: statuses}
+		return msgRootRefresh{status: "install complete", statuses: statuses}
 	}
 }
 
-// reloadCmd re-inspects the manifest and returns reloadAddonsMsg so the router
+// reloadCmd re-inspects the manifest and returns msgRootRefresh so the router
 // rebuilds the browse list (after a row was added) and sets the status line.
 func reloadCmd(sh *shared, status string) tea.Cmd {
 	manifestPath, projectRoot := sh.manifestPath, sh.projectRoot
 	return func() tea.Msg {
 		statuses, _ := addon.Inspect(manifestPath, projectRoot)
-		return reloadAddonsMsg{status: status, statuses: statuses}
+		return msgRootRefresh{status: status, statuses: statuses, rebuild: true}
 	}
 }
 

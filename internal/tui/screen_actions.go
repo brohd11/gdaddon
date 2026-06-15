@@ -7,8 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// actionsScreen is the submenu opened from the pinned Actions row: install all,
-// new plugin, import plugin.
+// actionsScreen is the Actions tab (reached with [ / ]): install all, new plugin,
+// import plugin. As a tab root it quits on q rather than popping.
 type actionsScreen struct {
 	list list.Model
 }
@@ -31,8 +31,8 @@ func (s *actionsScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
 	}
 	if key, ok := msg.(tea.KeyMsg); ok {
 		switch key.String() {
-		case "esc", "q":
-			return s, pop()
+		case "q":
+			return s, tea.Quit
 		case "enter":
 			a, ok := s.list.SelectedItem().(actionItem)
 			if !ok {
@@ -72,7 +72,7 @@ func (s *actionsScreen) startImport(sh *shared) (screen, tea.Cmd) {
 }
 
 func (s *actionsScreen) View(*shared) string     { return s.list.View() }
-func (s *actionsScreen) HelpView(*shared) string { return helpView(s.list) }
+func (s *actionsScreen) HelpView(*shared) string { return rootHelp(s.list, helpTabbed) }
 
 func (s *actionsScreen) SetSize(sh *shared, width, bodyHeight int) {
 	s.list.SetSize(width, bodyHeight)

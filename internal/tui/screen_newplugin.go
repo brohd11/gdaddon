@@ -128,14 +128,16 @@ func (s *newPluginForm) View(sh *shared) string {
 		boxStyle.Width(sh.confirmWidth()).Render(body))
 }
 
-var newPluginInputHelp = []key.Binding{
-	key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "field")),
-	key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "target")),
-	key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "next")),
-	key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+func (s *newPluginForm) HelpView(sh *shared) string {
+	// return sh.bindingHelp(newPluginInputHelp)
+	var newPluginInputHelp = []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "field")),
+		key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "target")),
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "next")),
+		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+	}
+	return sh.bindingHelp(newPluginInputHelp)
 }
-
-func (s *newPluginForm) HelpView(sh *shared) string { return sh.bindingHelp(newPluginInputHelp) }
 
 func (s *newPluginForm) SetSize(sh *shared, width, bodyHeight int) {
 	w := sh.confirmWidth() - 12 // box room minus the label column

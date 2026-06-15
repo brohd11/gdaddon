@@ -13,14 +13,6 @@ import (
 
 // ---------- list items ----------
 
-// menuItem is the entry pinned to the top of the browse list; selecting it opens
-// the Actions submenu (install all, add plugin, future config).
-type menuItem struct{}
-
-func (menuItem) Title() string       { return "☰ Actions" }
-func (menuItem) FilterValue() string { return "actions menu" }
-func (menuItem) Description() string { return "install all · global plugins" }
-
 // actionKind identifies a row in the Actions submenu.
 type actionKind int
 
@@ -175,12 +167,10 @@ func branchItems(branches []source.Asset) []list.Item {
 	return items
 }
 
-// addonListItems builds the browse list contents: the pinned Actions menu first,
-// then one row per addon (so addon index i lives at list index i+1 — see
-// applyStatuses).
+// addonListItems builds the browse list contents: one row per addon (Actions now
+// lives in its own top-level tab, reached with [ / ]).
 func addonListItems(statuses []addon.Status) []list.Item {
-	items := make([]list.Item, 0, len(statuses)+1)
-	items = append(items, menuItem{})
+	items := make([]list.Item, 0, len(statuses))
 	for _, s := range statuses {
 		items = append(items, item{status: s})
 	}
@@ -207,6 +197,9 @@ func newSelectList(items []list.Item, title string, extra ...key.Binding) list.M
 
 // archiveKey is the version-screen hint for the archive action.
 var archiveKey = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive"))
+
+// tabSwitchKey is the help-bar hint for top-level tab switching (shown by rootHelp).
+var tabSwitchKey = key.NewBinding(key.WithKeys("[", "]"), key.WithHelp("[ ]", "tabs"))
 
 // newDelegate is the shared list delegate with brightened description text.
 func newDelegate() list.DefaultDelegate {

@@ -29,23 +29,14 @@ type installEvent struct {
 	version string // version read from the installed plugin.cfg
 }
 
-// installDoneMsg / installAllDoneMsg / pluginAddedMsg are routed by the router to
-// the browse (root) screen: they refresh its list and set the status line, then
-// the router unwinds back to it. reloadAddonsMsg rebuilds the list when rows were
-// added (import / new plugin); applyStatusesMsg updates existing rows in place.
-type installDoneMsg struct {
-	statuses []addon.Status
-	name     string
-	version  string
-}
-
-type installAllDoneMsg struct {
-	statuses []addon.Status
-}
-
-type reloadAddonsMsg struct {
-	status   string
-	statuses []addon.Status
+// msgRootRefresh is routed by the router to the browse (root) screen: it sets the
+// status line, refreshes the list, then the router unwinds back to the root. The
+// sender supplies the display text; rebuild picks setItems (row count changed, e.g.
+// import / new plugin) over applyStatuses (existing rows updated in place).
+type msgRootRefresh struct {
+	status   string         // sender-provided display text
+	statuses []addon.Status // nil ⇒ no refresh (error paths send nil)
+	rebuild  bool           // true ⇒ setItems, false ⇒ applyStatuses
 }
 
 // archiveFinishedMsg unwinds to the versions screen and re-lists it so the newly

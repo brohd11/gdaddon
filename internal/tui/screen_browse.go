@@ -17,13 +17,14 @@ type browseScreen struct {
 
 var _ filterer = (*browseScreen)(nil)
 var _ outputViewer = (*browseScreen)(nil)
+var _ rootHandler = (*browseScreen)(nil)
 
 func newBrowseScreen(statuses []addon.Status) *browseScreen {
 	l := list.New(addonListItems(statuses), newDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	styleList(&l)
-	// The browse short help is rendered custom (see HelpView) to stay
-	// uncluttered; these extras only show in the full (?) help.
+	// The browse short help is decluttered (see HelpView / rootHelp); these extras
+	// only show in the full (?) help.
 	l.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
@@ -50,19 +51,14 @@ func (s *browseScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
 		case "q":
 			return s, tea.Quit
 		case "enter":
-			switch sel := s.list.SelectedItem().(type) {
-			case menuItem:
-				return s, push(newActionsScreen())
-			case item:
-				if !sel.status.Installable() {
-					return s, nil
-				}
-				sh.statusMsg = ""
-				a := sel.status.Addon
-				ld := newLoadingScreen(a, sel.status.LocalVersion, "fetching versions…", fetchReleases(a.URL))
-				return s, push(ld)
+			sel, ok := s.list.SelectedItem().(item)
+			if !ok || !sel.status.Installable() {
+				return s, nil
 			}
-			return s, nil
+			sh.statusMsg = ""
+			a := sel.status.Addon
+			ld := newLoadingScreen(a, sel.status.LocalVersion, "fetching versions…", fetchReleases(a.URL))
+			return s, push(ld)
 		}
 	}
 	var cmd tea.Cmd
@@ -82,22 +78,9 @@ func (s *browseScreen) View(sh *shared) string {
 	return body
 }
 
-// HelpView renders a decluttered short help (navigation + select + quit + more);
-// filter, output, and clear-log live only in the full (?) help.
-func (s *browseScreen) HelpView(*shared) string {
-	l := s.list
-	if l.Help.ShowAll {
-		return l.Styles.HelpStyle.Render(l.Help.FullHelpView(l.FullHelp()))
-	}
-	short := []key.Binding{
-		l.KeyMap.CursorUp,
-		l.KeyMap.CursorDown,
-		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
-		l.KeyMap.Quit,
-		l.KeyMap.ShowFullHelp,
-	}
-	return l.Styles.HelpStyle.Render(l.Help.ShortHelpView(short))
-}
+// HelpView renders the decluttered tab-root help (nav · select · tabs · quit ·
+// more); filter, output, and clear-log live only in the full (?) help.
+func (s *browseScreen) HelpView(*shared) string { return rootHelp(s.list, helpTabbed) }
 
 func (s *browseScreen) SetSize(sh *shared, width, bodyHeight int) {
 	h := bodyHeight
@@ -111,14 +94,31 @@ func (s *browseScreen) SetSize(sh *shared, width, bodyHeight int) {
 	s.list.SetSize(width, h)
 }
 
-// applyStatuses writes refreshed statuses back into the list, offset by 1 to skip
-// the pinned Actions row (addon index i lives at list index i+1 — see
-// addonListItems).
+// handleRoot refreshes the browse list from a result message (rootHandler): the
+// router unwinds to the root and hands the refresh here, keeping the browse-specific
+// list logic out of the router.
+func (s *browseScreen) handleRoot(sh *shared, msg tea.Msg) bool {
+	m, ok := msg.(msgRootRefresh)
+	if !ok {
+		return false
+	}
+	sh.statusMsg = m.status
+	if m.statuses != nil {
+		if m.rebuild {
+			s.setItems(m.statuses)
+		} else {
+			s.applyStatuses(m.statuses)
+		}
+	}
+	return true
+}
+
+// applyStatuses writes refreshed statuses back into the list in place (row i ↔
+// addon i; use setItems instead when the row count changed).
 func (s *browseScreen) applyStatuses(statuses []addon.Status) {
 	for i, st := range statuses {
-		idx := i + 1
-		if idx < len(s.list.Items()) {
-			s.list.SetItem(idx, item{status: st})
+		if i < len(s.list.Items()) {
+			s.list.SetItem(i, item{status: st})
 		}
 	}
 }

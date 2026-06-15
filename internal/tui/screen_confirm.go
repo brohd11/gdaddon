@@ -9,6 +9,7 @@ import (
 	"gdaddon/internal/source"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -85,11 +86,31 @@ func confirmInstallBody(sh *shared, selected addon.Addon, pick versionItem) stri
 
 // ---------- archive confirm ----------
 
+// archiveKeyHandler returns a picker onKey that archives the selected item on
+// 'a' — the shared version/asset/branch archive action. The key is always
+// consumed (handled=true); buildArchiveConfirm decides whether there's anything
+// to push.
+func archiveKeyHandler(selected addon.Addon, local string) func(*shared, string, list.Item) (tea.Cmd, bool) {
+	return func(sh *shared, k string, it list.Item) (tea.Cmd, bool) {
+		if k != "a" {
+			return nil, false
+		}
+		cs, status, ok := buildArchiveConfirm(selected, local, it)
+		if status != "" {
+			sh.statusMsg = status
+		}
+		if !ok {
+			return nil, true
+		}
+		return push(cs), true
+	}
+}
+
 // buildArchiveConfirm derives the package(s) to archive for the selected
 // version-list item and returns a confirm screen. It returns ok=false (with an
 // optional status line) when there is nothing to archive: HEAD, an error, or an
 // already-archived selection.
-func buildArchiveConfirm(selected addon.Addon, local string, sel interface{ FilterValue() string }) (*confirmScreen, string, bool) {
+func buildArchiveConfirm(selected addon.Addon, local string, sel list.Item) (*confirmScreen, string, bool) {
 	repoID, err := source.RepoID(selected.URL)
 	if err != nil {
 		return nil, "cannot archive: " + err.Error(), false

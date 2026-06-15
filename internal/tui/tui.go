@@ -1,11 +1,4 @@
-// Package tui implements the interactive bubbletea front-end for browsing
-// addons, picking a remote version, and installing/updating. It renders state
-// from the addon package and turns install progress into bubbletea messages.
-//
-// The UI is a router (router.go) holding a stack of screens (screen.go). The
-// router owns the persistent chrome — header, help bar, output/log pane — in
-// shared (shared.go); each screen (screen_*.go) owns its own body, keys, and
-// help, and navigates by returning the stack commands in nav.go.
+// The package overview and architecture live in doc.go.
 package tui
 
 import (
@@ -22,7 +15,11 @@ func Run(manifestPath, projectRoot string) error {
 	}
 
 	sh := newShared(manifestPath, projectRoot)
-	r := newRouter(sh, newBrowseScreen(statuses))
+	tabs := []tabEntry{
+		{title: "Browse", root: newBrowseScreen(statuses)},
+		{title: "Actions", root: newActionsScreen()},
+	}
+	r := newRouter(sh, tabs)
 	_, err = tea.NewProgram(r, tea.WithAltScreen()).Run()
 	return err
 }
@@ -42,9 +39,6 @@ const (
 	fldTarget
 	fldCount
 )
-
-// headerHeight is the persistent context box above the body.
-const headerHeight = 5 // border (2) + 3 content lines
 
 // focusArea tracks which pane receives navigation keys.
 type focusArea int
