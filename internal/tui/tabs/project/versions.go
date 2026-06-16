@@ -69,7 +69,7 @@ func newBranchesLoading(a addon.Addon, local string) *components.LoadingScreen {
 			sh.StatusMsg = "no branches found"
 			return core.Pop()
 		}
-		sub := newSubmenuScreen(a, local, branchItems(m.branches), core.HeaderTitle(a.Name, local, "Branches"))
+		sub := newInstallPicker(a, local, branchItems(m.branches), core.HeaderTitle(a.Name, local, "Branches"))
 		return core.Replace(sub)
 	}
 	return components.NewLoadingScreen(core.HeaderTitle(a.Name, local, ""), "fetching branches…", fetchBranches(a.URL), onResult)
@@ -113,7 +113,7 @@ func (s *versionsScreen) selectVersion() (core.Screen, tea.Cmd) {
 			pick := versionItem{tag: sel.rel.Tag, asset: a, prerelease: sel.rel.Prerelease, archived: isArchived(a)}
 			return s, core.Push(newInstallConfirm(s.selected, s.selectedLocal, pick))
 		}
-		sub := newSubmenuScreen(s.selected, s.selectedLocal,
+		sub := newInstallPicker(s.selected, s.selectedLocal,
 			assetItems(sel.rel), core.HeaderTitle(s.selected.Name, s.selectedLocal, "Assets "+sel.rel.Tag))
 		return s, core.Push(sub)
 	}

@@ -1,7 +1,6 @@
 package actions
 
 import (
-	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/core"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -45,9 +44,6 @@ func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 			case actNewPlugin:
 				sh.StatusMsg = ""
 				return s, core.Push(NewNewPluginForm())
-			case actImportPlugin:
-				sh.StatusMsg = ""
-				return s.startImport(sh)
 			}
 			return s, nil
 		}
@@ -55,21 +51,6 @@ func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 	var cmd tea.Cmd
 	s.list, cmd = s.list.Update(msg)
 	return s, cmd
-}
-
-// startImport loads the global plugin list and opens the picker, or reports an
-// empty/missing list and returns to browse.
-func (s *ActionsScreen) startImport(sh *core.Shared) (core.Screen, tea.Cmd) {
-	path, err := addon.GlobalListPath()
-	var addons []addon.Addon
-	if err == nil {
-		addons, err = addon.Parse(path)
-	}
-	if err != nil || len(addons) == 0 {
-		sh.StatusMsg = "no global plugins yet — add one via New Plugin → Global"
-		return s, core.ResetToRoot()
-	}
-	return s, core.Push(newImportScreen(addons))
 }
 
 func (s *ActionsScreen) View(*core.Shared) string     { return s.list.View() }

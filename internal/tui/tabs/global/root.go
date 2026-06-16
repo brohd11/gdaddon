@@ -1,6 +1,6 @@
-// Package global is the Global tab: a read-only listing of the user's global
-// plugin list (~/.gdaddon/plugins.yml). It is scaffolding for future global
-// commands — rows have no actions yet.
+// Package global is the Global tab: a listing of the user's global plugin list
+// (~/.gdaddon/plugins.yml). Selecting a plugin opens a per-plugin command submenu
+// (currently just Import to Project).
 package global
 
 import (
@@ -11,8 +11,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// globalItem is one entry from the global plugin list.
-type globalItem struct{ name, url string }
+// globalItem is one entry from the global plugin list. placeholder marks the
+// "(no global plugins yet)" hint row, which has no submenu.
+type globalItem struct {
+	name, url, path string
+	placeholder     bool
+}
 
 func (i globalItem) Title() string       { return i.name }
 func (i globalItem) FilterValue() string { return i.name }
@@ -33,14 +37,15 @@ func globalItems() []list.Item {
 	if path, err := addon.GlobalListPath(); err == nil {
 		if addons, err := addon.Parse(path); err == nil {
 			for _, a := range addons {
-				items = append(items, globalItem{name: a.Name, url: a.URL})
+				items = append(items, globalItem{name: a.Name, url: a.URL, path: a.Path})
 			}
 		}
 	}
 	if len(items) == 0 {
 		items = append(items, globalItem{
-			name: "(no global plugins yet)",
-			url:  "add one via Actions → New Plugin → Global",
+			name:        "(no global plugins yet)",
+			url:         "add one via Actions → New Plugin → Global",
+			placeholder: true,
 		})
 	}
 	return items
@@ -56,8 +61,18 @@ func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 		s.list, cmd = s.list.Update(msg)
 		return s, cmd
 	}
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "q" {
-		return s, tea.Quit
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.String() {
+		case "q":
+			return s, tea.Quit
+		case "enter":
+			g, ok := s.list.SelectedItem().(globalItem)
+			if !ok || g.placeholder {
+				return s, nil
+			}
+			sh.StatusMsg = ""
+			return s, core.Push(newSubmenuScreen(g))
+		}
 	}
 	var cmd tea.Cmd
 	s.list, cmd = s.list.Update(msg)

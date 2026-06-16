@@ -59,8 +59,32 @@ internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, ~/.gdaddon global list
   source/            — resolves remote versions from a URL (github.go: releases, branches, source archives; RepoID)
   archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips, merge into a listing
-  tui/               — bubbletea front-end (tui.go)
+  tui/               — bubbletea front-end (see internal/tui/doc.go)
+    tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
+    core/            — the framework: Shared state, Router over a screen stack, nav commands, Screen + optional interfaces, router messages, list/help/style helpers
+    components/      — reusable, context-agnostic screens configured by closures (PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen) — they name no domain type
+    tabs/<domain>/   — one package per top-level tab (project, global, actions): its root screen, flow screens, and the builders that wire components to features
 ```
+
+### TUI design goals
+
+The TUI was restructured for scalability around two ideas:
+
+- **Tabs are domains.** Each top-level tab is its own package under `tui/tabs/`
+  (`project`, `global`, `actions`) owning its root screen and flows. Adding a
+  feature area means adding a tab package, not editing a monolith.
+- **Domains share `components` to simplify logic.** Reusable screens
+  (picker/confirm/loading/streaming-task) live in `tui/components`, are
+  context-agnostic, and are configured by closures the tab supplies — so a tab
+  composes flows from shared pieces instead of reimplementing list/confirm/task
+  plumbing.
+
+Dependency direction is strictly `core ← components ← tabs/* ← tui`: `core` names
+no concrete screen (reaches them via optional interfaces like `Relister`/
+`RootHandler`), `components` name no domain type (closures only), and tabs never
+import each other. That acyclic layering is what lets the screens live in
+separate packages. See `internal/tui/doc.go` for the full contract and how to
+add a tab.
 
 Key packages/functions:
 - `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing.

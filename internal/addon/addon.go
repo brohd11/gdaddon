@@ -50,6 +50,12 @@ type Status struct {
 // user action (the TUI). Invalid entries cannot be installed.
 func (s Status) Installable() bool { return s.State != StateInvalid }
 
+// Present reports whether the addon is installed on disk (any present state),
+// regardless of version match.
+func (s Status) Present() bool {
+	return s.State == StateInstalled || s.State == StateMismatch || s.State == StateUnversioned
+}
+
 // Parse reads and unmarshals the manifest into a name-sorted slice.
 func Parse(manifestPath string) ([]Addon, error) {
 	data, err := os.ReadFile(manifestPath)

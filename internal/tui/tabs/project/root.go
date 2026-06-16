@@ -57,8 +57,7 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 				return s, nil
 			}
 			sh.StatusMsg = ""
-			a := sel.status.Addon
-			return s, core.Push(newReleasesLoading(a, sel.status.LocalVersion))
+			return s, core.Push(newSubmenuScreen(sel.status))
 		}
 	}
 	var cmd tea.Cmd

@@ -5,25 +5,61 @@ import (
 	"gdaddon/internal/tui/components"
 	"gdaddon/internal/tui/core"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// newSubmenuScreen builds the leaf picker — a release's assets, or HEAD's
-// branches — as a pickerScreen: enter installs the chosen item, 'a' archives it.
-// It's a thin wrapper that wires items + behavior into the reusable picker.
-func newSubmenuScreen(selected addon.Addon, local string, items []list.Item, title string) *components.PickerScreen {
+// menuKind identifies a command in an addon's top-level submenu.
+type menuKind int
+
+const (
+	menuInstall menuKind = iota
+	menuArchive
+	menuRemove
+)
+
+// menuItem is one command row in an addon's submenu.
+type menuItem struct {
+	title string
+	desc  string
+	kind  menuKind
+}
+
+func (i menuItem) Title() string       { return i.title }
+func (i menuItem) FilterValue() string { return i.title }
+func (i menuItem) Description() string { return i.desc }
+
+// newSubmenuScreen builds the per-addon command submenu (the screen reached by
+// pressing enter on an addon row). Install opens the existing version-fetch flow;
+// Archive (offered only when the addon is installed) opens the archive submenu;
+// Remove is scaffolding for a future command and is inert for now.
+func newSubmenuScreen(st addon.Status) *components.PickerScreen {
+	a, local := st.Addon, st.LocalVersion
+
+	items := []list.Item{
+		menuItem{title: "↧ Install / update", desc: "pick a version, branch, or asset to install", kind: menuInstall},
+	}
+	if st.Present() {
+		items = append(items, menuItem{title: "📦 Archive", desc: "save a local copy of this addon", kind: menuArchive})
+	}
+	items = append(items, menuItem{title: "✗ Remove", desc: "uninstall (coming soon)", kind: menuRemove})
+
 	return components.NewPicker(items, components.PickerOpts{
-		Title: title,
-		Help:  []key.Binding{archiveKey},
+		Title: core.HeaderTitle(a.Name, local, ""),
 		OnSelect: func(sh *core.Shared, it list.Item) tea.Cmd {
-			v, ok := it.(versionItem)
+			cmd, ok := it.(menuItem)
 			if !ok {
 				return nil
 			}
-			return core.Push(newInstallConfirm(selected, local, v))
+			switch cmd.kind {
+			case menuInstall:
+				return core.Push(newReleasesLoading(a, local))
+			case menuArchive:
+				return core.Push(newArchiveSubmenu(st))
+			case menuRemove:
+				return nil // scaffold: uninstall not implemented yet
+			}
+			return nil
 		},
-		OnKey: archiveKeyHandler(selected, local),
 	})
 }
