@@ -21,8 +21,8 @@ func Run(manifestPath, projectRoot string) error {
 	sh := core.NewShared(manifestPath, projectRoot)
 	tabs := []core.TabEntry{
 		{Title: "Project", Root: project.NewProjectScreen(statuses)},
-		{Title: "Actions", Root: actions.NewActionsScreen()},
 		{Title: "Global", Root: global.NewGlobalScreen()},
+		{Title: "Actions", Root: actions.NewActionsScreen()},
 	}
 	r := core.NewRouter(sh, tabs)
 	_, err = tea.NewProgram(r, tea.WithAltScreen()).Run()
