@@ -32,7 +32,7 @@ func TestConfigSourceSearchAndDetail(t *testing.T) {
 	src := configSource{cfg: config.SourceConfig{
 		Name: "Test",
 		Type: "json",
-		Search: config.SearchRule{
+		Search: &config.SearchRule{
 			URL:         srv.URL + "/search?q={query}&page={page}",
 			PageBase:    1,
 			ResultsPath: "items",
@@ -40,7 +40,7 @@ func TestConfigSourceSearchAndDetail(t *testing.T) {
 			TotalPath:   "total_count",
 			Fields:      config.FieldPaths{ID: "full_name", Title: "full_name", Author: "owner.login"},
 		},
-		Detail: config.DetailRule{
+		Detail: &config.DetailRule{
 			URL:             srv.URL + "/repos/{id}",
 			BrowseURLPath:   "clone_url",
 			DescriptionPath: "description",
@@ -81,8 +81,8 @@ func TestConfigSourceValidate(t *testing.T) {
 	bad := []config.SourceConfig{
 		{Name: "", Type: "json"},
 		{Name: "x", Type: "html"},
-		{Name: "x", Type: "json", Search: config.SearchRule{URL: "u"}}, // missing results_path
-		{Name: "x", Type: "json", Search: config.SearchRule{URL: "u", ResultsPath: "r"}}, // missing detail
+		{Name: "x", Type: "json", Search: &config.SearchRule{URL: "u"}},                    // missing results_path
+		{Name: "x", Type: "json", Search: &config.SearchRule{URL: "u", ResultsPath: "r"}}, // missing detail
 	}
 	for i, c := range bad {
 		if err := (configSource{cfg: c}).validate(); err == nil {

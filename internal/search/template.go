@@ -4,7 +4,8 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
-	"strings"
+
+	"gdaddon/internal/restrule"
 )
 
 // renderSearchURL substitutes a search rule's template placeholders. {query} and
@@ -12,10 +13,11 @@ import (
 // page+pageBase. Params named in omitIfEmpty whose value is empty are dropped
 // entirely (e.g. the Asset Library wants godot_version omitted, not blank).
 func renderSearchURL(tmpl, query, godotVersion string, page, pageBase int, omitIfEmpty []string) string {
-	out := tmpl
-	out = strings.ReplaceAll(out, "{query}", url.QueryEscape(query))
-	out = strings.ReplaceAll(out, "{godot_version}", url.QueryEscape(godotVersion))
-	out = strings.ReplaceAll(out, "{page}", strconv.Itoa(page+pageBase))
+	out := restrule.Render(tmpl, map[string]string{
+		"query":         url.QueryEscape(query),
+		"godot_version": url.QueryEscape(godotVersion),
+		"page":          strconv.Itoa(page + pageBase),
+	})
 
 	values := map[string]string{"query": query, "godot_version": godotVersion}
 	for _, name := range omitIfEmpty {
@@ -29,7 +31,7 @@ func renderSearchURL(tmpl, query, godotVersion string, page, pageBase int, omitI
 // renderDetailURL substitutes {id} raw. The id may contain '/' (e.g. a GitHub
 // "owner/repo"), which must stay a path separator, so it is not escaped.
 func renderDetailURL(tmpl, id string) string {
-	return strings.ReplaceAll(tmpl, "{id}", id)
+	return restrule.Render(tmpl, map[string]string{"id": id})
 }
 
 // dropEmptyParam removes a now-empty "name=" query parameter and its leading
