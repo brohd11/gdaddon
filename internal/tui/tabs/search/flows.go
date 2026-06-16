@@ -12,9 +12,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // ---------- result/detail messages ----------
@@ -33,138 +31,57 @@ type detailMsg struct {
 
 // ---------- query screen ----------
 
-// fields of the query screen: a source selector and the query text input.
-const (
-	fldSource = iota
-	fldQuery
-	fldCount
-)
+// newQueryScreen builds the search entry form (a generic components.FormScreen): a
+// Source row whose Enter opens the source sub-picker (a PickField/Activator), the
+// query text field, and a muted note showing the Godot version filter. The chosen
+// source is held in a captured variable that the sub-picker mutates and the
+// PickField/OnSubmit read back.
+func newQueryScreen(src searchpkg.Source, godotVer string) *components.FormScreen {
+	cur := src
+	source := components.NewPickField("source", "Source:  ",
+		func() string { return cur.Name() },
+		func(sh *core.Shared) (tea.Cmd, bool) { return core.Push(newSourcePicker(&cur)), true })
+	query := components.NewTextField("query", "Query:   ", "search terms (e.g. dialogue)")
 
-// queryScreen is the search entry point: pick a source (a list/submenu) and type
-// a query. It captures keys (Filtering) so the global chrome shortcuts don't steal
-// what's typed, and dispatches navigation via core.Keys; the typing-vs-navigation
-// split (so letter-aliases like "c"/"e" reach the query box instead of triggering
-// Back/Select) is handled centrally by components.QueryUpdate via the Typable interface.
-type queryScreen struct {
-	src      searchpkg.Source
-	godotVer string
-	input    textinput.Model
-	focus    int
-}
-
-var _ core.Filterer = (*queryScreen)(nil)
-
-func newQueryScreen(src searchpkg.Source, godotVer string) *queryScreen {
-	ti := textinput.New()
-	ti.Placeholder = "search terms (e.g. dialogue)"
-	ti.Prompt = ""
-	return &queryScreen{src: src, godotVer: godotVer, input: ti, focus: fldQuery}
-}
-
-func (s *queryScreen) Init(*core.Shared) tea.Cmd { return s.syncFocus() }
-
-func (s *queryScreen) Filtering() bool { return true }
-
-// Typable: the query box has focus only on the query field; QueryUpdate keeps
-// typed characters there instead of letting them trigger navigation.
-func (s *queryScreen) Typing() bool            { return s.focus == fldQuery }
-func (s *queryScreen) Input() *textinput.Model { return &s.input }
-
-func (s *queryScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
-	if cmd, ok := components.QueryUpdate(s, msg); ok {
-		return s, cmd
-	}
-	key, ok := msg.(tea.KeyMsg)
-	if !ok {
-		return s, nil
-	}
-	k := key.String()
-	switch {
-	case core.MatchKey(k, core.Keys.Back):
-		return s, core.Pop()
-	case core.MatchKey(k, core.Keys.NextField):
-		s.focus = (s.focus + 1) % fldCount
-		return s, s.syncFocus()
-	case core.MatchKey(k, core.Keys.PrevField):
-		s.focus = (s.focus - 1 + fldCount) % fldCount
-		return s, s.syncFocus()
-	case core.MatchKey(k, core.Keys.Select):
-		if s.focus == fldSource {
-			return s, core.Push(newSourcePicker(s))
-		}
-		query := strings.TrimSpace(s.input.Value())
-		if query == "" {
-			return s, nil
-		}
-		return s, core.Push(newSearchLoading(s.src, query, s.godotVer, 0))
-	}
-	// Editing keys (backspace, cursor) fall through to the focused query box.
-	if s.focus == fldQuery {
-		var cmd tea.Cmd
-		s.input, cmd = s.input.Update(msg)
-		return s, cmd
-	}
-	return s, nil
-}
-
-func (s *queryScreen) syncFocus() tea.Cmd {
-	if s.focus == fldQuery {
-		return s.input.Focus()
-	}
-	s.input.Blur()
-	return nil
-}
-
-func (s *queryScreen) View(sh *core.Shared) string {
-	label := lipgloss.NewStyle().Foreground(core.MutedColor)
-	marker := func(focused bool) string {
-		if focused {
-			return lipgloss.NewStyle().Foreground(core.FocusedColor).Render("▸ ")
-		}
-		return "  "
-	}
-	body := strings.Join([]string{
-		"Search assets",
-		"",
-		marker(s.focus == fldSource) + label.Render("Source:  ") + s.src.Name(),
-		marker(s.focus == fldQuery) + label.Render("Query:   ") + s.input.View(),
-		"",
-		label.Render("  filtering by Godot " + s.godotVer),
-	}, "\n")
-	return lipgloss.JoinVertical(lipgloss.Left,
-		core.RenderTitleBar("Search"),
-		sh.Box(body))
-}
-
-func (s *queryScreen) HelpView(sh *core.Shared) string {
-	return sh.BindingHelp([]key.Binding{
-		core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
-		core.Hint("go", core.Keys.Select),
-		core.Hint("cancel", core.Keys.Back),
+	return components.NewForm(components.FormOpts{
+		Crumb: core.RenderTitleBar("Search"),
+		Fields: []components.FormField{
+			components.NewHeading("Search assets"),
+			components.NewSpacer(),
+			source,
+			query,
+			components.NewSpacer(),
+			components.NewNote("  filtering by Godot " + godotVer),
+		},
+		Focus: "query",
+		Help: []key.Binding{
+			core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
+			core.Hint("go", core.Keys.Select),
+			core.Hint("cancel", core.Keys.Back),
+		},
+		OnSubmit: func(sh *core.Shared, f *components.FormScreen) tea.Cmd {
+			q := strings.TrimSpace(f.Value("query"))
+			if q == "" {
+				return nil
+			}
+			return core.Push(newSearchLoading(cur, q, godotVer, 0))
+		},
 	})
-}
-
-func (s *queryScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
-	w := sh.ConfirmWidth() - 12 // box room minus the label column
-	if w < 10 {
-		w = 10
-	}
-	s.input.Width = w
 }
 
 // ---------- source picker ----------
 
-// newSourcePicker lists the registered asset sources; selecting one sets it on
-// the query screen and pops back. With a single source today it's a one-row list,
-// but the threading is already source-agnostic.
-func newSourcePicker(qs *queryScreen) *components.PickerScreen {
+// newSourcePicker lists the registered asset sources; selecting one writes it back
+// through dst and pops to the query form. With a single source today it's a one-row
+// list, but the threading is already source-agnostic.
+func newSourcePicker(dst *searchpkg.Source) *components.PickerScreen {
 	srcs := searchpkg.Sources()
 	items := make([]list.Item, 0, len(srcs))
 	for _, src := range srcs {
 		src := src
 		items = append(items, components.Item{
 			Name: src.Name(),
-			Pick: func(sh *core.Shared) tea.Cmd { qs.src = src; return core.Pop() },
+			Pick: func(sh *core.Shared) tea.Cmd { *dst = src; return core.Pop() },
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: "Select source"})

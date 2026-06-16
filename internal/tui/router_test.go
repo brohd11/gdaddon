@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"gdaddon/internal/tui/components"
 	"gdaddon/internal/tui/core"
 	"gdaddon/internal/tui/flows/newplugin"
 	"gdaddon/internal/tui/tabs/actions"
@@ -78,7 +79,7 @@ func TestTabSwitchGatedAtDepth(t *testing.T) {
 	tm := sized(newTestRouter())
 	tm, _ = tm.Update(core.Push(newplugin.NewNewPluginForm())()) // depth 2 on the Browse tab
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
-	if _, ok := tm.(core.Router).Top().(*newplugin.NewPluginForm); !ok {
+	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(core.Router).Top())
 	}
 }

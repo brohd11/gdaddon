@@ -50,17 +50,17 @@ func newTestRouter() core.Router {
 func TestNewPluginFormToConfirm(t *testing.T) {
 	tm := sized(newTestRouter())
 	tm, _ = tm.Update(core.Push(NewNewPluginForm())())
-	form, ok := tm.(core.Router).Top().(*NewPluginForm)
+	form, ok := tm.(core.Router).Top().(*components.FormScreen)
 	if !ok {
-		t.Fatalf("want *NewPluginForm, got %T", tm.(core.Router).Top())
+		t.Fatalf("want *components.FormScreen, got %T", tm.(core.Router).Top())
 	}
 
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
-	if _, ok := tm.(core.Router).Top().(*NewPluginForm); !ok {
+	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("empty URL should keep the form, got %T", tm.(core.Router).Top())
 	}
 
-	form.inputs[fldURL].SetValue("https://github.com/owner/repo")
+	form.SetValue("url", "https://github.com/owner/repo")
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
 	if _, ok := tm.(core.Router).Top().(*components.ConfirmScreen); !ok {
 		t.Fatalf("filled URL should push confirm, got %T", tm.(core.Router).Top())
@@ -73,10 +73,10 @@ func TestNewPluginFormToConfirm(t *testing.T) {
 // TestNewWithURL prefills the URL and focuses the Name field.
 func TestNewWithURL(t *testing.T) {
 	f := NewWithURL("https://github.com/owner/repo")
-	if got := f.inputs[fldURL].Value(); got != "https://github.com/owner/repo" {
+	if got := f.Value("url"); got != "https://github.com/owner/repo" {
 		t.Fatalf("url not prefilled, got %q", got)
 	}
-	if f.formFocus != fldName {
-		t.Fatalf("focus should jump to Name field, got %d", f.formFocus)
+	if f.FocusedKey() != "name" {
+		t.Fatalf("focus should jump to Name field, got %q", f.FocusedKey())
 	}
 }

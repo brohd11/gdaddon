@@ -81,8 +81,8 @@ var Keys = KeyMap{
 	NextField: key.NewBinding(key.WithKeys("down", "tab")),
 	PrevField: key.NewBinding(key.WithKeys("up", "shift+tab")),
 
-	PageNext: key.NewBinding(key.WithKeys(";", "2")),
-	PagePrev: key.NewBinding(key.WithKeys("'", "3")),
+	PageNext: key.NewBinding(key.WithKeys("'", "3")),
+	PagePrev: key.NewBinding(key.WithKeys(";", "2")),
 }
 
 // MatchKey reports whether the pressed key string k is one of binding b's keys.
