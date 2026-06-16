@@ -55,12 +55,12 @@ func TestRouterStackPushPop(t *testing.T) {
 		t.Fatalf("after push want 2, got %d", got)
 	}
 
-	tm, _ = tm.Update(popMsg{})
+	tm, _ = tm.Update(popMsg{n: 1})
 	if got := len(tm.(Router).stack); got != 1 {
 		t.Fatalf("after pop want 1, got %d", got)
 	}
 
-	tm, _ = tm.Update(popMsg{})
+	tm, _ = tm.Update(popMsg{n: 1})
 	if got := len(tm.(Router).stack); got != 1 {
 		t.Fatalf("root pop should be ignored, want 1, got %d", got)
 	}

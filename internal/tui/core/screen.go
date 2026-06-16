@@ -33,7 +33,7 @@ type RootHandler interface {
 	HandleRoot(sh *Shared, msg tea.Msg) (handled bool)
 }
 
-// relister is a screen that can re-list itself after a background task changed its
-// data (the versions screen after an archive). The router unwinds to it and calls
-// relist without naming the concrete type, so it can live in another package.
-type Relister interface{ Relist() }
+// popStopper marks a screen the router stops at when handling PopTo: a sub-flow
+// can pop back to its command hub (the nearest stopper) without knowing the stack
+// depth. Returns false to act as a normal screen.
+type PopStopper interface{ PopStop() bool }

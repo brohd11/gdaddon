@@ -70,8 +70,20 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r, cmd
 
 	case popMsg:
-		if len(r.stack) > 1 {
+		for i := 0; i < msg.n && len(r.stack) > 1; i++ {
 			r.stack = r.stack[:len(r.stack)-1]
+		}
+		r.resize()
+		return r, nil
+
+	case popToMsg:
+		// Always leave the current screen, then stop at the first screen that opts
+		// into PopStopper (a command hub), or the root.
+		for len(r.stack) > 1 {
+			r.stack = r.stack[:len(r.stack)-1]
+			if s, ok := r.Top().(PopStopper); ok && s.PopStop() {
+				break
+			}
 		}
 		r.resize()
 		return r, nil
@@ -96,22 +108,6 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.stack = []Screen{r.tabs[r.browseAt].Root}
 		if h, ok := r.tabRoot().(RootHandler); ok {
 			h.HandleRoot(r.sh, msg)
-		}
-		r.resize()
-		return r, nil
-
-	case ArchiveFinishedMsg:
-		// Unwind to the screen that can re-list itself (the versions screen) and do
-		// so, so the new archived packages appear. Addressed via the relister
-		// interface, not a concrete type, to keep the router screen-agnostic.
-		for len(r.stack) > 1 {
-			if _, ok := r.Top().(Relister); ok {
-				break
-			}
-			r.stack = r.stack[:len(r.stack)-1]
-		}
-		if v, ok := r.Top().(Relister); ok {
-			v.Relist()
 		}
 		r.resize()
 		return r, nil

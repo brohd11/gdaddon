@@ -19,6 +19,7 @@ type PickerScreen struct {
 	list     list.Model
 	OnSelect func(*core.Shared, list.Item) tea.Cmd
 	OnKey    func(*core.Shared, string, list.Item) (tea.Cmd, bool)
+	popStop  bool
 }
 
 // pickerOpts configures a pickerScreen. onKey is optional; when it reports
@@ -29,17 +30,22 @@ type PickerOpts struct {
 	Help     []key.Binding // extra help/hint bindings shown in the list help
 	OnSelect func(*core.Shared, list.Item) tea.Cmd
 	OnKey    func(*core.Shared, string, list.Item) (tea.Cmd, bool)
+	PopStop  bool // mark this picker as a PopTo boundary (a command hub)
 }
 
 var _ core.Filterer = (*PickerScreen)(nil)
+var _ core.PopStopper = (*PickerScreen)(nil)
 
 func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 	return &PickerScreen{
 		list:     core.NewSelectList(items, opts.Title, opts.Help...),
 		OnSelect: opts.OnSelect,
 		OnKey:    opts.OnKey,
+		popStop:  opts.PopStop,
 	}
 }
+
+func (s *PickerScreen) PopStop() bool { return s.popStop }
 
 func (s *PickerScreen) Init(*core.Shared) tea.Cmd { return nil }
 

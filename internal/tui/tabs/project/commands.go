@@ -69,6 +69,29 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 	}
 }
 
-func archiveFinished() tea.Cmd {
-	return func() tea.Msg { return core.ArchiveFinishedMsg{} }
+// commitRemove removes the addon from the project: the installed files too when
+// the chosen mode is "project + local", then the manifest entry. On success it
+// rebuilds the browse list (a row was dropped) via reloadCmd.
+func commitRemove(sh *core.Shared, st addon.Status, mode int) tea.Cmd {
+	if mode == removeProjectLocal {
+		if err := addon.Uninstall(st.Addon, sh.ProjectRoot); err != nil {
+			sh.StatusMsg = "error: " + err.Error()
+			return core.ResetToRoot()
+		}
+	}
+	if err := addon.RemoveEntry(sh.ManifestPath, st.Addon.Name); err != nil {
+		sh.StatusMsg = "error: " + err.Error()
+		return core.ResetToRoot()
+	}
+	return reloadCmd(sh, "removed "+st.Addon.Name)
+}
+
+// reloadCmd re-inspects the manifest and returns MsgRootRefresh with Rebuild so the
+// router rebuilds the browse list (used when the row count changed, e.g. a removal).
+func reloadCmd(sh *core.Shared, status string) tea.Cmd {
+	manifestPath, projectRoot := sh.ManifestPath, sh.ProjectRoot
+	return func() tea.Msg {
+		statuses, _ := addon.Inspect(manifestPath, projectRoot)
+		return core.MsgRootRefresh{Status: status, Statuses: statuses, Rebuild: true}
+	}
 }

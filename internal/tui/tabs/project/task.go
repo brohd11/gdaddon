@@ -57,7 +57,7 @@ func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.As
 	}
 	onDismiss := func(sh *core.Shared) tea.Cmd {
 		sh.StatusMsg = ""
-		return archiveFinished()
+		return core.PopTo() // back to the addon submenu (its command hub)
 	}
 	return components.NewStayTask("archiving "+tag+"…", "done — esc to go back", run, onDone, onDismiss)
 }

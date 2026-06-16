@@ -105,6 +105,46 @@ func TestUpdateEntryInsertsPath(t *testing.T) {
 	}
 }
 
+func TestRemoveEntry(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove the first entry; the second must survive verbatim.
+	if err := RemoveEntry(path, "Terrain3D"); err != nil {
+		t.Fatal(err)
+	}
+	got := string(mustRead(t, path))
+	t.Logf("\n%s", got)
+	if strings.Contains(got, "Terrain3D:") {
+		t.Errorf("entry not removed; got:\n%s", got)
+	}
+	if !strings.Contains(got, "PluginDevTools:") || !strings.Contains(got, `version: "0.1.0"`) {
+		t.Errorf("other entry mutated; got:\n%s", got)
+	}
+
+	// Removing the last remaining entry empties the manifest.
+	if err := RemoveEntry(path, "PluginDevTools"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(mustRead(t, path))); got != "" {
+		t.Errorf("manifest should be empty after removing all entries; got:\n%s", got)
+	}
+}
+
+func TestRemoveEntryNotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveEntry(path, "Nope"); err == nil {
+		t.Errorf("expected an error removing a missing entry")
+	}
+}
+
 func mustRead(t *testing.T, path string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(path)

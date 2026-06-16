@@ -93,6 +93,45 @@ func UpdateEntry(manifestPath, name, url, path, version string) error {
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
+// RemoveEntry deletes a manifest entry — its key line and the indented block
+// beneath it — in place, leaving every other entry byte-for-byte intact. It uses
+// the same flat-shape block detection as UpdateEntry, so it works on the project
+// manifest and the global list alike. Returns an error if the entry isn't found.
+func RemoveEntry(manifestPath, name string) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	keyIdx := -1
+	for i, ln := range lines {
+		if isEntryKey(ln, name) {
+			keyIdx = i
+			break
+		}
+	}
+	if keyIdx == -1 {
+		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+	}
+
+	// The entry block runs until the next column-0 (non-indented) content line.
+	end := len(lines)
+	for i := keyIdx + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		if !startsWithSpace(lines[i]) {
+			end = i
+			break
+		}
+	}
+
+	lines = append(lines[:keyIdx], lines[end:]...)
+	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
 // isEntryKey reports whether ln is the column-0 mapping key `<name>:`.
 func isEntryKey(ln, name string) bool {
 	if startsWithSpace(ln) {

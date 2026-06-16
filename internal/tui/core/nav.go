@@ -12,13 +12,30 @@ import (
 // navigate the same way.
 type (
 	pushMsg        struct{ s Screen } // push a new screen on top
-	popMsg         struct{}           // pop the current screen (back / cancel)
+	popMsg         struct{ n int }    // pop n screens (back / cancel)
+	popToMsg       struct{}           // pop to the nearest PopStopper, or the root
 	replaceMsg     struct{ s Screen } // pop current + push (e.g. fetching -> versions)
 	resetToRootMsg struct{}           // unwind to the root (browse) screen
 )
 
-func Push(s Screen) tea.Cmd    { return func() tea.Msg { return pushMsg{s} } }
-func Pop() tea.Cmd             { return func() tea.Msg { return popMsg{} } }
+func Push(s Screen) tea.Cmd { return func() tea.Msg { return pushMsg{s} } }
+
+// Pop pops one screen by default, or n when given. Variadic so existing Pop()
+// callers are unchanged; Pop(2) pops two levels (a sub-flow returning past its
+// own intermediate screens). The router clamps so the root is never popped.
+func Pop(n ...int) tea.Cmd {
+	count := 1
+	if len(n) > 0 {
+		count = n[0]
+	}
+	return func() tea.Msg { return popMsg{count} }
+}
+
+// PopTo unwinds to the nearest screen that opts into PopStopper (a command hub),
+// or the root if none — so a deep sub-flow can return to its hub without knowing
+// the stack depth.
+func PopTo() tea.Cmd { return func() tea.Msg { return popToMsg{} } }
+
 func Replace(s Screen) tea.Cmd { return func() tea.Msg { return replaceMsg{s} } }
 func ResetToRoot() tea.Cmd     { return func() tea.Msg { return resetToRootMsg{} } }
 

@@ -42,10 +42,11 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 	if st.Present() {
 		items = append(items, menuItem{title: "📦 Archive", desc: "save a local copy of this addon", kind: menuArchive})
 	}
-	items = append(items, menuItem{title: "✗ Remove", desc: "uninstall (coming soon)", kind: menuRemove})
+	items = append(items, menuItem{title: "✗ Remove", desc: "remove from the project (and optionally delete files)", kind: menuRemove})
 
 	return components.NewPicker(items, components.PickerOpts{
-		Title: core.HeaderTitle(a.Name, local, ""),
+		Title:   core.HeaderTitle(a.Name, local, ""),
+		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 		OnSelect: func(sh *core.Shared, it list.Item) tea.Cmd {
 			cmd, ok := it.(menuItem)
 			if !ok {
@@ -57,7 +58,7 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 			case menuArchive:
 				return core.Push(newArchiveSubmenu(st))
 			case menuRemove:
-				return nil // scaffold: uninstall not implemented yet
+				return core.Push(newRemoveConfirm(st))
 			}
 			return nil
 		},

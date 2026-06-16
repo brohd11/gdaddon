@@ -16,16 +16,13 @@ type versionsScreen struct {
 	list          list.Model
 	selected      addon.Addon
 	selectedLocal string
-	ghListing     *source.Listing // raw upstream listing (nil when offline/delisted)
-	listing       *source.Listing // ghListing merged with archived packages
 }
 
 var _ core.Filterer = (*versionsScreen)(nil)
-var _ core.Relister = (*versionsScreen)(nil)
 
-func newVersionsScreen(selected addon.Addon, local string, gh, listing *source.Listing) *versionsScreen {
-	l := core.NewSelectList(versionTopItems(listing), core.HeaderTitle(selected.Name, local, "Versions"), archiveKey)
-	return &versionsScreen{list: l, selected: selected, selectedLocal: local, ghListing: gh, listing: listing}
+func newVersionsScreen(selected addon.Addon, local string, listing *source.Listing) *versionsScreen {
+	l := core.NewSelectList(versionTopItems(listing), core.HeaderTitle(selected.Name, local, "Versions"))
+	return &versionsScreen{list: l, selected: selected, selectedLocal: local}
 }
 
 // newReleasesLoading builds the loading screen for an addon's release fetch. Its
@@ -46,9 +43,8 @@ func newReleasesLoading(a addon.Addon, local string) *components.LoadingScreen {
 			sh.StatusMsg = "error: " + m.err.Error()
 			return core.Pop()
 		}
-		gh := m.listing
-		listing := archive.Merge(cloneListing(gh), archived)
-		return core.Replace(newVersionsScreen(a, local, gh, listing))
+		listing := archive.Merge(cloneListing(m.listing), archived)
+		return core.Replace(newVersionsScreen(a, local, listing))
 	}
 	return components.NewLoadingScreen(core.HeaderTitle(a.Name, local, ""), "fetching versions…", fetchReleases(a.URL), onResult)
 }
@@ -91,8 +87,6 @@ func (s *versionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.
 			return s, core.Pop()
 		case "enter":
 			return s.selectVersion()
-		case "a":
-			return s.archiveSelection(sh, s.list.SelectedItem())
 		}
 	}
 	var cmd tea.Cmd
@@ -118,30 +112,6 @@ func (s *versionsScreen) selectVersion() (core.Screen, tea.Cmd) {
 		return s, core.Push(sub)
 	}
 	return s, nil
-}
-
-// archiveSelection pushes the archive confirm for the selected version-list item.
-// A release archives all its remote assets; a leaf asset/branch archives just
-// that one. HEAD (no concrete asset) is ignored.
-func (s *versionsScreen) archiveSelection(sh *core.Shared, sel list.Item) (core.Screen, tea.Cmd) {
-	cs, status, ok := buildArchiveConfirm(s.selected, s.selectedLocal, sel)
-	if status != "" {
-		sh.StatusMsg = status
-	}
-	if !ok {
-		return s, nil
-	}
-	return s, core.Push(cs)
-}
-
-// relist re-merges the archive into the listing and rebuilds the rows, so newly
-// archived packages appear (called after an archive task finishes).
-func (s *versionsScreen) Relist() {
-	if repoID, err := source.RepoID(s.selected.URL); err == nil {
-		archived, _ := archive.List(repoID)
-		s.listing = archive.Merge(cloneListing(s.ghListing), archived)
-		s.list.SetItems(versionTopItems(s.listing))
-	}
 }
 
 func (s *versionsScreen) View(*core.Shared) string     { return s.list.View() }

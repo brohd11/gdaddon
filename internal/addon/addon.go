@@ -219,6 +219,22 @@ func Install(a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	return InstallResult{}, nil
 }
 
+// Uninstall deletes an addon's installed files under baseDir, symmetric with
+// Install. The location is the entry's recorded path; it is lenient — an empty
+// path (nothing recorded) or an already-absent directory is a no-op — so a
+// "remove + delete files" action is safe even when the addon isn't installed. The
+// manifest entry is removed separately via RemoveEntry.
+func Uninstall(a Addon, baseDir string) error {
+	if a.Path == "" {
+		return nil
+	}
+	fullPath, err := filepath.Abs(filepath.Join(baseDir, a.Path))
+	if err != nil {
+		return fmt.Errorf("could not resolve path: %w", err)
+	}
+	return os.RemoveAll(fullPath)
+}
+
 func getLocalPluginVersion(addonPath string) string {
 	cfgPath := pluginCfgPath(addonPath)
 	if cfgPath == "" {

@@ -8,8 +8,8 @@
 //	             over a screen stack, navigation commands (Push/Pop/Replace/
 //	             ResetToRoot/RootRefresh), the Screen interface plus the optional
 //	             interfaces the router type-asserts (Filterer, OutputViewer,
-//	             RootHandler, Relister), router-handled messages (MsgRootRefresh,
-//	             InstallEvent, ArchiveFinishedMsg), and generic list/help/style
+//	             RootHandler), router-handled messages (MsgRootRefresh,
+//	             InstallEvent), and generic list/help/style
 //	             helpers (NewSelectList, RootHelp, RenderTitleBar, …).
 //	components/  reusable, context-agnostic screens configured by closures — they
 //	             name no domain type: PickerScreen, ConfirmScreen, LoadingScreen,
@@ -22,9 +22,9 @@
 // # Dependency direction
 //
 // core ← components ← tabs/* ← tui (this package). core names no concrete screen
-// (the router reaches the versions screen via the Relister interface, and the
-// browse root via RootHandler); components name no domain type (loading/task/
-// confirm take closures); tabs do not import each other. That acyclic layering is
+// (the router reaches the browse root via the RootHandler interface); components
+// name no domain type (loading/task/confirm take closures); tabs do not import
+// each other. That acyclic layering is
 // what lets the screens live in separate packages — Go forbids import cycles only
 // between packages, and the closure + optional-interface inversions remove the
 // concrete cross-references that would otherwise straddle a boundary.

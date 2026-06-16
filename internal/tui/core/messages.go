@@ -24,7 +24,3 @@ type MsgRootRefresh struct {
 	Statuses []addon.Status // nil ⇒ no refresh (error paths send nil)
 	Rebuild  bool           // true ⇒ setItems, false ⇒ applyStatuses
 }
-
-// ArchiveFinishedMsg unwinds to the versions screen and re-lists it so the newly
-// archived packages appear.
-type ArchiveFinishedMsg struct{}

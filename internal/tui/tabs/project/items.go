@@ -7,7 +7,6 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 )
 
@@ -144,6 +143,3 @@ func addonListItems(statuses []addon.Status) []list.Item {
 	}
 	return items
 }
-
-// archiveKey is the version-screen hint for the archive action.
-var archiveKey = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive"))

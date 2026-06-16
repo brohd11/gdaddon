@@ -39,11 +39,17 @@ var newPluginConfirmHelp = []key.Binding{
 func newNewPluginConfirm(name, url, path string, addTarget int) *components.ConfirmScreen {
 	target := addTarget // local copy the toggle mutates
 	return &components.ConfirmScreen{
-		Crumb:    core.RenderTitleBar("New Plugin"),
-		Render:   func(sh *core.Shared) string { return sh.Box(newPluginConfirmBody(sh, name, url, path, target)) },
-		OnToggle: func() { target = otherTarget(target) },
-		OnYes:    func(sh *core.Shared) tea.Cmd { return commitNewPlugin(sh, name, url, path, target) },
-		Help:     newPluginConfirmHelp,
+		Crumb:  core.RenderTitleBar("New Plugin"),
+		Render: func(sh *core.Shared) string { return sh.Box(newPluginConfirmBody(sh, name, url, path, target)) },
+		OnKey: func(sh *core.Shared, k string) tea.Cmd {
+			switch k {
+			case "left", "right", "h", "l":
+				target = otherTarget(target)
+			}
+			return nil
+		},
+		OnYes: func(sh *core.Shared) tea.Cmd { return commitNewPlugin(sh, name, url, path, target) },
+		Help:  newPluginConfirmHelp,
 	}
 }
 
