@@ -134,6 +134,21 @@ func cleanAssetName(name string) string {
 	return filepath.Base(name)
 }
 
+// RemoveRepo deletes all archived packages for a repo (its <root>/<repoDir>
+// folder) and refreshes index.yml. A missing folder is a no-op. Standalone so a
+// future archive-cleaning tool can reuse it.
+func RemoveRepo(repoID string) error {
+	root, err := Dir()
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(filepath.Join(root, repoDir(repoID))); err != nil {
+		return err
+	}
+	_ = writeIndex(root)
+	return nil
+}
+
 // List returns the archived packages for a repo as releases (newest tag first),
 // each asset named with the archived suffix and a local-file URL. A missing
 // archive returns (nil, nil).
@@ -142,7 +157,13 @@ func List(repoID string) ([]source.Release, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := filepath.Join(root, repoDir(repoID))
+	return listDir(filepath.Join(root, repoDir(repoID)))
+}
+
+// listDir reads one repo folder (<root>/<repoDir>) into releases, newest tag
+// first; a missing folder returns (nil, nil). Shared by List (keyed by repoID)
+// and Repos (which walks every folder directly).
+func listDir(base string) ([]source.Release, error) {
 	tagDirs, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -177,6 +198,74 @@ func List(repoID string) ([]source.Release, error) {
 	// Newest tag first, to match the GitHub listing's ordering convention.
 	sort.Slice(releases, func(i, j int) bool { return releases[i].Tag > releases[j].Tag })
 	return releases, nil
+}
+
+// RepoArchive is one repo's worth of archived packages, as surfaced by Repos.
+// ID is a display label derived from the on-disk folder ('_' -> '/', best-effort
+// and lossy if a repo segment itself contains '_'); it is for display only. The
+// authoritative key for removal is each asset's local path (source.Asset.URL).
+type RepoArchive struct {
+	ID       string
+	Releases []source.Release
+}
+
+// Repos enumerates every archived repo (one per folder under the archive root),
+// newest-archived-first by display id. A missing/empty archive returns (nil, nil).
+func Repos() ([]RepoArchive, error) {
+	root, err := Dir()
+	if err != nil {
+		return nil, err
+	}
+	dirs, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var repos []RepoArchive
+	for _, d := range dirs {
+		if !d.IsDir() {
+			continue
+		}
+		releases, err := listDir(filepath.Join(root, d.Name()))
+		if err != nil || len(releases) == 0 {
+			continue
+		}
+		repos = append(repos, RepoArchive{
+			ID:       strings.ReplaceAll(d.Name(), "_", "/"),
+			Releases: releases,
+		})
+	}
+	sort.Slice(repos, func(i, j int) bool { return repos[i].ID < repos[j].ID })
+	return repos, nil
+}
+
+// Remove deletes one archived asset by its absolute path (the local URL carried
+// by List/Repos assets), then prunes the tag folder and repo folder if they were
+// left empty, and refreshes index.yml. Pruning stops at the archive root.
+func Remove(path string) error {
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	root, err := Dir()
+	if err != nil {
+		return err
+	}
+	// Walk up from the asset's tag dir, removing now-empty folders, but never the
+	// archive root itself.
+	for dir := filepath.Dir(path); dir != root && strings.HasPrefix(dir, root); dir = filepath.Dir(dir) {
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) > 0 {
+			break
+		}
+		if err := os.Remove(dir); err != nil {
+			break
+		}
+	}
+	_ = writeIndex(root)
+	return nil
 }
 
 // Merge folds archived releases into a GitHub listing: archived assets are

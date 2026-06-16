@@ -6,19 +6,17 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
+	"gdaddon/internal/tui/components"
+	"gdaddon/internal/tui/core"
 
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-// ---------- list items ----------
+// ---------- browse rows ----------
 
-type item struct{ status addon.Status }
-
-func (i item) Title() string       { return i.status.Addon.Name }
-func (i item) FilterValue() string { return i.status.Addon.Name }
-
-func (i item) Description() string {
-	s := i.status
+// addonDesc renders an addon row's status line from its inspected state.
+func addonDesc(s addon.Status) string {
 	switch s.State {
 	case addon.StateInvalid:
 		return "✗ invalid — missing url or path"
@@ -41,30 +39,30 @@ func (i item) Description() string {
 	return ""
 }
 
-// headItem is the top-of-list entry that opens the branch (refs/heads) submenu.
-type headItem struct{}
-
-func (headItem) Title() string       { return "HEAD" }
-func (headItem) FilterValue() string { return "HEAD" }
-func (headItem) Description() string { return "track a branch (refs/heads)" }
-
-// releaseItem is one release in the top-level versions list. Selecting it either
-// drops straight into confirm (single asset) or opens the asset submenu.
-type releaseItem struct{ rel source.Release }
-
-func (r releaseItem) Title() string       { return r.rel.Tag }
-func (r releaseItem) FilterValue() string { return r.rel.Tag }
-
-func (r releaseItem) Description() string {
-	d := fmt.Sprintf("%d asset(s)", len(r.rel.Assets))
-	if r.rel.Prerelease {
-		d += " · prerelease"
+// addonItem builds one browse row. A non-installable addon gets a nil Pick (an
+// inert row), which replaces the old Installable() gate in the screen's Update.
+func addonItem(s addon.Status) components.Item {
+	var pick func(*core.Shared) tea.Cmd
+	if s.Installable() {
+		pick = func(sh *core.Shared) tea.Cmd { return core.Push(newSubmenuScreen(s)) }
 	}
-	return d
+	return components.Item{Name: s.Addon.Name, Desc: addonDesc(s), Pick: pick}
 }
 
-// versionItem is a leaf choice (a branch or a release asset) shown in a submenu
-// and carried in m.pick through confirm/install.
+// addonListItems builds the browse list contents: one row per addon.
+func addonListItems(statuses []addon.Status) []list.Item {
+	items := make([]list.Item, 0, len(statuses))
+	for _, s := range statuses {
+		items = append(items, addonItem(s))
+	}
+	return items
+}
+
+// ---------- install payload ----------
+
+// versionItem is a leaf choice (a branch or a release asset) carried through
+// confirm/install. It is a payload, not a list row — the version/asset/branch
+// pickers are built from components.Item (see versions.go).
 type versionItem struct {
 	tag        string
 	asset      source.Asset
@@ -77,26 +75,6 @@ type versionItem struct {
 // rather than a remote download.
 func isArchived(a source.Asset) bool { return !strings.HasPrefix(a.URL, "http") }
 
-func (v versionItem) Title() string {
-	if v.branch {
-		return "branch: " + v.tag
-	}
-	return v.asset.Name
-}
-
-func (v versionItem) Description() string {
-	if v.branch {
-		return "latest commit · " + v.asset.Name
-	}
-	d := v.tag
-	if v.prerelease {
-		d += " · prerelease"
-	}
-	return d
-}
-
-func (v versionItem) FilterValue() string { return v.tag + " " + v.asset.Name }
-
 // pickSection describes the chosen asset for the confirm breadcrumb, e.g.
 // "Assets v1.0.0 - addon.zip" or "Branches - main".
 func pickSection(pick versionItem) string {
@@ -104,42 +82,4 @@ func pickSection(pick versionItem) string {
 		return "Branches - " + pick.tag
 	}
 	return fmt.Sprintf("Assets %s - %s", pick.tag, pick.asset.Name)
-}
-
-// versionTopItems builds the top-level versions list: HEAD first, then one entry
-// per release (newest first).
-func versionTopItems(l *source.Listing) []list.Item {
-	items := []list.Item{headItem{}}
-	for _, r := range l.Releases {
-		items = append(items, releaseItem{rel: r})
-	}
-	return items
-}
-
-// assetItems builds the per-release asset submenu.
-func assetItems(r source.Release) []list.Item {
-	items := make([]list.Item, 0, len(r.Assets))
-	for _, a := range r.Assets {
-		items = append(items, versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease, archived: isArchived(a)})
-	}
-	return items
-}
-
-// branchItems builds the HEAD/branch submenu.
-func branchItems(branches []source.Asset) []list.Item {
-	items := make([]list.Item, 0, len(branches))
-	for _, b := range branches {
-		items = append(items, versionItem{tag: b.Name, asset: b, branch: true, archived: isArchived(b)})
-	}
-	return items
-}
-
-// addonListItems builds the browse list contents: one row per addon (Actions now
-// lives in its own top-level tab, reached with [ / ]).
-func addonListItems(statuses []addon.Status) []list.Item {
-	items := make([]list.Item, 0, len(statuses))
-	for _, s := range statuses {
-		items = append(items, item{status: s})
-	}
-	return items
 }

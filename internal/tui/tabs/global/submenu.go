@@ -9,45 +9,22 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// submenuKind identifies a command in a global plugin's submenu.
-type submenuKind int
-
-const (
-	subImportToProject submenuKind = iota
-)
-
-// submenuItem is one command row in a global plugin's submenu.
-type submenuItem struct {
-	title string
-	desc  string
-	kind  submenuKind
-}
-
-func (i submenuItem) Title() string       { return i.title }
-func (i submenuItem) FilterValue() string { return i.title }
-func (i submenuItem) Description() string { return i.desc }
-
 // newSubmenuScreen builds the per-plugin command submenu as a reusable picker.
-// Today the only command is Import to Project; new global commands are added as
-// rows here.
+// Each row carries its own Pick, so new global commands are added as rows here.
 func newSubmenuScreen(g globalItem) *components.PickerScreen {
 	items := []list.Item{
-		submenuItem{title: "⬇ Import to Project", desc: "add this plugin to the project manifest", kind: subImportToProject},
-	}
-	return components.NewPicker(items, components.PickerOpts{
-		Title: g.name,
-		OnSelect: func(sh *core.Shared, it list.Item) tea.Cmd {
-			cmd, ok := it.(submenuItem)
-			if !ok {
-				return nil
-			}
-			switch cmd.kind {
-			case subImportToProject:
-				return importToProject(sh, g)
-			}
-			return nil
+		components.Item{
+			Name: "⬇ Import to Project",
+			Desc: "add this plugin to the project manifest",
+			Pick: func(sh *core.Shared) tea.Cmd { return importToProject(sh, g) },
 		},
-	})
+		components.Item{
+			Name: "✗ Remove",
+			Desc: "remove from the global list (and optionally its archive)",
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newRemoveConfirm(g)) },
+		},
+	}
+	return components.NewPicker(items, components.PickerOpts{Title: g.name})
 }
 
 // importToProject copies the global entry into the project manifest, then

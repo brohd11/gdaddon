@@ -111,6 +111,34 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		r.resize()
 		return r, nil
+
+	case MsgGlobalRefresh:
+		// A global-list change can originate from any tab (global Remove, or New
+		// Plugin → Global on the Actions tab). Find the tab whose root handles this
+		// (the global list), switch to it, unwind to its root, and let it rebuild.
+		for i := range r.tabs {
+			if h, ok := r.tabs[i].Root.(RootHandler); ok && h.HandleRoot(r.sh, msg) {
+				r.active = i
+				r.stack = []Screen{r.tabs[i].Root}
+				break
+			}
+		}
+		r.resize()
+		return r, nil
+
+	case MsgArchiveRefresh:
+		// An archive change (a package removal) is raised deep in the Archive tab's
+		// remove flow. Find the tab whose root handles it, switch to it, unwind to
+		// its root, and let it reload from disk. Same shape as MsgGlobalRefresh.
+		for i := range r.tabs {
+			if h, ok := r.tabs[i].Root.(RootHandler); ok && h.HandleRoot(r.sh, msg) {
+				r.active = i
+				r.stack = []Screen{r.tabs[i].Root}
+				break
+			}
+		}
+		r.resize()
+		return r, nil
 	}
 
 	s, cmd := r.Top().Update(r.sh, msg)

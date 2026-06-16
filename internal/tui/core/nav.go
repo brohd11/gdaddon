@@ -44,3 +44,15 @@ func ResetToRoot() tea.Cmd     { return func() tea.Msg { return resetToRootMsg{}
 func RootRefresh(status string, ss []addon.Status, rebuild bool) tea.Cmd {
 	return func() tea.Msg { return MsgRootRefresh{status, ss, rebuild} }
 }
+
+// GlobalRefresh asks the router to show the Global tab rebuilt (after a global-list
+// change), with the given status text. Works from any tab.
+func GlobalRefresh(status string) tea.Cmd {
+	return func() tea.Msg { return MsgGlobalRefresh{status} }
+}
+
+// ArchiveRefresh asks the router to show the Archive tab rebuilt (after an archive
+// change, e.g. a package removal), with the given status text. Works from any tab.
+func ArchiveRefresh(status string) tea.Cmd {
+	return func() tea.Msg { return MsgArchiveRefresh{status} }
+}

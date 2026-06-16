@@ -9,7 +9,7 @@
 //	             ResetToRoot/RootRefresh), the Screen interface plus the optional
 //	             interfaces the router type-asserts (Filterer, OutputViewer,
 //	             RootHandler), router-handled messages (MsgRootRefresh,
-//	             InstallEvent), and generic list/help/style
+//	             MsgGlobalRefresh, InstallEvent), and generic list/help/style
 //	             helpers (NewSelectList, RootHelp, RenderTitleBar, …).
 //	components/  reusable, context-agnostic screens configured by closures — they
 //	             name no domain type: PickerScreen, ConfirmScreen, LoadingScreen,

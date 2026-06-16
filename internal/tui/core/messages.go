@@ -24,3 +24,15 @@ type MsgRootRefresh struct {
 	Statuses []addon.Status // nil ⇒ no refresh (error paths send nil)
 	Rebuild  bool           // true ⇒ setItems, false ⇒ applyStatuses
 }
+
+// MsgGlobalRefresh asks the router to show the Global tab's root rebuilt: it finds
+// the tab whose root handles this (the global list), switches to it, unwinds to its
+// root, and that root reloads itself from disk. Sibling to MsgRootRefresh (browse),
+// but routed by handler rather than a fixed tab index so it works from any tab —
+// global Remove and New Plugin → Global both use it.
+type MsgGlobalRefresh struct{ Status string }
+
+// MsgArchiveRefresh asks the router to show the Archive tab's root rebuilt after a
+// change to the local archive (a package removal). Routed by handler like
+// MsgGlobalRefresh, so the deep remove flow can refresh the tab from anywhere.
+type MsgArchiveRefresh struct{ Status string }

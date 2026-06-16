@@ -65,10 +65,18 @@ func (s *PickerScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 			if s.OnSelect != nil {
 				return s, s.OnSelect(sh, s.list.SelectedItem())
 			}
+			// No screen-level handler: let a self-dispatching Item pick itself.
+			if it, ok := s.list.SelectedItem().(Item); ok && it.Pick != nil {
+				return s, it.Pick(sh)
+			}
 			return s, nil
 		default:
 			if s.OnKey != nil {
 				if cmd, handled := s.OnKey(sh, k, s.list.SelectedItem()); handled {
+					return s, cmd
+				}
+			} else if it, ok := s.list.SelectedItem().(Item); ok && it.Keys != nil {
+				if cmd, handled := it.Keys(sh, k); handled {
 					return s, cmd
 				}
 			}

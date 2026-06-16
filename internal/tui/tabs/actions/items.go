@@ -1,32 +1,27 @@
 package actions
 
-import "github.com/charmbracelet/bubbles/list"
+import (
+	"gdaddon/internal/tui/components"
+	"gdaddon/internal/tui/core"
 
-// ---------- list items ----------
-
-// actionKind identifies a row in the Actions menu.
-type actionKind int
-
-const (
-	actInstallAll actionKind = iota
-	actNewPlugin
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-// actionItem is one row in the Actions menu.
-type actionItem struct {
-	title string
-	desc  string
-	kind  actionKind
-}
-
-func (a actionItem) Title() string       { return a.title }
-func (a actionItem) FilterValue() string { return a.title }
-func (a actionItem) Description() string { return a.desc }
-
-// actionItems builds the Actions menu rows.
+// actionItems builds the Actions menu rows. Each row is a self-dispatching
+// components.Item carrying its own Pick, so the tab root just runs the selected
+// row's closure — no kind enum, no switch.
 func actionItems() []list.Item {
 	return []list.Item{
-		actionItem{title: "↧ Install / update all", desc: "download everything per the manifest", kind: actInstallAll},
-		actionItem{title: "+ New Plugin", desc: "add a plugin to the project or your global list", kind: actNewPlugin},
+		components.Item{
+			Name: "↧ Install / update all",
+			Desc: "download everything per the manifest",
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newInstallAllTask()) },
+		},
+		components.Item{
+			Name: "+ New Plugin",
+			Desc: "add a plugin to the project or your global list",
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(NewNewPluginForm()) },
+		},
 	}
 }

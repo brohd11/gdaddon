@@ -73,10 +73,11 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) tea
 		}
 		if err != nil {
 			sh.StatusMsg = "error: " + err.Error()
-		} else {
-			sh.StatusMsg = fmt.Sprintf("added %s to global list", name)
+			return core.ResetToRoot()
 		}
-		return core.ResetToRoot()
+		// Show the Global tab rebuilt with the new entry (parallel to a project add
+		// switching to Browse).
+		return core.GlobalRefresh(fmt.Sprintf("added %s to global list", name))
 	}
 
 	if err := addon.AddEntry(sh.ManifestPath, name, url, path); err != nil {

@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"gdaddon/internal/tui/components"
 	"gdaddon/internal/tui/core"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -34,16 +35,9 @@ func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 		case "q":
 			return s, tea.Quit
 		case "enter":
-			a, ok := s.list.SelectedItem().(actionItem)
-			if !ok {
-				return s, nil
-			}
-			switch a.kind {
-			case actInstallAll:
-				return s, core.Push(newInstallAllTask())
-			case actNewPlugin:
+			if it, ok := s.list.SelectedItem().(components.Item); ok && it.Pick != nil {
 				sh.StatusMsg = ""
-				return s, core.Push(NewNewPluginForm())
+				return s, it.Pick(sh)
 			}
 			return s, nil
 		}

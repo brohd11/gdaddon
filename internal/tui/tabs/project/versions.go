@@ -1,6 +1,8 @@
 package project
 
 import (
+	"fmt"
+
 	"gdaddon/internal/addon"
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
@@ -11,18 +13,75 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// versionsScreen is the top-level version picker: HEAD plus one row per release.
-type versionsScreen struct {
-	list          list.Model
-	selected      addon.Addon
-	selectedLocal string
+// newVersionsScreen builds the top-level version picker: HEAD plus one row per
+// release. Each row is a self-dispatching components.Item, so there's no bespoke
+// Update — HEAD opens the branch fetch, a single-asset release goes straight to
+// confirm, a multi-asset release opens the asset picker.
+func newVersionsScreen(selected addon.Addon, local string, listing *source.Listing) *components.PickerScreen {
+	items := []list.Item{
+		components.Item{
+			Name: "HEAD",
+			Desc: "track a branch (refs/heads)",
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newBranchesLoading(selected, local)) },
+		},
+	}
+	for _, r := range listing.Releases {
+		r := r
+		items = append(items, components.Item{
+			Name: r.Tag,
+			Desc: releaseDesc(r),
+			Pick: func(sh *core.Shared) tea.Cmd {
+				if len(r.Assets) == 1 {
+					a := r.Assets[0]
+					pick := versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease, archived: isArchived(a)}
+					return core.Push(newInstallConfirm(selected, local, pick))
+				}
+				return core.Push(newAssetPicker(selected, local, r))
+			},
+		})
+	}
+	return components.NewPicker(items, components.PickerOpts{Title: core.HeaderTitle(selected.Name, local, "Versions")})
 }
 
-var _ core.Filterer = (*versionsScreen)(nil)
+func releaseDesc(r source.Release) string {
+	d := fmt.Sprintf("%d asset(s)", len(r.Assets))
+	if r.Prerelease {
+		d += " · prerelease"
+	}
+	return d
+}
 
-func newVersionsScreen(selected addon.Addon, local string, listing *source.Listing) *versionsScreen {
-	l := core.NewSelectList(versionTopItems(listing), core.HeaderTitle(selected.Name, local, "Versions"))
-	return &versionsScreen{list: l, selected: selected, selectedLocal: local}
+// newAssetPicker lists a multi-asset release's assets; each opens the install
+// confirm for that asset.
+func newAssetPicker(selected addon.Addon, local string, r source.Release) *components.PickerScreen {
+	desc := r.Tag
+	if r.Prerelease {
+		desc += " · prerelease"
+	}
+	items := make([]list.Item, 0, len(r.Assets))
+	for _, a := range r.Assets {
+		pick := versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease, archived: isArchived(a)}
+		items = append(items, components.Item{
+			Name: a.Name,
+			Desc: desc,
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newInstallConfirm(selected, local, pick)) },
+		})
+	}
+	return components.NewPicker(items, components.PickerOpts{Title: core.HeaderTitle(selected.Name, local, "Assets "+r.Tag)})
+}
+
+// newBranchPicker lists refs/heads; each opens the install confirm for that branch.
+func newBranchPicker(selected addon.Addon, local string, branches []source.Asset) *components.PickerScreen {
+	items := make([]list.Item, 0, len(branches))
+	for _, b := range branches {
+		pick := versionItem{tag: b.Name, asset: b, branch: true, archived: isArchived(b)}
+		items = append(items, components.Item{
+			Name: "branch: " + b.Name,
+			Desc: "latest commit · " + b.Name,
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newInstallConfirm(selected, local, pick)) },
+		})
+	}
+	return components.NewPicker(items, components.PickerOpts{Title: core.HeaderTitle(selected.Name, local, "Branches")})
 }
 
 // newReleasesLoading builds the loading screen for an addon's release fetch. Its
@@ -50,7 +109,7 @@ func newReleasesLoading(a addon.Addon, local string) *components.LoadingScreen {
 }
 
 // newBranchesLoading builds the loading screen for a HEAD/branch fetch. Its onResult
-// opens the branch submenu (or unwinds on error / empty).
+// opens the branch picker (or unwinds on error / empty).
 func newBranchesLoading(a addon.Addon, local string) *components.LoadingScreen {
 	onResult := func(sh *core.Shared, msg tea.Msg) tea.Cmd {
 		m, ok := msg.(branchesMsg)
@@ -65,58 +124,7 @@ func newBranchesLoading(a addon.Addon, local string) *components.LoadingScreen {
 			sh.StatusMsg = "no branches found"
 			return core.Pop()
 		}
-		sub := newInstallPicker(a, local, branchItems(m.branches), core.HeaderTitle(a.Name, local, "Branches"))
-		return core.Replace(sub)
+		return core.Replace(newBranchPicker(a, local, m.branches))
 	}
 	return components.NewLoadingScreen(core.HeaderTitle(a.Name, local, ""), "fetching branches…", fetchBranches(a.URL), onResult)
-}
-
-func (s *versionsScreen) Init(*core.Shared) tea.Cmd { return nil }
-
-func (s *versionsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
-
-func (s *versionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
-	if s.Filtering() {
-		var cmd tea.Cmd
-		s.list, cmd = s.list.Update(msg)
-		return s, cmd
-	}
-	if key, ok := msg.(tea.KeyMsg); ok {
-		switch key.String() {
-		case "esc", "q":
-			return s, core.Pop()
-		case "enter":
-			return s.selectVersion()
-		}
-	}
-	var cmd tea.Cmd
-	s.list, cmd = s.list.Update(msg)
-	return s, cmd
-}
-
-// selectVersion handles enter: HEAD opens the branch submenu (after a fetch), a
-// single-asset release goes straight to confirm, a multi-asset release opens the
-// asset submenu.
-func (s *versionsScreen) selectVersion() (core.Screen, tea.Cmd) {
-	switch sel := s.list.SelectedItem().(type) {
-	case headItem:
-		return s, core.Push(newBranchesLoading(s.selected, s.selectedLocal))
-	case releaseItem:
-		if len(sel.rel.Assets) == 1 {
-			a := sel.rel.Assets[0]
-			pick := versionItem{tag: sel.rel.Tag, asset: a, prerelease: sel.rel.Prerelease, archived: isArchived(a)}
-			return s, core.Push(newInstallConfirm(s.selected, s.selectedLocal, pick))
-		}
-		sub := newInstallPicker(s.selected, s.selectedLocal,
-			assetItems(sel.rel), core.HeaderTitle(s.selected.Name, s.selectedLocal, "Assets "+sel.rel.Tag))
-		return s, core.Push(sub)
-	}
-	return s, nil
-}
-
-func (s *versionsScreen) View(*core.Shared) string     { return s.list.View() }
-func (s *versionsScreen) HelpView(*core.Shared) string { return core.HelpView(s.list) }
-
-func (s *versionsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
-	s.list.SetSize(width, bodyHeight)
 }

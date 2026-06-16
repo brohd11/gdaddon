@@ -2,6 +2,7 @@ package project
 
 import (
 	"gdaddon/internal/addon"
+	"gdaddon/internal/tui/components"
 	"gdaddon/internal/tui/core"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -52,12 +53,11 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 		case "q":
 			return s, tea.Quit
 		case "enter":
-			sel, ok := s.list.SelectedItem().(item)
-			if !ok || !sel.status.Installable() {
-				return s, nil
+			if it, ok := s.list.SelectedItem().(components.Item); ok && it.Pick != nil {
+				sh.StatusMsg = ""
+				return s, it.Pick(sh)
 			}
-			sh.StatusMsg = ""
-			return s, core.Push(newSubmenuScreen(sel.status))
+			return s, nil
 		}
 	}
 	var cmd tea.Cmd
@@ -117,7 +117,7 @@ func (s *ProjectScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 func (s *ProjectScreen) applyStatuses(statuses []addon.Status) {
 	for i, st := range statuses {
 		if i < len(s.list.Items()) {
-			s.list.SetItem(i, item{status: st})
+			s.list.SetItem(i, addonItem(st))
 		}
 	}
 }

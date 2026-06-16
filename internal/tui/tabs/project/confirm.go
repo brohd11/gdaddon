@@ -11,7 +11,6 @@ import (
 	"gdaddon/internal/source"
 
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -115,28 +114,17 @@ func removeOptions(mode int) string {
 
 // ---------- archive confirm ----------
 
-// buildArchiveConfirm derives the package(s) to archive for the selected
-// version-list item and returns a confirm screen. It returns ok=false (with an
-// optional status line) when there is nothing to archive: HEAD, an error, or an
-// already-archived selection.
-func buildArchiveConfirm(selected addon.Addon, local string, sel list.Item) (*components.ConfirmScreen, string, bool) {
+// buildArchiveConfirm derives the package to archive for the chosen version and
+// returns a confirm screen. It returns ok=false (with an optional status line)
+// when there is nothing to archive: an error or an already-archived selection.
+func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (*components.ConfirmScreen, string, bool) {
 	repoID, err := source.RepoID(selected.URL)
 	if err != nil {
 		return nil, "cannot archive: " + err.Error(), false
 	}
 
-	var tag string
-	var assets []source.Asset
-	switch it := sel.(type) {
-	case releaseItem:
-		tag = it.rel.Tag
-		assets = it.rel.Assets
-	case versionItem:
-		tag = it.tag
-		assets = []source.Asset{it.asset}
-	default:
-		return nil, "", false // HEAD or anything without a concrete package
-	}
+	tag := pick.tag
+	assets := []source.Asset{pick.asset}
 
 	// Drop already-archived (local) assets; nothing to fetch for those.
 	var remote []source.Asset

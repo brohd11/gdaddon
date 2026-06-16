@@ -5,6 +5,7 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/core"
 	"gdaddon/internal/tui/tabs/actions"
+	"gdaddon/internal/tui/tabs/archive"
 	"gdaddon/internal/tui/tabs/global"
 	"gdaddon/internal/tui/tabs/project"
 
@@ -22,6 +23,7 @@ func Run(manifestPath, projectRoot string) error {
 	tabs := []core.TabEntry{
 		{Title: "Project", Root: project.NewProjectScreen(statuses)},
 		{Title: "Global", Root: global.NewGlobalScreen()},
+		{Title: "Archive", Root: archive.NewArchiveScreen()},
 		{Title: "Actions", Root: actions.NewActionsScreen()},
 	}
 	r := core.NewRouter(sh, tabs)

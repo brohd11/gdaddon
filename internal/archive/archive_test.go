@@ -90,6 +90,102 @@ func TestStoreAndList(t *testing.T) {
 	}
 }
 
+func TestRemoveRepo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	const repoID = "github.com/owner/repo"
+
+	if _, err := Store(repoID, "v1.0.0", "pkg.zip", strings.NewReader("zipdata")); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveRepo(repoID); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := List(repoID); err != nil || got != nil {
+		t.Errorf("repo archive should be gone, got (%v,%v)", got, err)
+	}
+
+	// Removing a repo with no archive is a no-op.
+	if err := RemoveRepo("github.com/none/none"); err != nil {
+		t.Errorf("removing a missing repo archive should be a no-op, got %v", err)
+	}
+}
+
+func TestRepos(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if _, err := Store("github.com/owner/repoB", "v1.0.0", "pkg.zip", strings.NewReader("z")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Store("github.com/owner/repoA", "v2.0.0", "a.zip", strings.NewReader("z")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Store("github.com/owner/repoA", "v2.0.0", "b.zip", strings.NewReader("z")); err != nil {
+		t.Fatal(err)
+	}
+
+	repos, err := Repos()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(repos) != 2 {
+		t.Fatalf("expected 2 archived repos, got %d", len(repos))
+	}
+	// Sorted by display id; '_' folder separators mapped back to '/'.
+	if repos[0].ID != "github.com/owner/repoA" {
+		t.Errorf("first repo id = %q", repos[0].ID)
+	}
+	if len(repos[0].Releases) != 1 || len(repos[0].Releases[0].Assets) != 2 {
+		t.Errorf("repoA should have 1 release with 2 assets, got %+v", repos[0].Releases)
+	}
+
+	// Empty archive -> nil.
+	t.Setenv("HOME", t.TempDir())
+	if got, err := Repos(); err != nil || got != nil {
+		t.Errorf("empty archive should be (nil,nil), got (%v,%v)", got, err)
+	}
+}
+
+func TestRemove(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	const repoID = "github.com/owner/repo"
+
+	pathA, err := Store(repoID, "v1.0.0", "a.zip", strings.NewReader("z"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Store(repoID, "v1.0.0", "b.zip", strings.NewReader("z")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Removing one asset of a multi-asset tag keeps the tag (b.zip remains).
+	if err := Remove(pathA); err != nil {
+		t.Fatal(err)
+	}
+	releases, _ := List(repoID)
+	if len(releases) != 1 || len(releases[0].Assets) != 1 {
+		t.Fatalf("expected tag kept with 1 asset, got %+v", releases)
+	}
+
+	// Removing the last asset prunes the now-empty tag and repo folders.
+	if err := Remove(releases[0].Assets[0].URL); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := List(repoID); got != nil {
+		t.Errorf("repo archive should be pruned, got %+v", got)
+	}
+	root, _ := Dir()
+	if _, err := os.Stat(filepath.Join(root, "github.com_owner_repo")); !os.IsNotExist(err) {
+		t.Errorf("repo folder should be pruned, stat err = %v", err)
+	}
+	// The archive root itself is never pruned.
+	if _, err := os.Stat(root); err != nil {
+		t.Errorf("archive root should survive pruning: %v", err)
+	}
+}
+
 func TestMerge(t *testing.T) {
 	listing := &source.Listing{Releases: []source.Release{
 		{Tag: "v1.0.0", Assets: []source.Asset{{Name: "a.zip", URL: "http://x/a.zip"}}},
