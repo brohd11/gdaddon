@@ -1,4 +1,4 @@
-package tui
+package project
 
 import "gdaddon/internal/source"
 

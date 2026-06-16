@@ -1,4 +1,4 @@
-package tui
+package project
 
 import (
 	"gdaddon/internal/addon"
@@ -12,15 +12,15 @@ import (
 
 // browseScreen is the permanent root: the addon list with the pinned Actions
 // row. It shows the status line and output pane below the list.
-type browseScreen struct {
+type ProjectScreen struct {
 	list list.Model
 }
 
-var _ core.Filterer = (*browseScreen)(nil)
-var _ core.OutputViewer = (*browseScreen)(nil)
-var _ core.RootHandler = (*browseScreen)(nil)
+var _ core.Filterer = (*ProjectScreen)(nil)
+var _ core.OutputViewer = (*ProjectScreen)(nil)
+var _ core.RootHandler = (*ProjectScreen)(nil)
 
-func newBrowseScreen(statuses []addon.Status) *browseScreen {
+func NewProjectScreen(statuses []addon.Status) *ProjectScreen {
 	l := list.New(addonListItems(statuses), core.NewDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	core.StyleList(&l)
@@ -33,15 +33,15 @@ func newBrowseScreen(statuses []addon.Status) *browseScreen {
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear log")),
 		}
 	}
-	return &browseScreen{list: l}
+	return &ProjectScreen{list: l}
 }
 
-func (s *browseScreen) Init(*core.Shared) tea.Cmd { return nil }
+func (s *ProjectScreen) Init(*core.Shared) tea.Cmd { return nil }
 
-func (s *browseScreen) Filtering() bool   { return s.list.FilterState() == list.Filtering }
-func (s *browseScreen) WantsOutput() bool { return true }
+func (s *ProjectScreen) Filtering() bool   { return s.list.FilterState() == list.Filtering }
+func (s *ProjectScreen) WantsOutput() bool { return true }
 
-func (s *browseScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
 	if s.Filtering() {
 		var cmd tea.Cmd
 		s.list, cmd = s.list.Update(msg)
@@ -66,7 +66,7 @@ func (s *browseScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 	return s, cmd
 }
 
-func (s *browseScreen) View(sh *core.Shared) string {
+func (s *ProjectScreen) View(sh *core.Shared) string {
 	// Order bottom-up: list, then status, then output.
 	body := s.list.View()
 	if sh.StatusMsg != "" {
@@ -80,9 +80,9 @@ func (s *browseScreen) View(sh *core.Shared) string {
 
 // HelpView renders the decluttered tab-root help (nav · select · tabs · quit ·
 // more); filter, output, and clear-log live only in the full (?) help.
-func (s *browseScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
+func (s *ProjectScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
 
-func (s *browseScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
+func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	h := bodyHeight
 	if sh.StatusMsg != "" {
 		h--
@@ -97,7 +97,7 @@ func (s *browseScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 // handleRoot refreshes the browse list from a result message (rootHandler): the
 // router unwinds to the root and hands the refresh here, keeping the browse-specific
 // list logic out of the router.
-func (s *browseScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
+func (s *ProjectScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 	m, ok := msg.(core.MsgRootRefresh)
 	if !ok {
 		return false
@@ -115,7 +115,7 @@ func (s *browseScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 
 // applyStatuses writes refreshed statuses back into the list in place (row i ↔
 // addon i; use setItems instead when the row count changed).
-func (s *browseScreen) applyStatuses(statuses []addon.Status) {
+func (s *ProjectScreen) applyStatuses(statuses []addon.Status) {
 	for i, st := range statuses {
 		if i < len(s.list.Items()) {
 			s.list.SetItem(i, item{status: st})
@@ -124,6 +124,6 @@ func (s *browseScreen) applyStatuses(statuses []addon.Status) {
 }
 
 // setItems rebuilds the list (handles a changed row count, unlike applyStatuses).
-func (s *browseScreen) setItems(statuses []addon.Status) {
+func (s *ProjectScreen) setItems(statuses []addon.Status) {
 	s.list.SetItems(addonListItems(statuses))
 }

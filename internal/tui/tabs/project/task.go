@@ -1,4 +1,4 @@
-package tui
+package project
 
 import (
 	"fmt"
@@ -33,20 +33,6 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 		return finishInstallCmd(sh, selected, pick, ev.Path, ev.Version)
 	}
 	return components.NewTask("installing "+selected.Name+"…", run, onDone)
-}
-
-func newInstallAllTask() *components.TaskScreen {
-	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.InstallEvent) {
-		statuses, err := addon.Inspect(sh.ManifestPath, sh.ProjectRoot)
-		if err != nil {
-			report("error: %v", err)
-		} else {
-			_ = addon.InstallAll(sh.ManifestPath, statuses, sh.ProjectRoot, report)
-		}
-		done <- core.InstallEvent{Done: true}
-	}
-	onDone := func(sh *core.Shared, ev core.InstallEvent) tea.Cmd { return finishInstallAllCmd(sh) }
-	return components.NewTask("installing all addons…", run, onDone)
 }
 
 func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.Asset) *components.TaskScreen {

@@ -1,4 +1,4 @@
-package tui
+package actions
 
 import (
 	"gdaddon/internal/addon"

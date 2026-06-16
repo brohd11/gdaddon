@@ -1,4 +1,4 @@
-package tui
+package actions
 
 import (
 	"gdaddon/internal/addon"
@@ -10,21 +10,21 @@ import (
 
 // actionsScreen is the Actions tab (reached with [ / ]): install all, new plugin,
 // import plugin. As a tab root it quits on q rather than popping.
-type actionsScreen struct {
+type ActionsScreen struct {
 	list list.Model
 }
 
-var _ core.Filterer = (*actionsScreen)(nil)
+var _ core.Filterer = (*ActionsScreen)(nil)
 
-func newActionsScreen() *actionsScreen {
-	return &actionsScreen{list: core.NewSelectList(actionItems(), "Actions")}
+func NewActionsScreen() *ActionsScreen {
+	return &ActionsScreen{list: core.NewSelectList(actionItems(), "Actions")}
 }
 
-func (s *actionsScreen) Init(*core.Shared) tea.Cmd { return nil }
+func (s *ActionsScreen) Init(*core.Shared) tea.Cmd { return nil }
 
-func (s *actionsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
+func (s *ActionsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *actionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
 	if s.Filtering() {
 		var cmd tea.Cmd
 		s.list, cmd = s.list.Update(msg)
@@ -44,7 +44,7 @@ func (s *actionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 				return s, core.Push(newInstallAllTask())
 			case actNewPlugin:
 				sh.StatusMsg = ""
-				return s, core.Push(newNewPluginForm())
+				return s, core.Push(NewNewPluginForm())
 			case actImportPlugin:
 				sh.StatusMsg = ""
 				return s.startImport(sh)
@@ -59,7 +59,7 @@ func (s *actionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 
 // startImport loads the global plugin list and opens the picker, or reports an
 // empty/missing list and returns to browse.
-func (s *actionsScreen) startImport(sh *core.Shared) (core.Screen, tea.Cmd) {
+func (s *ActionsScreen) startImport(sh *core.Shared) (core.Screen, tea.Cmd) {
 	path, err := addon.GlobalListPath()
 	var addons []addon.Addon
 	if err == nil {
@@ -72,9 +72,9 @@ func (s *actionsScreen) startImport(sh *core.Shared) (core.Screen, tea.Cmd) {
 	return s, core.Push(newImportScreen(addons))
 }
 
-func (s *actionsScreen) View(*core.Shared) string     { return s.list.View() }
-func (s *actionsScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
+func (s *ActionsScreen) View(*core.Shared) string     { return s.list.View() }
+func (s *ActionsScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
 
-func (s *actionsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
+func (s *ActionsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	s.list.SetSize(width, bodyHeight)
 }

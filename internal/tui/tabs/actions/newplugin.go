@@ -1,4 +1,4 @@
-package tui
+package actions
 
 import (
 	"gdaddon/internal/tui/core"
@@ -14,15 +14,15 @@ import (
 
 // newPluginForm is the single-page Add Plugin form: url/name/path text fields and
 // the Project/Global target toggle. On enter it pushes the confirm screen.
-type newPluginForm struct {
+type NewPluginForm struct {
 	inputs    []textinput.Model
 	formFocus int
 	addTarget int
 }
 
-var _ core.Filterer = (*newPluginForm)(nil)
+var _ core.Filterer = (*NewPluginForm)(nil)
 
-func newNewPluginForm() *newPluginForm {
+func NewNewPluginForm() *NewPluginForm {
 	mk := func(placeholder string) textinput.Model {
 		ti := textinput.New()
 		ti.Placeholder = placeholder
@@ -30,7 +30,7 @@ func newNewPluginForm() *newPluginForm {
 		return ti
 	}
 	// Order matches the fld* indices: url, name, path.
-	return &newPluginForm{
+	return &NewPluginForm{
 		inputs: []textinput.Model{
 			mk("https://github.com/owner/repo"),
 			mk("(optional — derived from url)"),
@@ -41,13 +41,13 @@ func newNewPluginForm() *newPluginForm {
 	}
 }
 
-func (s *newPluginForm) Init(*core.Shared) tea.Cmd { return s.syncFormFocus() }
+func (s *NewPluginForm) Init(*core.Shared) tea.Cmd { return s.syncFormFocus() }
 
 // filtering: the URL text input captures keys, so the global tab/c shortcuts must
 // not steal characters typed into it.
-func (s *newPluginForm) Filtering() bool { return true }
+func (s *NewPluginForm) Filtering() bool { return true }
 
-func (s *newPluginForm) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+func (s *NewPluginForm) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return s, nil
@@ -91,7 +91,7 @@ func (s *newPluginForm) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 
 // syncFormFocus focuses the textinput at formFocus and blurs the rest (the target
 // row focuses none), returning the cursor-blink command.
-func (s *newPluginForm) syncFormFocus() tea.Cmd {
+func (s *NewPluginForm) syncFormFocus() tea.Cmd {
 	var cmd tea.Cmd
 	for i := range s.inputs {
 		if i == s.formFocus {
@@ -103,7 +103,7 @@ func (s *newPluginForm) syncFormFocus() tea.Cmd {
 	return cmd
 }
 
-func (s *newPluginForm) View(sh *core.Shared) string {
+func (s *NewPluginForm) View(sh *core.Shared) string {
 	label := lipgloss.NewStyle().Foreground(core.MutedColor)
 	marker := func(focused bool) string {
 		if focused {
@@ -129,7 +129,7 @@ func (s *newPluginForm) View(sh *core.Shared) string {
 		sh.Box(body))
 }
 
-func (s *newPluginForm) HelpView(sh *core.Shared) string {
+func (s *NewPluginForm) HelpView(sh *core.Shared) string {
 	// return sh.bindingHelp(newPluginInputHelp)
 	var newPluginInputHelp = []key.Binding{
 		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "field")),
@@ -140,7 +140,7 @@ func (s *newPluginForm) HelpView(sh *core.Shared) string {
 	return sh.BindingHelp(newPluginInputHelp)
 }
 
-func (s *newPluginForm) SetSize(sh *core.Shared, width, bodyHeight int) {
+func (s *NewPluginForm) SetSize(sh *core.Shared, width, bodyHeight int) {
 	w := sh.ConfirmWidth() - 12 // box room minus the label column
 	if w < 10 {
 		w = 10

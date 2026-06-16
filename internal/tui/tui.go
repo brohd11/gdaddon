@@ -4,6 +4,9 @@ package tui
 import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/tabs/actions"
+	"gdaddon/internal/tui/tabs/global"
+	"gdaddon/internal/tui/tabs/project"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -17,26 +20,11 @@ func Run(manifestPath, projectRoot string) error {
 
 	sh := core.NewShared(manifestPath, projectRoot)
 	tabs := []core.TabEntry{
-		{Title: "Browse", Root: newBrowseScreen(statuses)},
-		{Title: "Actions", Root: newActionsScreen()},
+		{Title: "Project", Root: project.NewProjectScreen(statuses)},
+		{Title: "Actions", Root: actions.NewActionsScreen()},
+		{Title: "Global", Root: global.NewGlobalScreen()},
 	}
 	r := core.NewRouter(sh, tabs)
 	_, err = tea.NewProgram(r, tea.WithAltScreen()).Run()
 	return err
 }
-
-// add targets for the New Plugin target toggle.
-const (
-	targetProject = iota
-	targetGlobal
-)
-
-// rows of the New Plugin form (url/name/path text fields + the target toggle).
-// URL is first because it's the only mandatory field.
-const (
-	fldURL = iota
-	fldName
-	fldPath
-	fldTarget
-	fldCount
-)
