@@ -82,12 +82,12 @@ func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 func (s *GlobalScreen) View(*core.Shared) string     { return s.list.View() }
 func (s *GlobalScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
 
-// HandleRoot rebuilds the global list from disk on a MsgGlobalRefresh (after a
-// global-list add/remove), so the Global tab reflects the change. The router routes
+// HandleRoot rebuilds the global list from disk on a MsgRefresh targeting the global
+// list (after an add/remove), so the Global tab reflects the change. The router routes
 // the message here by finding the root that claims it.
 func (s *GlobalScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
-	m, ok := msg.(core.MsgGlobalRefresh)
-	if !ok {
+	m, ok := msg.(core.MsgRefresh)
+	if !ok || m.Target != core.RefreshGlobal {
 		return false
 	}
 	sh.StatusMsg = m.Status

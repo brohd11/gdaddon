@@ -84,7 +84,7 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) tea
 		sh.StatusMsg = "error: " + err.Error()
 		return core.ResetToRoot()
 	}
-	return tea.Batch(core.ResetToRoot(), reloadCmd(sh, "added "+name))
+	return tea.Batch(core.ResetToRoot(), core.RootRefresh("added "+name))
 }
 
 // targetToggle renders the Project ◄ ► Global switch with the active side

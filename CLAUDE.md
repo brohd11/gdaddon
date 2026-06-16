@@ -58,30 +58,40 @@ cmd/
 internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, ~/.gdaddon global list
   source/            — resolves remote versions from a URL (github.go: releases, branches, source archives; RepoID)
-  archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips, merge into a listing
+  archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   tui/               — bubbletea front-end (see internal/tui/doc.go)
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
     core/            — the framework: Shared state, Router over a screen stack, nav commands, Screen + optional interfaces, router messages, list/help/style helpers
-    components/      — reusable, context-agnostic screens configured by closures (PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen) — they name no domain type
-    tabs/<domain>/   — one package per top-level tab (project, global, actions): its root screen, flow screens, and the builders that wire components to features
+    components/      — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen) — they name no domain type
+    tabs/<domain>/   — one package per top-level tab (project, global, archive, actions): its root screen, flow screens, and the builders that wire components to features
 ```
 
 ### TUI design goals
 
-The TUI was restructured for scalability around two ideas:
+The TUI was restructured for scalability around three ideas:
 
 - **Tabs are domains.** Each top-level tab is its own package under `tui/tabs/`
-  (`project`, `global`, `actions`) owning its root screen and flows. Adding a
-  feature area means adding a tab package, not editing a monolith.
+  (`project`, `global`, `archive`, `actions`) owning its root screen and flows.
+  Adding a feature area means adding a tab package, not editing a monolith.
 - **Domains share `components` to simplify logic.** Reusable screens
   (picker/confirm/loading/streaming-task) live in `tui/components`, are
   context-agnostic, and are configured by closures the tab supplies — so a tab
   composes flows from shared pieces instead of reimplementing list/confirm/task
   plumbing.
+- **List rows carry their own behavior (`components.Item`).** Every list is built
+  from `components.Item` values, each holding its own `Pick func(*core.Shared)
+  tea.Cmd` closure. A `PickerScreen` runs the selected row's `Pick` on enter, so a
+  menu of mixed commands needs no per-row `kind` enum, no `switch`, and — for a
+  pushed screen — no `Update` method at all (building the rows *is* the flow). An
+  inert row (placeholder / disabled) is just an `Item` with a nil `Pick`. Tab
+  roots still own an `Update` (quit-on-`q`, refresh, output pane) but dispatch
+  with the same one-liner `it.(components.Item).Pick(sh)`. Domain values carried
+  *through* a flow (e.g. `versionItem`, `globalItem`) stay plain payload structs
+  captured inside the closures, not used as list rows.
 
 Dependency direction is strictly `core ← components ← tabs/* ← tui`: `core` names
-no concrete screen (reaches them via optional interfaces like `Relister`/
-`RootHandler`), `components` name no domain type (closures only), and tabs never
+no concrete screen (reaches them via optional interfaces like `RootHandler`/
+`PopStopper`), `components` name no domain type (closures only), and tabs never
 import each other. That acyclic layering is what lets the screens live in
 separate packages. See `internal/tui/doc.go` for the full contract and how to
 add a tab.
@@ -91,7 +101,8 @@ Key packages/functions:
 - `addon.Install` / `addon.InstallAll` — fetch (`.zip` download / `.git` clone / **local `.zip` path** for archived packages), derive the install dir from the package's `plugin.cfg`/`version.cfg` (`internal/addon/cfg.go`), and report progress via a callback. `Install` returns the resolved path+version.
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — GitHub releases (uploaded `.zip`s + a generated source archive), branch-HEAD archives, and canonical repo identity.
-- `archive.Archive` / `archive.List` / `archive.Merge` — save a downloaded asset zip, read archived packages back as "- archived" releases (local-file URLs), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails).
+- `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip, read one repo's archived packages back as "- archived" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails).
+- `archive.RemoveRepo` / `archive.Remove` — delete a repo's whole archive (used by Global → Remove "+ archive"), or one archived package by its local path, pruning emptied folders (the Archive tab).
 
 ## Installing the binary
 

@@ -1,10 +1,6 @@
 package core
 
-import (
-	"gdaddon/internal/addon"
-
-	tea "github.com/charmbracelet/bubbletea"
-)
+import tea "github.com/charmbracelet/bubbletea"
 
 // Navigation messages. Screens never mutate the stack directly; they return one
 // of these via a command and the router interprets it in one place. This keeps
@@ -39,20 +35,20 @@ func PopTo() tea.Cmd { return func() tea.Msg { return popToMsg{} } }
 func Replace(s Screen) tea.Cmd { return func() tea.Msg { return replaceMsg{s} } }
 func ResetToRoot() tea.Cmd     { return func() tea.Msg { return resetToRootMsg{} } }
 
-// rootRefresh asks the router to unwind to the root and refresh the browse list
-// with the given status text and statuses (rebuild ⇒ row count changed).
-func RootRefresh(status string, ss []addon.Status, rebuild bool) tea.Cmd {
-	return func() tea.Msg { return MsgRootRefresh{status, ss, rebuild} }
+// RootRefresh asks the router to switch to the project tab, unwind to its root, and
+// rebuild the browse list from the manifest, with the given status text.
+func RootRefresh(status string) tea.Cmd {
+	return func() tea.Msg { return MsgRefresh{Target: RefreshProject, Switch: true, Status: status} }
 }
 
 // GlobalRefresh asks the router to show the Global tab rebuilt (after a global-list
 // change), with the given status text. Works from any tab.
 func GlobalRefresh(status string) tea.Cmd {
-	return func() tea.Msg { return MsgGlobalRefresh{status} }
+	return func() tea.Msg { return MsgRefresh{Target: RefreshGlobal, Switch: true, Status: status} }
 }
 
 // ArchiveRefresh asks the router to show the Archive tab rebuilt (after an archive
 // change, e.g. a package removal), with the given status text. Works from any tab.
 func ArchiveRefresh(status string) tea.Cmd {
-	return func() tea.Msg { return MsgArchiveRefresh{status} }
+	return func() tea.Msg { return MsgRefresh{Target: RefreshArchive, Switch: true, Status: status} }
 }

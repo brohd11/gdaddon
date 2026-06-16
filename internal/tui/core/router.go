@@ -25,19 +25,17 @@ type TabEntry struct {
 // Tabs are switched with [ / ] only at depth 1, so the live stack always belongs
 // to the active tab; there is never a deeper stack to stash when switching.
 type Router struct {
-	sh       *Shared
-	tabs     []TabEntry
-	active   int      // index into tabs of the visible tab
-	browseAt int      // tab that owns addon results (msgRootRefresh lands here)
-	stack    []Screen // live nav stack for the active tab; stack[0] == tabs[active].root
+	sh     *Shared
+	tabs   []TabEntry
+	active int      // index into tabs of the visible tab
+	stack  []Screen // live nav stack for the active tab; stack[0] == tabs[active].root
 }
 
 func NewRouter(sh *Shared, tabs []TabEntry) Router {
-	return Router{sh: sh, tabs: tabs, browseAt: 0, stack: []Screen{tabs[0].Root}}
+	return Router{sh: sh, tabs: tabs, stack: []Screen{tabs[0].Root}}
 }
 
-func (r Router) Top() Screen     { return r.stack[len(r.stack)-1] }
-func (r Router) tabRoot() Screen { return r.stack[0] }
+func (r Router) Top() Screen { return r.stack[len(r.stack)-1] }
 
 func (r Router) Init() tea.Cmd { return r.Top().Init(r.sh) }
 
@@ -99,43 +97,22 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.resize()
 		return r, nil
 
-	case MsgRootRefresh:
-		// Addon results belong to the Browse tab even when triggered from Actions
-		// (e.g. Install All): switch to it, unwind to its root, and let that root
-		// refresh itself (rootHandler). This is the one deliberate cross-tab coupling
-		// — everything else is tab-agnostic.
-		r.active = r.browseAt
-		r.stack = []Screen{r.tabs[r.browseAt].Root}
-		if h, ok := r.tabRoot().(RootHandler); ok {
-			h.HandleRoot(r.sh, msg)
-		}
-		r.resize()
-		return r, nil
-
-	case MsgGlobalRefresh:
-		// A global-list change can originate from any tab (global Remove, or New
-		// Plugin → Global on the Actions tab). Find the tab whose root handles this
-		// (the global list), switch to it, unwind to its root, and let it rebuild.
+	case MsgRefresh:
+		// A refresh can originate from any tab (Install All from Actions, global
+		// Remove, an archive removal, …). Find the tab whose root claims this Target,
+		// hand it the message to rebuild itself, and — when Switch is set — make that
+		// tab active and unwind it to its root. The router stays tab-agnostic: it asks
+		// each root rather than mapping Target → index itself.
 		for i := range r.tabs {
-			if h, ok := r.tabs[i].Root.(RootHandler); ok && h.HandleRoot(r.sh, msg) {
+			h, ok := r.tabs[i].Root.(RootHandler)
+			if !ok || !h.HandleRoot(r.sh, msg) {
+				continue
+			}
+			if msg.Switch {
 				r.active = i
 				r.stack = []Screen{r.tabs[i].Root}
-				break
 			}
-		}
-		r.resize()
-		return r, nil
-
-	case MsgArchiveRefresh:
-		// An archive change (a package removal) is raised deep in the Archive tab's
-		// remove flow. Find the tab whose root handles it, switch to it, unwind to
-		// its root, and let it reload from disk. Same shape as MsgGlobalRefresh.
-		for i := range r.tabs {
-			if h, ok := r.tabs[i].Root.(RootHandler); ok && h.HandleRoot(r.sh, msg) {
-				r.active = i
-				r.stack = []Screen{r.tabs[i].Root}
-				break
-			}
+			break
 		}
 		r.resize()
 		return r, nil

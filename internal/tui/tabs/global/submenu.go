@@ -27,12 +27,12 @@ func newSubmenuScreen(g globalItem) *components.PickerScreen {
 	return components.NewPicker(items, components.PickerOpts{Title: g.name})
 }
 
-// importToProject copies the global entry into the project manifest, then
-// refreshes the Project tab with the new row (reloadCmd → MsgRootRefresh).
+// importToProject copies the global entry into the project manifest, then refreshes
+// the Project tab (RootRefresh), which reloads the new row from the manifest.
 func importToProject(sh *core.Shared, g globalItem) tea.Cmd {
 	if err := addon.AddEntry(sh.ManifestPath, g.name, g.url, g.path); err != nil {
 		sh.StatusMsg = "error: " + err.Error()
 		return core.ResetToRoot()
 	}
-	return reloadCmd(sh, "imported "+g.name)
+	return core.RootRefresh("imported " + g.name)
 }

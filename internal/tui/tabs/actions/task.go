@@ -9,7 +9,7 @@ import (
 )
 
 // newInstallAllTask runs a batch install of everything in the manifest, then lands
-// the result on the Browse tab (finishInstallAllCmd → MsgRootRefresh).
+// the result on the Browse tab (RootRefresh reloads it from the manifest).
 func newInstallAllTask() *components.TaskScreen {
 	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.InstallEvent) {
 		statuses, err := addon.Inspect(sh.ManifestPath, sh.ProjectRoot)
@@ -20,6 +20,6 @@ func newInstallAllTask() *components.TaskScreen {
 		}
 		done <- core.InstallEvent{Done: true}
 	}
-	onDone := func(sh *core.Shared, ev core.InstallEvent) tea.Cmd { return finishInstallAllCmd(sh) }
+	onDone := func(sh *core.Shared, ev core.InstallEvent) tea.Cmd { return core.RootRefresh("install complete") }
 	return components.NewTask("installing all addons…", run, onDone)
 }

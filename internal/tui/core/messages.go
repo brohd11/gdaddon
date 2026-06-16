@@ -1,7 +1,5 @@
 package core
 
-import "gdaddon/internal/addon"
-
 // ---------- messages ----------
 
 // InstallEvent streams a streaming task's progress (one line per event) and its
@@ -15,24 +13,24 @@ type InstallEvent struct {
 	Version string // version read from the installed plugin.cfg
 }
 
-// MsgRootRefresh is routed by the router to the browse (root) screen: it sets the
-// status line, refreshes the list, then the router unwinds back to the root. The
-// sender supplies the display text; Rebuild picks setItems (row count changed, e.g.
-// import / new plugin) over applyStatuses (existing rows updated in place).
-type MsgRootRefresh struct {
-	Status   string         // sender-provided display text
-	Statuses []addon.Status // nil ⇒ no refresh (error paths send nil)
-	Rebuild  bool           // true ⇒ setItems, false ⇒ applyStatuses
+// RefreshTarget names which tab's root a MsgRefresh is meant for. The router stays
+// tab-agnostic — it doesn't map a target to an index itself; each root claims the
+// target(s) it handles in HandleRoot.
+type RefreshTarget int
+
+const (
+	RefreshProject RefreshTarget = iota // the browse/project addon list
+	RefreshGlobal                       // the global plugin list
+	RefreshArchive                      // the local package archive
+)
+
+// MsgRefresh asks the router to refresh a tab's root after an out-of-band change.
+// The router finds the root that claims Target, hands it the message to rebuild
+// itself from disk, and — when Switch is set — makes that tab active and unwinds it
+// to its root. One message serves every tab; it carries no list state, since each
+// root reloads from the manifest/list/archive itself.
+type MsgRefresh struct {
+	Target RefreshTarget // which tab root handles this
+	Switch bool          // true ⇒ switch to + unwind that tab; false ⇒ refresh in place
+	Status string        // sender-provided display text
 }
-
-// MsgGlobalRefresh asks the router to show the Global tab's root rebuilt: it finds
-// the tab whose root handles this (the global list), switches to it, unwinds to its
-// root, and that root reloads itself from disk. Sibling to MsgRootRefresh (browse),
-// but routed by handler rather than a fixed tab index so it works from any tab —
-// global Remove and New Plugin → Global both use it.
-type MsgGlobalRefresh struct{ Status string }
-
-// MsgArchiveRefresh asks the router to show the Archive tab's root rebuilt after a
-// change to the local archive (a package removal). Routed by handler like
-// MsgGlobalRefresh, so the deep remove flow can refresh the tab from anywhere.
-type MsgArchiveRefresh struct{ Status string }

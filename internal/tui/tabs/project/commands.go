@@ -42,11 +42,10 @@ func cloneListing(l *source.Listing) *source.Listing {
 	return &c
 }
 
-// finishInstallCmd pins the freshly installed url, resolved path, and version
-// into the manifest and re-inspects, returning msgRootRefresh for the router to
-// apply to the browse list.
+// finishInstallCmd pins the freshly installed url, resolved path, and version into
+// the manifest, then returns a project MsgRefresh so the browse list reloads from it.
 func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
-	manifestPath, projectRoot := sh.ManifestPath, sh.ProjectRoot
+	manifestPath := sh.ManifestPath
 	name, url := selected.Name, pick.asset.URL
 	// Installing from the local archive must not pin the machine-specific archive
 	// path as the manifest url — keep the entry's canonical repo url instead.
@@ -61,17 +60,13 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 	status := "updated " + name + " → " + version
 	return func() tea.Msg {
 		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version)
-		statuses, err := addon.Inspect(manifestPath, projectRoot)
-		if err != nil {
-			return core.MsgRootRefresh{Status: status}
-		}
-		return core.MsgRootRefresh{Status: status, Statuses: statuses}
+		return core.RootRefresh(status)()
 	}
 }
 
 // commitRemove removes the addon from the project: the installed files too when
 // the chosen mode is "project + local", then the manifest entry. On success it
-// rebuilds the browse list (a row was dropped) via reloadCmd.
+// refreshes the browse list (RootRefresh), which reloads from the manifest.
 func commitRemove(sh *core.Shared, st addon.Status, mode int) tea.Cmd {
 	if mode == removeProjectLocal {
 		if err := addon.Uninstall(st.Addon, sh.ProjectRoot); err != nil {
@@ -83,15 +78,5 @@ func commitRemove(sh *core.Shared, st addon.Status, mode int) tea.Cmd {
 		sh.StatusMsg = "error: " + err.Error()
 		return core.ResetToRoot()
 	}
-	return reloadCmd(sh, "removed "+st.Addon.Name)
-}
-
-// reloadCmd re-inspects the manifest and returns MsgRootRefresh with Rebuild so the
-// router rebuilds the browse list (used when the row count changed, e.g. a removal).
-func reloadCmd(sh *core.Shared, status string) tea.Cmd {
-	manifestPath, projectRoot := sh.ManifestPath, sh.ProjectRoot
-	return func() tea.Msg {
-		statuses, _ := addon.Inspect(manifestPath, projectRoot)
-		return core.MsgRootRefresh{Status: status, Statuses: statuses, Rebuild: true}
-	}
+	return core.RootRefresh("removed " + st.Addon.Name)
 }

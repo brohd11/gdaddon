@@ -78,11 +78,11 @@ func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 func (s *ArchiveScreen) View(*core.Shared) string     { return s.list.View() }
 func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
 
-// HandleRoot rebuilds the list from disk on a MsgArchiveRefresh (after a package
-// removal), so the tab reflects the change. Routed here by the router.
+// HandleRoot rebuilds the list from disk on a MsgRefresh targeting the archive
+// (after a package removal), so the tab reflects the change. Routed here by the router.
 func (s *ArchiveScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
-	m, ok := msg.(core.MsgArchiveRefresh)
-	if !ok {
+	m, ok := msg.(core.MsgRefresh)
+	if !ok || m.Target != core.RefreshArchive {
 		return false
 	}
 	sh.StatusMsg = m.Status

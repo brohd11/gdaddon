@@ -93,36 +93,17 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	s.list.SetSize(width, h)
 }
 
-// handleRoot refreshes the browse list from a result message (rootHandler): the
-// router unwinds to the root and hands the refresh here, keeping the browse-specific
-// list logic out of the router.
+// HandleRoot rebuilds the browse list by re-inspecting the manifest (rootHandler):
+// the router unwinds to the root and hands the refresh here, keeping the
+// browse-specific list logic out of the router.
 func (s *ProjectScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
-	m, ok := msg.(core.MsgRootRefresh)
-	if !ok {
+	m, ok := msg.(core.MsgRefresh)
+	if !ok || m.Target != core.RefreshProject {
 		return false
 	}
 	sh.StatusMsg = m.Status
-	if m.Statuses != nil {
-		if m.Rebuild {
-			s.setItems(m.Statuses)
-		} else {
-			s.applyStatuses(m.Statuses)
-		}
+	if statuses, err := addon.Inspect(sh.ManifestPath, sh.ProjectRoot); err == nil {
+		s.list.SetItems(addonListItems(statuses))
 	}
 	return true
-}
-
-// applyStatuses writes refreshed statuses back into the list in place (row i ↔
-// addon i; use setItems instead when the row count changed).
-func (s *ProjectScreen) applyStatuses(statuses []addon.Status) {
-	for i, st := range statuses {
-		if i < len(s.list.Items()) {
-			s.list.SetItem(i, addonItem(st))
-		}
-	}
-}
-
-// setItems rebuilds the list (handles a changed row count, unlike applyStatuses).
-func (s *ProjectScreen) setItems(statuses []addon.Status) {
-	s.list.SetItems(addonListItems(statuses))
 }

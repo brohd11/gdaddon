@@ -9,16 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// reloadCmd re-inspects the manifest and returns MsgRootRefresh so the router
-// switches to the Project tab and rebuilds its list with the imported row.
-func reloadCmd(sh *core.Shared, status string) tea.Cmd {
-	manifestPath, projectRoot := sh.ManifestPath, sh.ProjectRoot
-	return func() tea.Msg {
-		statuses, _ := addon.Inspect(manifestPath, projectRoot)
-		return core.MsgRootRefresh{Status: status, Statuses: statuses, Rebuild: true}
-	}
-}
-
 // commitRemove removes the plugin from the global list, plus its archived packages
 // when the chosen mode is "global + archive". On success it refreshes the Global
 // tab (GlobalRefresh) so the removed row disappears.
