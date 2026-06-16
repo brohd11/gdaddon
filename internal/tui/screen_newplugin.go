@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"gdaddon/internal/tui/core"
 	"strings"
 
 	"gdaddon/internal/addon"
@@ -19,7 +20,7 @@ type newPluginForm struct {
 	addTarget int
 }
 
-var _ filterer = (*newPluginForm)(nil)
+var _ core.Filterer = (*newPluginForm)(nil)
 
 func newNewPluginForm() *newPluginForm {
 	mk := func(placeholder string) textinput.Model {
@@ -40,20 +41,20 @@ func newNewPluginForm() *newPluginForm {
 	}
 }
 
-func (s *newPluginForm) Init(*shared) tea.Cmd { return s.syncFormFocus() }
+func (s *newPluginForm) Init(*core.Shared) tea.Cmd { return s.syncFormFocus() }
 
 // filtering: the URL text input captures keys, so the global tab/c shortcuts must
 // not steal characters typed into it.
-func (s *newPluginForm) filtering() bool { return true }
+func (s *newPluginForm) Filtering() bool { return true }
 
-func (s *newPluginForm) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
+func (s *newPluginForm) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return s, nil
 	}
 	switch key.String() {
 	case "esc":
-		return s, pop()
+		return s, core.Pop()
 	case "up", "shift+tab":
 		s.formFocus = (s.formFocus - 1 + fldCount) % fldCount
 		return s, s.syncFormFocus()
@@ -78,7 +79,7 @@ func (s *newPluginForm) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
 			name = addon.DeriveName(url)
 		}
 		path := strings.TrimSpace(s.inputs[fldPath].Value())
-		return s, push(newNewPluginConfirm(name, addon.NormalizeRepoURL(url), path, s.addTarget))
+		return s, core.Push(newNewPluginConfirm(name, addon.NormalizeRepoURL(url), path, s.addTarget))
 	}
 	if s.formFocus == fldTarget {
 		return s, nil
@@ -102,11 +103,11 @@ func (s *newPluginForm) syncFormFocus() tea.Cmd {
 	return cmd
 }
 
-func (s *newPluginForm) View(sh *shared) string {
-	label := lipgloss.NewStyle().Foreground(mutedColor)
+func (s *newPluginForm) View(sh *core.Shared) string {
+	label := lipgloss.NewStyle().Foreground(core.MutedColor)
 	marker := func(focused bool) string {
 		if focused {
-			return lipgloss.NewStyle().Foreground(focusedColor).Render("▸ ")
+			return lipgloss.NewStyle().Foreground(core.FocusedColor).Render("▸ ")
 		}
 		return "  "
 	}
@@ -124,11 +125,11 @@ func (s *newPluginForm) View(sh *shared) string {
 		marker(s.formFocus == fldTarget) + label.Render("Add to:  ") + targetToggle(s.addTarget),
 	}, "\n")
 	return lipgloss.JoinVertical(lipgloss.Left,
-		renderTitleBar("New Plugin"),
-		boxStyle.Width(sh.confirmWidth()).Render(body))
+		core.RenderTitleBar("New Plugin"),
+		sh.Box(body))
 }
 
-func (s *newPluginForm) HelpView(sh *shared) string {
+func (s *newPluginForm) HelpView(sh *core.Shared) string {
 	// return sh.bindingHelp(newPluginInputHelp)
 	var newPluginInputHelp = []key.Binding{
 		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "field")),
@@ -136,11 +137,11 @@ func (s *newPluginForm) HelpView(sh *shared) string {
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "next")),
 		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 	}
-	return sh.bindingHelp(newPluginInputHelp)
+	return sh.BindingHelp(newPluginInputHelp)
 }
 
-func (s *newPluginForm) SetSize(sh *shared, width, bodyHeight int) {
-	w := sh.confirmWidth() - 12 // box room minus the label column
+func (s *newPluginForm) SetSize(sh *core.Shared, width, bodyHeight int) {
+	w := sh.ConfirmWidth() - 12 // box room minus the label column
 	if w < 10 {
 		w = 10
 	}

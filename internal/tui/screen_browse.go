@@ -2,6 +2,7 @@ package tui
 
 import (
 	"gdaddon/internal/addon"
+	"gdaddon/internal/tui/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -15,14 +16,14 @@ type browseScreen struct {
 	list list.Model
 }
 
-var _ filterer = (*browseScreen)(nil)
-var _ outputViewer = (*browseScreen)(nil)
-var _ rootHandler = (*browseScreen)(nil)
+var _ core.Filterer = (*browseScreen)(nil)
+var _ core.OutputViewer = (*browseScreen)(nil)
+var _ core.RootHandler = (*browseScreen)(nil)
 
 func newBrowseScreen(statuses []addon.Status) *browseScreen {
-	l := list.New(addonListItems(statuses), newDelegate(), 0, 0)
+	l := list.New(addonListItems(statuses), core.NewDelegate(), 0, 0)
 	l.Title = "Godot Addons"
-	styleList(&l)
+	core.StyleList(&l)
 	// The browse short help is decluttered (see HelpView / rootHelp); these extras
 	// only show in the full (?) help.
 	l.AdditionalFullHelpKeys = func() []key.Binding {
@@ -35,13 +36,13 @@ func newBrowseScreen(statuses []addon.Status) *browseScreen {
 	return &browseScreen{list: l}
 }
 
-func (s *browseScreen) Init(*shared) tea.Cmd { return nil }
+func (s *browseScreen) Init(*core.Shared) tea.Cmd { return nil }
 
-func (s *browseScreen) filtering() bool   { return s.list.FilterState() == list.Filtering }
-func (s *browseScreen) wantsOutput() bool { return true }
+func (s *browseScreen) Filtering() bool   { return s.list.FilterState() == list.Filtering }
+func (s *browseScreen) WantsOutput() bool { return true }
 
-func (s *browseScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
-	if s.filtering() {
+func (s *browseScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+	if s.Filtering() {
 		var cmd tea.Cmd
 		s.list, cmd = s.list.Update(msg)
 		return s, cmd
@@ -55,10 +56,9 @@ func (s *browseScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
 			if !ok || !sel.status.Installable() {
 				return s, nil
 			}
-			sh.statusMsg = ""
+			sh.StatusMsg = ""
 			a := sel.status.Addon
-			ld := newLoadingScreen(a, sel.status.LocalVersion, "fetching versions…", fetchReleases(a.URL))
-			return s, push(ld)
+			return s, core.Push(newReleasesLoading(a, sel.status.LocalVersion))
 		}
 	}
 	var cmd tea.Cmd
@@ -66,28 +66,28 @@ func (s *browseScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
 	return s, cmd
 }
 
-func (s *browseScreen) View(sh *shared) string {
+func (s *browseScreen) View(sh *core.Shared) string {
 	// Order bottom-up: list, then status, then output.
 	body := s.list.View()
-	if sh.statusMsg != "" {
-		body = lipgloss.JoinVertical(lipgloss.Left, body, statusStyle.Render(sh.statusMsg))
+	if sh.StatusMsg != "" {
+		body = lipgloss.JoinVertical(lipgloss.Left, body, core.StatusStyle.Render(sh.StatusMsg))
 	}
-	if len(sh.logs) > 0 {
-		body = lipgloss.JoinVertical(lipgloss.Left, body, sh.outputView())
+	if len(sh.Logs) > 0 {
+		body = lipgloss.JoinVertical(lipgloss.Left, body, sh.OutputView())
 	}
 	return body
 }
 
 // HelpView renders the decluttered tab-root help (nav · select · tabs · quit ·
 // more); filter, output, and clear-log live only in the full (?) help.
-func (s *browseScreen) HelpView(*shared) string { return rootHelp(s.list, helpTabbed) }
+func (s *browseScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
 
-func (s *browseScreen) SetSize(sh *shared, width, bodyHeight int) {
+func (s *browseScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	h := bodyHeight
-	if sh.statusMsg != "" {
+	if sh.StatusMsg != "" {
 		h--
 	}
-	h -= sh.outputBoxHeight()
+	h -= sh.OutputBoxHeight()
 	if h < 1 {
 		h = 1
 	}
@@ -97,17 +97,17 @@ func (s *browseScreen) SetSize(sh *shared, width, bodyHeight int) {
 // handleRoot refreshes the browse list from a result message (rootHandler): the
 // router unwinds to the root and hands the refresh here, keeping the browse-specific
 // list logic out of the router.
-func (s *browseScreen) handleRoot(sh *shared, msg tea.Msg) bool {
-	m, ok := msg.(msgRootRefresh)
+func (s *browseScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
+	m, ok := msg.(core.MsgRootRefresh)
 	if !ok {
 		return false
 	}
-	sh.statusMsg = m.status
-	if m.statuses != nil {
-		if m.rebuild {
-			s.setItems(m.statuses)
+	sh.StatusMsg = m.Status
+	if m.Statuses != nil {
+		if m.Rebuild {
+			s.setItems(m.Statuses)
 		} else {
-			s.applyStatuses(m.statuses)
+			s.applyStatuses(m.Statuses)
 		}
 	}
 	return true

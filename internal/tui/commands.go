@@ -2,7 +2,7 @@ package tui
 
 import (
 	"context"
-	"fmt"
+	"gdaddon/internal/tui/core"
 	"strings"
 
 	"gdaddon/internal/addon"
@@ -42,35 +42,11 @@ func cloneListing(l *source.Listing) *source.Listing {
 	return &c
 }
 
-// ---------- streaming task machinery ----------
-
-// startTask spawns run in the background, piping report() lines into the output
-// log via the shared events channel, and returns the spinner tick + the wait for
-// the first event. run sends the terminating installEvent itself. Shared by
-// install, install-all, and archive (see taskScreen).
-func startTask(sh *shared, run func(report addon.Reporter, done chan<- installEvent)) tea.Cmd {
-	sh.events = make(chan installEvent)
-	ch := sh.events
-	go func() {
-		report := addon.Reporter(func(format string, args ...any) {
-			ch <- installEvent{line: fmt.Sprintf(format, args...)}
-		})
-		run(report, ch)
-	}()
-	return tea.Batch(sh.spinner.Tick, waitForEvent(ch))
-}
-
-func waitForEvent(events chan installEvent) tea.Cmd {
-	return func() tea.Msg {
-		return <-events
-	}
-}
-
 // finishInstallCmd pins the freshly installed url, resolved path, and version
 // into the manifest and re-inspects, returning msgRootRefresh for the router to
 // apply to the browse list.
-func finishInstallCmd(sh *shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
-	manifestPath, projectRoot := sh.manifestPath, sh.projectRoot
+func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
+	manifestPath, projectRoot := sh.ManifestPath, sh.ProjectRoot
 	name, url := selected.Name, pick.asset.URL
 	// Installing from the local archive must not pin the machine-specific archive
 	// path as the manifest url — keep the entry's canonical repo url instead.
@@ -87,34 +63,34 @@ func finishInstallCmd(sh *shared, selected addon.Addon, pick versionItem, instPa
 		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version)
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
-			return msgRootRefresh{status: status}
+			return core.MsgRootRefresh{Status: status}
 		}
-		return msgRootRefresh{status: status, statuses: statuses}
+		return core.MsgRootRefresh{Status: status, Statuses: statuses}
 	}
 }
 
 // finishInstallAllCmd re-inspects after a batch install for the router to apply.
-func finishInstallAllCmd(sh *shared) tea.Cmd {
-	manifestPath, projectRoot := sh.manifestPath, sh.projectRoot
+func finishInstallAllCmd(sh *core.Shared) tea.Cmd {
+	manifestPath, projectRoot := sh.ManifestPath, sh.ProjectRoot
 	return func() tea.Msg {
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
-			return msgRootRefresh{status: "install complete"}
+			return core.MsgRootRefresh{Status: "install complete"}
 		}
-		return msgRootRefresh{status: "install complete", statuses: statuses}
+		return core.MsgRootRefresh{Status: "install complete", Statuses: statuses}
 	}
 }
 
 // reloadCmd re-inspects the manifest and returns msgRootRefresh so the router
 // rebuilds the browse list (after a row was added) and sets the status line.
-func reloadCmd(sh *shared, status string) tea.Cmd {
-	manifestPath, projectRoot := sh.manifestPath, sh.projectRoot
+func reloadCmd(sh *core.Shared, status string) tea.Cmd {
+	manifestPath, projectRoot := sh.ManifestPath, sh.ProjectRoot
 	return func() tea.Msg {
 		statuses, _ := addon.Inspect(manifestPath, projectRoot)
-		return msgRootRefresh{status: status, statuses: statuses, rebuild: true}
+		return core.MsgRootRefresh{Status: status, Statuses: statuses, Rebuild: true}
 	}
 }
 
 func archiveFinished() tea.Cmd {
-	return func() tea.Msg { return archiveFinishedMsg{} }
+	return func() tea.Msg { return core.ArchiveFinishedMsg{} }
 }

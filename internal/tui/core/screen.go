@@ -1,4 +1,4 @@
-package tui
+package core
 
 import tea "github.com/charmbracelet/bubbletea"
 
@@ -6,12 +6,12 @@ import tea "github.com/charmbracelet/bubbletea"
 // bar, output pane) and the navigation stack; a screen renders only its own body
 // and handles its own keys. Implementations are pointer types so Update and
 // SetSize can mutate in place.
-type screen interface {
-	Init(*shared) tea.Cmd
-	Update(*shared, tea.Msg) (screen, tea.Cmd)
-	View(*shared) string     // body between the header and the help bar
-	HelpView(*shared) string // the fully-rendered help bar line(s)
-	SetSize(s *shared, width, bodyHeight int)
+type Screen interface {
+	Init(*Shared) tea.Cmd
+	Update(*Shared, tea.Msg) (Screen, tea.Cmd)
+	View(*Shared) string     // body between the header and the help bar
+	HelpView(*Shared) string // the fully-rendered help bar line(s)
+	SetSize(s *Shared, width, bodyHeight int)
 }
 
 // Optional behaviors the router type-asserts for, so a screen only opts in when
@@ -19,16 +19,21 @@ type screen interface {
 
 // filterer reports an active text filter, so the router's global single-key
 // shortcuts (tab/c) don't steal keystrokes meant for the filter input.
-type filterer interface{ filtering() bool }
+type Filterer interface{ Filtering() bool }
 
 // outputViewer reports that the screen shows the shared output/log pane below
 // it (browse + the task screens), used for sizing and for whether tab focuses
 // the output.
-type outputViewer interface{ wantsOutput() bool }
+type OutputViewer interface{ WantsOutput() bool }
 
 // rootHandler lets a tab's root screen handle app-level result messages itself,
 // so the router stays tab-agnostic (it only owns the stack). browse uses this to
 // refresh its addon list. Returns whether the message was consumed.
-type rootHandler interface {
-	handleRoot(sh *shared, msg tea.Msg) (handled bool)
+type RootHandler interface {
+	HandleRoot(sh *Shared, msg tea.Msg) (handled bool)
 }
+
+// relister is a screen that can re-list itself after a background task changed its
+// data (the versions screen after an archive). The router unwinds to it and calls
+// relist without naming the concrete type, so it can live in another package.
+type Relister interface{ Relist() }

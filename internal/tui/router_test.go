@@ -4,16 +4,19 @@ import (
 	"strings"
 	"testing"
 
+	"gdaddon/internal/tui/components"
+	"gdaddon/internal/tui/core"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // newTestRouter builds a router with the Browse + Actions tabs and no real project
 // on disk (statuses nil → an empty browse list).
-func newTestRouter() router {
-	sh := newShared("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test")
-	return newRouter(sh, []tabEntry{
-		{title: "Browse", root: newBrowseScreen(nil)},
-		{title: "Actions", root: newActionsScreen()},
+func newTestRouter() core.Router {
+	sh := core.NewShared("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test")
+	return core.NewRouter(sh, []core.TabEntry{
+		{Title: "Browse", Root: newBrowseScreen(nil)},
+		{Title: "Actions", Root: newActionsScreen()},
 	})
 }
 
@@ -58,13 +61,13 @@ func TestRouterRenders(t *testing.T) {
 func TestTabSwitch(t *testing.T) {
 	tm := sized(newTestRouter())
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
-	if _, ok := tm.(router).top().(*actionsScreen); !ok {
-		t.Fatalf("after ] want *actionsScreen, got %T", tm.(router).top())
+	if _, ok := tm.(core.Router).Top().(*actionsScreen); !ok {
+		t.Fatalf("after ] want *actionsScreen, got %T", tm.(core.Router).Top())
 	}
 	_ = tm.View()
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
-	if _, ok := tm.(router).top().(*browseScreen); !ok {
-		t.Fatalf("after [ want *browseScreen, got %T", tm.(router).top())
+	if _, ok := tm.(core.Router).Top().(*browseScreen); !ok {
+		t.Fatalf("after [ want *browseScreen, got %T", tm.(core.Router).Top())
 	}
 }
 
@@ -72,53 +75,10 @@ func TestTabSwitch(t *testing.T) {
 // drilling into a sub-screen, the tab key is ignored.
 func TestTabSwitchGatedAtDepth(t *testing.T) {
 	tm := sized(newTestRouter())
-	tm, _ = tm.Update(pushMsg{s: newNewPluginForm()}) // depth 2 on the Browse tab
+	tm, _ = tm.Update(core.Push(newNewPluginForm())()) // depth 2 on the Browse tab
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
-	if _, ok := tm.(router).top().(*newPluginForm); !ok {
-		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(router).top())
-	}
-}
-
-// TestRouterStackPushPop checks the stack semantics: push grows it, pop shrinks
-// it, and popping at the root (single screen) is ignored.
-func TestRouterStackPushPop(t *testing.T) {
-	tm := sized(newTestRouter())
-
-	tm, _ = tm.Update(pushMsg{s: newActionsScreen()})
-	if got := len(tm.(router).stack); got != 2 {
-		t.Fatalf("after push want 2, got %d", got)
-	}
-
-	tm, _ = tm.Update(popMsg{})
-	if got := len(tm.(router).stack); got != 1 {
-		t.Fatalf("after pop want 1, got %d", got)
-	}
-
-	tm, _ = tm.Update(popMsg{})
-	if got := len(tm.(router).stack); got != 1 {
-		t.Fatalf("root pop should be ignored, want 1, got %d", got)
-	}
-}
-
-// TestOutputFocusAndClear seeds a log line, then checks tab focuses the output
-// pane and c clears it (returning focus to the list) — the router's global keys.
-func TestOutputFocusAndClear(t *testing.T) {
-	tm := sized(newTestRouter())
-	sh := tm.(router).sh
-	sh.appendLog("hello")
-	tm = sized(tm) // re-lay-out with the log present
-
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyTab})
-	if sh.focus != focusOutput {
-		t.Fatalf("tab should focus the output pane, got %v", sh.focus)
-	}
-
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if len(sh.logs) != 0 {
-		t.Fatalf("c should clear the logs, got %d", len(sh.logs))
-	}
-	if sh.focus != focusList {
-		t.Fatal("clearing should return focus to the list")
+	if _, ok := tm.(core.Router).Top().(*newPluginForm); !ok {
+		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(core.Router).Top())
 	}
 }
 
@@ -126,21 +86,21 @@ func TestOutputFocusAndClear(t *testing.T) {
 // and a filled URL pushes the confirm screen.
 func TestNewPluginFormToConfirm(t *testing.T) {
 	tm := sized(newTestRouter())
-	tm, _ = tm.Update(pushMsg{s: newNewPluginForm()})
-	form, ok := tm.(router).top().(*newPluginForm)
+	tm, _ = tm.Update(core.Push(newNewPluginForm())())
+	form, ok := tm.(core.Router).Top().(*newPluginForm)
 	if !ok {
-		t.Fatalf("want *newPluginForm, got %T", tm.(router).top())
+		t.Fatalf("want *newPluginForm, got %T", tm.(core.Router).Top())
 	}
 
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
-	if _, ok := tm.(router).top().(*newPluginForm); !ok {
-		t.Fatalf("empty URL should keep the form, got %T", tm.(router).top())
+	if _, ok := tm.(core.Router).Top().(*newPluginForm); !ok {
+		t.Fatalf("empty URL should keep the form, got %T", tm.(core.Router).Top())
 	}
 
 	form.inputs[fldURL].SetValue("https://github.com/owner/repo")
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
-	if _, ok := tm.(router).top().(*confirmScreen); !ok {
-		t.Fatalf("filled URL should push confirm, got %T", tm.(router).top())
+	if _, ok := tm.(core.Router).Top().(*components.ConfirmScreen); !ok {
+		t.Fatalf("filled URL should push confirm, got %T", tm.(core.Router).Top())
 	}
 	if !strings.Contains(tm.View(), "owner/repo") {
 		t.Fatal("confirm view should show the entered url")

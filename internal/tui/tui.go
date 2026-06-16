@@ -3,6 +3,7 @@ package tui
 
 import (
 	"gdaddon/internal/addon"
+	"gdaddon/internal/tui/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -14,12 +15,12 @@ func Run(manifestPath, projectRoot string) error {
 		return err
 	}
 
-	sh := newShared(manifestPath, projectRoot)
-	tabs := []tabEntry{
-		{title: "Browse", root: newBrowseScreen(statuses)},
-		{title: "Actions", root: newActionsScreen()},
+	sh := core.NewShared(manifestPath, projectRoot)
+	tabs := []core.TabEntry{
+		{Title: "Browse", Root: newBrowseScreen(statuses)},
+		{Title: "Actions", Root: newActionsScreen()},
 	}
-	r := newRouter(sh, tabs)
+	r := core.NewRouter(sh, tabs)
 	_, err = tea.NewProgram(r, tea.WithAltScreen()).Run()
 	return err
 }
@@ -38,12 +39,4 @@ const (
 	fldPath
 	fldTarget
 	fldCount
-)
-
-// focusArea tracks which pane receives navigation keys.
-type focusArea int
-
-const (
-	focusList focusArea = iota
-	focusOutput
 )

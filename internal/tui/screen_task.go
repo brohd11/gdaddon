@@ -7,163 +7,71 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
+	"gdaddon/internal/tui/components"
+	"gdaddon/internal/tui/core"
 
-	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
-type taskKind int
+// The streaming task screen itself is the generic components.TaskScreen. These
+// builders supply the run/onDone closures for each feature; install and install-all
+// navigate away on completion, archive stays on the log until dismissed.
 
-const (
-	taskInstall taskKind = iota
-	taskInstallAll
-	taskArchive
-)
-
-// taskScreen runs a streaming background task (install / install-all / archive),
-// piping progress into the shared output pane. Install and install-all unwind to
-// browse on completion; archive stays on screen until dismissed, then re-lists
-// the versions screen.
-type taskScreen struct {
-	kind       taskKind
-	label      string
-	done       bool
-	bodyHeight int
-
-	// install payload
-	selected      addon.Addon
-	selectedLocal string
-	pick          versionItem
-
-	// archive payload
-	repoID string
-	tag    string
-	assets []source.Asset
-}
-
-var _ outputViewer = (*taskScreen)(nil)
-
-func newInstallTask(selected addon.Addon, local string, pick versionItem) *taskScreen {
-	return &taskScreen{kind: taskInstall, label: "installing " + selected.Name + "…", selected: selected, selectedLocal: local, pick: pick}
-}
-
-func newInstallAllTask() *taskScreen {
-	return &taskScreen{kind: taskInstallAll, label: "installing all addons…"}
-}
-
-func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.Asset) *taskScreen {
-	return &taskScreen{kind: taskArchive, label: "archiving " + tag + "…", selected: selected, repoID: repoID, tag: tag, assets: assets}
-}
-
-func (s *taskScreen) wantsOutput() bool { return true }
-
-func (s *taskScreen) Init(sh *shared) tea.Cmd {
-	switch s.kind {
-	case taskInstall:
-		target := addon.Addon{Name: s.selected.Name, URL: s.pick.asset.URL, Path: s.selected.Path}
-		root := sh.projectRoot
-		return startTask(sh, func(report addon.Reporter, done chan<- installEvent) {
-			res, err := addon.Install(target, root, report)
-			done <- installEvent{done: true, err: err, path: res.Path, version: res.Version}
-		})
-	case taskInstallAll:
-		mp, pr := sh.manifestPath, sh.projectRoot
-		return startTask(sh, func(report addon.Reporter, done chan<- installEvent) {
-			statuses, err := addon.Inspect(mp, pr)
-			if err != nil {
-				report("error: %v", err)
-			} else {
-				_ = addon.InstallAll(mp, statuses, pr, report)
-			}
-			done <- installEvent{done: true}
-		})
-	case taskArchive:
-		repoID, tag, assets := s.repoID, s.tag, s.assets
-		return startTask(sh, func(report addon.Reporter, done chan<- installEvent) {
-			for _, a := range assets {
-				report("downloading %s …", strings.TrimSuffix(a.Name, " - archived"))
-				if err := archive.Archive(repoID, tag, a); err != nil {
-					done <- installEvent{done: true, err: err}
-					return
-				}
-			}
-			done <- installEvent{done: true}
-		})
+func newInstallTask(selected addon.Addon, local string, pick versionItem) *components.TaskScreen {
+	target := addon.Addon{Name: selected.Name, URL: pick.asset.URL, Path: selected.Path}
+	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.InstallEvent) {
+		res, err := addon.Install(target, sh.ProjectRoot, report)
+		done <- core.InstallEvent{Done: true, Err: err, Path: res.Path, Version: res.Version}
 	}
-	return nil
+	onDone := func(sh *core.Shared, ev core.InstallEvent) tea.Cmd {
+		if ev.Err != nil {
+			sh.AppendLog(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err))
+			sh.StatusMsg = "install failed"
+			return core.ResetToRoot()
+		}
+		sh.AppendLog(fmt.Sprintf("[%s] installed", selected.Name))
+		return finishInstallCmd(sh, selected, pick, ev.Path, ev.Version)
+	}
+	return components.NewTask("installing "+selected.Name+"…", run, onDone)
 }
 
-func (s *taskScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
-	switch msg := msg.(type) {
-	case installEvent:
-		if !msg.done {
-			sh.appendLog(msg.line)
-			return s, waitForEvent(sh.events)
+func newInstallAllTask() *components.TaskScreen {
+	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.InstallEvent) {
+		statuses, err := addon.Inspect(sh.ManifestPath, sh.ProjectRoot)
+		if err != nil {
+			report("error: %v", err)
+		} else {
+			_ = addon.InstallAll(sh.ManifestPath, statuses, sh.ProjectRoot, report)
 		}
-		switch s.kind {
-		case taskArchive:
-			// Stay on the log screen so the result (or error) is readable; the user
-			// dismisses with esc (handled below).
-			s.done = true
-			if msg.err != nil {
-				sh.appendLog("archive failed: " + msg.err.Error())
-			} else {
-				sh.appendLog("archived " + s.tag)
-			}
-			return s, nil
-		case taskInstallAll:
-			return s, finishInstallAllCmd(sh)
-		case taskInstall:
-			if msg.err != nil {
-				sh.appendLog(fmt.Sprintf("[%s] error: %v", s.selected.Name, msg.err))
-				sh.statusMsg = "install failed"
-				return s, resetToRoot()
-			}
-			sh.appendLog(fmt.Sprintf("[%s] installed", s.selected.Name))
-			return s, finishInstallCmd(sh, s.selected, s.pick, msg.path, msg.version)
-		}
+		done <- core.InstallEvent{Done: true}
+	}
+	onDone := func(sh *core.Shared, ev core.InstallEvent) tea.Cmd { return finishInstallAllCmd(sh) }
+	return components.NewTask("installing all addons…", run, onDone)
+}
 
-	case tea.KeyMsg:
-		if s.kind == taskArchive && s.done {
-			switch msg.String() {
-			case "esc", "enter", "q":
-				sh.statusMsg = ""
-				return s, archiveFinished()
+func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.Asset) *components.TaskScreen {
+	_ = selected
+	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.InstallEvent) {
+		for _, a := range assets {
+			report("downloading %s …", strings.TrimSuffix(a.Name, " - archived"))
+			if err := archive.Archive(repoID, tag, a); err != nil {
+				done <- core.InstallEvent{Done: true, Err: err}
+				return
 			}
 		}
+		done <- core.InstallEvent{Done: true}
 	}
-	return s, nil
+	onDone := func(sh *core.Shared, ev core.InstallEvent) tea.Cmd {
+		if ev.Err != nil {
+			sh.AppendLog("archive failed: " + ev.Err.Error())
+		} else {
+			sh.AppendLog("archived " + tag)
+		}
+		return nil
+	}
+	onDismiss := func(sh *core.Shared) tea.Cmd {
+		sh.StatusMsg = ""
+		return archiveFinished()
+	}
+	return components.NewStayTask("archiving "+tag+"…", "done — esc to go back", run, onDone, onDismiss)
 }
-
-func (s *taskScreen) View(sh *shared) string {
-	glyph := sh.spinner.View()
-	if s.done {
-		glyph = "•"
-	}
-	label := s.label
-	if s.kind == taskArchive && s.done {
-		label = "done — esc to go back"
-	}
-	progress := fmt.Sprintf("\n  %s %s", glyph, label)
-	if len(sh.logs) == 0 {
-		return progress
-	}
-	out := sh.outputView()
-	filler := s.bodyHeight - lipgloss.Height(progress) - lipgloss.Height(out)
-	if filler < 1 {
-		filler = 1
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, progress, blanks(filler), out)
-}
-
-func (s *taskScreen) HelpView(sh *shared) string {
-	if s.kind == taskArchive && s.done {
-		return sh.bindingHelp([]key.Binding{
-			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-		})
-	}
-	return sh.noteHelp("non-interactive · working…")
-}
-
-func (s *taskScreen) SetSize(sh *shared, width, bodyHeight int) { s.bodyHeight = bodyHeight }

@@ -1,4 +1,4 @@
-package tui
+package core
 
 import (
 	"fmt"
@@ -20,9 +20,9 @@ import (
 // spinner, the output/log pane (with its own focus mode), and a help model for
 // rendering static help bars. A single instance is created in newShared and
 // pointed at by the router; screens receive it as a method argument.
-type shared struct {
-	manifestPath string
-	projectRoot  string
+type Shared struct {
+	ManifestPath string
+	ProjectRoot  string
 	manifestRel  string
 	projectName  string
 	hasProject   bool
@@ -30,17 +30,17 @@ type shared struct {
 	width  int
 	height int
 
-	spinner   spinner.Model
+	Spinner   spinner.Model
 	output    viewport.Model
 	help      help.Model // renders static (non-list) help bars
-	logs      []string
+	Logs      []string
 	focus     focusArea
-	statusMsg string
+	StatusMsg string
 
-	events chan installEvent // the in-flight streaming task channel
+	Events chan InstallEvent // the in-flight streaming task channel
 }
 
-func newShared(manifestPath, projectRoot string) *shared {
+func NewShared(manifestPath, projectRoot string) *Shared {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 
@@ -51,17 +51,17 @@ func newShared(manifestPath, projectRoot string) *shared {
 	name, exists := addon.ProjectName(projectRoot)
 
 	h := help.New()
-	h.Styles.ShortKey = h.Styles.ShortKey.Foreground(mutedColor)
-	h.Styles.ShortDesc = h.Styles.ShortDesc.Foreground(mutedColor)
-	h.Styles.ShortSeparator = h.Styles.ShortSeparator.Foreground(mutedColor)
+	h.Styles.ShortKey = h.Styles.ShortKey.Foreground(MutedColor)
+	h.Styles.ShortDesc = h.Styles.ShortDesc.Foreground(MutedColor)
+	h.Styles.ShortSeparator = h.Styles.ShortSeparator.Foreground(MutedColor)
 
-	return &shared{
-		manifestPath: manifestPath,
-		projectRoot:  projectRoot,
+	return &Shared{
+		ManifestPath: manifestPath,
+		ProjectRoot:  projectRoot,
 		manifestRel:  rel,
 		projectName:  name,
 		hasProject:   exists,
-		spinner:      sp,
+		Spinner:      sp,
 		output:       viewport.New(0, 0),
 		help:         h,
 	}
@@ -70,34 +70,42 @@ func newShared(manifestPath, projectRoot string) *shared {
 var (
 	// mutedColor is the secondary/muted gray (borders, labels, help, list
 	// descriptions); logColor is brighter, near-white, for the output log text.
-	mutedColor   = lipgloss.Color("247")
+	MutedColor   = lipgloss.Color("247")
 	logColor     = lipgloss.Color("252")
-	borderColor  = lipgloss.Color("245")
-	focusedColor = lipgloss.Color("212")
+	BorderColor  = lipgloss.Color("245")
+	FocusedColor = lipgloss.Color("212")
 
-	statusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(focusedColor)
+	StatusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
 	logStyle    = lipgloss.NewStyle().Foreground(logColor)
 
 	// tab strip: sits under the header, active tab highlighted, inactive muted,
 	// closed off from the content below by a full-width rule. The switch keys are
 	// shown in the help bar (rootHelp), not here.
 	tabStripStyle  = lipgloss.NewStyle().Padding(0, 1)
-	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(focusedColor)
-	tabStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(mutedColor)
-	tabRuleStyle   = lipgloss.NewStyle().Foreground(borderColor)
+	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
+	tabStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(MutedColor)
+	tabRuleStyle   = lipgloss.NewStyle().Foreground(BorderColor)
 	boxStyle       = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
-	headerStyle    = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(borderColor)
-	labelStyle     = lipgloss.NewStyle().Foreground(mutedColor)
+	headerStyle    = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(BorderColor)
+	labelStyle     = lipgloss.NewStyle().Foreground(MutedColor)
 
 	// listStyles are the default bubbles list styles, reused to render
 	// breadcrumb/title bars and static help so they align with the real lists.
 	listStyles = list.DefaultStyles()
 )
 
+// focusArea tracks which pane receives navigation keys.
+type focusArea int
+
+const (
+	focusList focusArea = iota
+	focusOutput
+)
+
 // ---------- header ----------
 
 // headerView renders the persistent context box shown on every screen.
-func (s *shared) headerView() string {
+func (s *Shared) headerView() string {
 	name := "No Project File"
 	if s.hasProject {
 		name = s.projectName
@@ -117,7 +125,7 @@ func (s *shared) headerView() string {
 	}
 	body := strings.Join([]string{
 		labelStyle.Render("Project:  ") + name,
-		line("Root:     ", s.projectRoot),
+		line("Root:     ", s.ProjectRoot),
 		line("Manifest: ", s.manifestRel),
 	}, "\n")
 
@@ -140,13 +148,13 @@ func truncLeft(s string, max int) string {
 
 // renderTitleBar renders text as a list-title-styled bar, so screens without
 // their own list title keep a consistent header.
-func renderTitleBar(text string) string {
+func RenderTitleBar(text string) string {
 	return listStyles.TitleBar.Render(listStyles.Title.Render(text))
 }
 
 // headerTitle is the shared header for a selected addon's screens, e.g.
 // "MyAddon - Current:v1.0.0 - Versions". An empty section yields just the base.
-func headerTitle(name, local, section string) string {
+func HeaderTitle(name, local, section string) string {
 	cur := "none"
 	if local != "" {
 		cur = "v" + local
@@ -158,20 +166,11 @@ func headerTitle(name, local, section string) string {
 	return base + " - " + section
 }
 
-// pickSection describes the chosen asset for the confirm breadcrumb, e.g.
-// "Assets v1.0.0 - addon.zip" or "Branches - main".
-func pickSection(pick versionItem) string {
-	if pick.branch {
-		return "Branches - " + pick.tag
-	}
-	return fmt.Sprintf("Assets %s - %s", pick.tag, pick.asset.Name)
-}
-
 // ---------- confirm/summary box ----------
 
 // confirmWidth is the inner width of the boxed confirm/input screens, sized to
 // the terminal with a sane floor.
-func (s *shared) confirmWidth() int {
+func (s *Shared) ConfirmWidth() int {
 	inner := s.width - 10
 	if inner < 24 {
 		inner = 24
@@ -180,32 +179,74 @@ func (s *shared) confirmWidth() int {
 }
 
 // box renders body inside the shared bordered confirm/summary box.
-func (s *shared) box(body string) string {
-	return boxStyle.Width(s.confirmWidth()).Render(body)
+func (s *Shared) Box(body string) string {
+	return boxStyle.Width(s.ConfirmWidth()).Render(body)
 }
 
 // ---------- help bars ----------
 
 // helpView renders a list's own help bar on its own, so it can be placed below
 // the status and output panes.
-func helpView(l list.Model) string {
+func HelpView(l list.Model) string {
 	return l.Styles.HelpStyle.Render(l.Help.View(l))
+}
+
+// tabSwitchKey is the help-bar hint for top-level tab switching (shown by rootHelp).
+var tabSwitchKey = key.NewBinding(key.WithKeys("[", "]"), key.WithHelp("[ ]", "tabs"))
+
+// newSelectList builds a list styled like the others (no status bar, help drawn
+// separately, esc/enter hints) for the versions and submenu screens. It's sized
+// to zero; the owning screen's SetSize gives it real dimensions.
+func NewSelectList(items []list.Item, title string, extra ...key.Binding) list.Model {
+	l := list.New(items, NewDelegate(), 0, 0)
+	l.Title = title
+	StyleList(&l)
+	keys := func() []key.Binding {
+		return append([]key.Binding{
+			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		}, extra...)
+	}
+	l.AdditionalShortHelpKeys = keys
+	l.AdditionalFullHelpKeys = keys
+	return l
+}
+
+// newDelegate is the shared list delegate with brightened description text.
+func NewDelegate() list.DefaultDelegate {
+	d := list.NewDefaultDelegate()
+	d.Styles.NormalDesc = d.Styles.NormalDesc.Foreground(MutedColor)
+	d.Styles.DimmedDesc = d.Styles.DimmedDesc.Foreground(MutedColor)
+	return d
+}
+
+// styleList applies the shared list config: hide the built-in status bar and
+// help (help is drawn manually at the bottom), and brighten the help colors.
+func StyleList(l *list.Model) {
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.Help.Styles.ShortKey = l.Help.Styles.ShortKey.Foreground(MutedColor)
+	l.Help.Styles.ShortDesc = l.Help.Styles.ShortDesc.Foreground(MutedColor)
+	l.Help.Styles.ShortSeparator = l.Help.Styles.ShortSeparator.Foreground(MutedColor)
+	l.Help.Styles.FullKey = l.Help.Styles.FullKey.Foreground(MutedColor)
+	l.Help.Styles.FullDesc = l.Help.Styles.FullDesc.Foreground(MutedColor)
+	l.Help.Styles.FullSeparator = l.Help.Styles.FullSeparator.Foreground(MutedColor)
 }
 
 // helpMode selects a tab root's help-bar preset. The zero value is the decluttered
 // minimal bar (nav · select · quit · more); helpTabbed adds the [ ] tab-switch hint.
-type helpMode int
+type HelpMode int
 
 const (
-	helpMinimal helpMode = iota
-	helpTabbed
+	HelpMinimal HelpMode = iota
+	HelpTabbed
 )
 
 // rootHelp renders a tab root's decluttered short help for the given preset; the
 // full (?) help still lists everything via the list's own FullHelp. Tab roots use
 // this instead of helpView so secondary keys (filter, output, clear) stay out of
 // the short bar.
-func rootHelp(l list.Model, mode helpMode) string {
+func RootHelp(l list.Model, mode HelpMode) string {
 	if l.Help.ShowAll {
 		return l.Styles.HelpStyle.Render(l.Help.FullHelpView(l.FullHelp()))
 	}
@@ -214,7 +255,7 @@ func rootHelp(l list.Model, mode helpMode) string {
 		l.KeyMap.CursorDown,
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
 	}
-	if mode == helpTabbed {
+	if mode == HelpTabbed {
 		short = append(short, tabSwitchKey)
 	}
 	short = append(short, l.KeyMap.Quit, l.KeyMap.ShowFullHelp)
@@ -223,12 +264,12 @@ func rootHelp(l list.Model, mode helpMode) string {
 
 // bindingHelp renders a set of key bindings as a static help bar aligned with
 // the real list help bars (used by confirm / form / task screens).
-func (s *shared) bindingHelp(bindings []key.Binding) string {
+func (s *Shared) BindingHelp(bindings []key.Binding) string {
 	return listStyles.HelpStyle.Render(s.help.ShortHelpView(bindings))
 }
 
 // noteHelp renders a plain (non-interactive) note in the help bar position.
-func (s *shared) noteHelp(text string) string {
+func (s *Shared) NoteHelp(text string) string {
 	return listStyles.HelpStyle.Render(s.help.Styles.ShortDesc.Render(text))
 }
 
@@ -236,22 +277,22 @@ func (s *shared) noteHelp(text string) string {
 
 // appendLog records a line. The router's resize re-sets the viewport content and
 // keeps it scrolled to the newest entry (unless the user is scrolling it).
-func (s *shared) appendLog(line string) {
-	s.logs = append(s.logs, line)
+func (s *Shared) AppendLog(line string) {
+	s.Logs = append(s.Logs, line)
 }
 
 // clearLogs empties the output pane and the status line, and returns focus to
 // the list. The caller (the router) re-lays-out afterward.
-func (s *shared) clearLogs() {
-	s.logs = nil
-	s.statusMsg = ""
+func (s *Shared) clearLogs() {
+	s.Logs = nil
+	s.StatusMsg = ""
 	s.focus = focusList
 	s.output.SetContent("")
 }
 
 // outputInnerWidth is the text width inside the output box (full width minus the
 // side borders and the 1-col padding on each side).
-func (s *shared) outputInnerWidth() int {
+func (s *Shared) outputInnerWidth() int {
 	w := s.width - 2 - 2 - 2 // header margin parity, side borders, padding
 	if w < 10 {
 		w = 10
@@ -262,7 +303,7 @@ func (s *shared) outputInnerWidth() int {
 // outputContentHeight is the viewport height for the log: a fixed ~25% of the
 // terminal height, the same in every mode, so the log stretches to fill a stable
 // region (and scrolls past it) instead of growing line by line.
-func (s *shared) outputContentHeight() int {
+func (s *Shared) outputContentHeight() int {
 	n := s.height / 4
 	if n < 3 {
 		n = 3
@@ -272,17 +313,17 @@ func (s *shared) outputContentHeight() int {
 
 // outputBoxHeight is the total rows the output pane occupies (content + the top
 // and bottom border lines) when there are logs to show, else 0.
-func (s *shared) outputBoxHeight() int {
-	if len(s.logs) == 0 {
+func (s *Shared) OutputBoxHeight() int {
+	if len(s.Logs) == 0 {
 		return 0
 	}
 	return s.outputContentHeight() + 2
 }
 
 // logContent renders the log lines for the viewport.
-func (s *shared) logContent() string {
+func (s *Shared) logContent() string {
 	var b strings.Builder
-	for i, l := range s.logs {
+	for i, l := range s.Logs {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
@@ -293,22 +334,22 @@ func (s *shared) logContent() string {
 
 // outputView draws the scrollable log inside a bordered box whose top edge is
 // interrupted by an "Output" legend (and a scroll hint while focused).
-func (s *shared) outputView() string {
-	color := borderColor
+func (s *Shared) OutputView() string {
+	color := BorderColor
 	label := "Output"
 	if s.focus == focusOutput {
-		color = focusedColor
+		color = FocusedColor
 		label = "Output · ↑/↓ scroll · tab/esc back"
 	}
 
 	inner := s.outputInnerWidth()
-	box := lipgloss.NewStyle().
+	Box := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderTop(false).
 		BorderForeground(color).
 		Padding(0, 1).
 		Width(inner + 2) // inner text + the 1-col padding on each side
-	content := box.Render(s.output.View())
+	content := Box.Render(s.output.View())
 
 	// Hand-draw the top border so the legend can sit mid-line. The run between
 	// the corners is the same width as the bottom border: inner + 2 (padding).
@@ -317,17 +358,17 @@ func (s *shared) outputView() string {
 	if fill < 0 {
 		fill = 0
 	}
-	top := lipgloss.NewStyle().Foreground(color).
+	Top := lipgloss.NewStyle().Foreground(color).
 		Render("┌" + legend + strings.Repeat("─", fill) + "┐")
 
-	return top + "\n" + content
+	return Top + "\n" + content
 }
 
 // ---------- text helpers ----------
 
 // hardWrap breaks s into chunks of at most width runes (URLs have no spaces to
 // word-wrap on, so we break unconditionally).
-func hardWrap(s string, width int) string {
+func HardWrap(s string, width int) string {
 	if width < 8 {
 		width = 8
 	}
@@ -344,14 +385,14 @@ func hardWrap(s string, width int) string {
 
 // blanks returns an n-line block of empty lines (height n) for use as a flexible
 // filler/spacer in JoinVertical stacks.
-func blanks(n int) string {
+func Blanks(n int) string {
 	if n < 1 {
 		return ""
 	}
 	return strings.Repeat("\n", n-1)
 }
 
-func indentLines(s, prefix string) string {
+func IndentLines(s, prefix string) string {
 	lines := strings.Split(s, "\n")
 	for i := range lines {
 		lines[i] = prefix + lines[i]

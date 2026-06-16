@@ -139,6 +139,15 @@ func (v versionItem) Description() string {
 
 func (v versionItem) FilterValue() string { return v.tag + " " + v.asset.Name }
 
+// pickSection describes the chosen asset for the confirm breadcrumb, e.g.
+// "Assets v1.0.0 - addon.zip" or "Branches - main".
+func pickSection(pick versionItem) string {
+	if pick.branch {
+		return "Branches - " + pick.tag
+	}
+	return fmt.Sprintf("Assets %s - %s", pick.tag, pick.asset.Name)
+}
+
 // versionTopItems builds the top-level versions list: HEAD first, then one entry
 // per release (newest first).
 func versionTopItems(l *source.Listing) []list.Item {
@@ -177,47 +186,5 @@ func addonListItems(statuses []addon.Status) []list.Item {
 	return items
 }
 
-// newSelectList builds a list styled like the others (no status bar, help drawn
-// separately, esc/enter hints) for the versions and submenu screens. It's sized
-// to zero; the owning screen's SetSize gives it real dimensions.
-func newSelectList(items []list.Item, title string, extra ...key.Binding) list.Model {
-	l := list.New(items, newDelegate(), 0, 0)
-	l.Title = title
-	styleList(&l)
-	keys := func() []key.Binding {
-		return append([]key.Binding{
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
-			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-		}, extra...)
-	}
-	l.AdditionalShortHelpKeys = keys
-	l.AdditionalFullHelpKeys = keys
-	return l
-}
-
 // archiveKey is the version-screen hint for the archive action.
 var archiveKey = key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive"))
-
-// tabSwitchKey is the help-bar hint for top-level tab switching (shown by rootHelp).
-var tabSwitchKey = key.NewBinding(key.WithKeys("[", "]"), key.WithHelp("[ ]", "tabs"))
-
-// newDelegate is the shared list delegate with brightened description text.
-func newDelegate() list.DefaultDelegate {
-	d := list.NewDefaultDelegate()
-	d.Styles.NormalDesc = d.Styles.NormalDesc.Foreground(mutedColor)
-	d.Styles.DimmedDesc = d.Styles.DimmedDesc.Foreground(mutedColor)
-	return d
-}
-
-// styleList applies the shared list config: hide the built-in status bar and
-// help (help is drawn manually at the bottom), and brighten the help colors.
-func styleList(l *list.Model) {
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.Help.Styles.ShortKey = l.Help.Styles.ShortKey.Foreground(mutedColor)
-	l.Help.Styles.ShortDesc = l.Help.Styles.ShortDesc.Foreground(mutedColor)
-	l.Help.Styles.ShortSeparator = l.Help.Styles.ShortSeparator.Foreground(mutedColor)
-	l.Help.Styles.FullKey = l.Help.Styles.FullKey.Foreground(mutedColor)
-	l.Help.Styles.FullDesc = l.Help.Styles.FullDesc.Foreground(mutedColor)
-	l.Help.Styles.FullSeparator = l.Help.Styles.FullSeparator.Foreground(mutedColor)
-}

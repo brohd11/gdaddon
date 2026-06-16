@@ -1,0 +1,44 @@
+package components
+
+import (
+	"fmt"
+	"gdaddon/internal/tui/core"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+// loadingScreen is the non-interactive spinner shown while an upstream fetch is in
+// flight. It is context-agnostic: the caller supplies the title, the fetch command,
+// and an onResult closure that turns the fetch result (releasesMsg / branchesMsg /
+// …) into the next navigation command. loadingScreen itself names no domain type.
+type LoadingScreen struct {
+	Title    string
+	label    string
+	cmd      tea.Cmd                             // the fetch command, run on Init
+	onResult func(*core.Shared, tea.Msg) tea.Cmd // caller's result handler; nil cmd ⇒ ignore msg
+}
+
+func NewLoadingScreen(Title, label string, cmd tea.Cmd, onResult func(*core.Shared, tea.Msg) tea.Cmd) *LoadingScreen {
+	return &LoadingScreen{Title: Title, label: label, cmd: cmd, onResult: onResult}
+}
+
+func (s *LoadingScreen) Init(sh *core.Shared) tea.Cmd {
+	return tea.Batch(sh.Spinner.Tick, s.cmd)
+}
+
+func (s *LoadingScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+	return s, s.onResult(sh, msg)
+}
+
+func (s *LoadingScreen) View(sh *core.Shared) string {
+	return lipgloss.JoinVertical(lipgloss.Left,
+		core.RenderTitleBar(s.Title),
+		fmt.Sprintf("  %s %s", sh.Spinner.View(), s.label))
+}
+
+func (s *LoadingScreen) HelpView(sh *core.Shared) string {
+	return sh.NoteHelp("non-interactive · working…")
+}
+
+func (s *LoadingScreen) SetSize(*core.Shared, int, int) {}

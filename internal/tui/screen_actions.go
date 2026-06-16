@@ -2,6 +2,7 @@ package tui
 
 import (
 	"gdaddon/internal/addon"
+	"gdaddon/internal/tui/core"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,18 +14,18 @@ type actionsScreen struct {
 	list list.Model
 }
 
-var _ filterer = (*actionsScreen)(nil)
+var _ core.Filterer = (*actionsScreen)(nil)
 
 func newActionsScreen() *actionsScreen {
-	return &actionsScreen{list: newSelectList(actionItems(), "Actions")}
+	return &actionsScreen{list: core.NewSelectList(actionItems(), "Actions")}
 }
 
-func (s *actionsScreen) Init(*shared) tea.Cmd { return nil }
+func (s *actionsScreen) Init(*core.Shared) tea.Cmd { return nil }
 
-func (s *actionsScreen) filtering() bool { return s.list.FilterState() == list.Filtering }
+func (s *actionsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *actionsScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
-	if s.filtering() {
+func (s *actionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+	if s.Filtering() {
 		var cmd tea.Cmd
 		s.list, cmd = s.list.Update(msg)
 		return s, cmd
@@ -40,12 +41,12 @@ func (s *actionsScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
 			}
 			switch a.kind {
 			case actInstallAll:
-				return s, push(newInstallAllTask())
+				return s, core.Push(newInstallAllTask())
 			case actNewPlugin:
-				sh.statusMsg = ""
-				return s, push(newNewPluginForm())
+				sh.StatusMsg = ""
+				return s, core.Push(newNewPluginForm())
 			case actImportPlugin:
-				sh.statusMsg = ""
+				sh.StatusMsg = ""
 				return s.startImport(sh)
 			}
 			return s, nil
@@ -58,22 +59,22 @@ func (s *actionsScreen) Update(sh *shared, msg tea.Msg) (screen, tea.Cmd) {
 
 // startImport loads the global plugin list and opens the picker, or reports an
 // empty/missing list and returns to browse.
-func (s *actionsScreen) startImport(sh *shared) (screen, tea.Cmd) {
+func (s *actionsScreen) startImport(sh *core.Shared) (core.Screen, tea.Cmd) {
 	path, err := addon.GlobalListPath()
 	var addons []addon.Addon
 	if err == nil {
 		addons, err = addon.Parse(path)
 	}
 	if err != nil || len(addons) == 0 {
-		sh.statusMsg = "no global plugins yet — add one via New Plugin → Global"
-		return s, resetToRoot()
+		sh.StatusMsg = "no global plugins yet — add one via New Plugin → Global"
+		return s, core.ResetToRoot()
 	}
-	return s, push(newImportScreen(addons))
+	return s, core.Push(newImportScreen(addons))
 }
 
-func (s *actionsScreen) View(*shared) string     { return s.list.View() }
-func (s *actionsScreen) HelpView(*shared) string { return rootHelp(s.list, helpTabbed) }
+func (s *actionsScreen) View(*core.Shared) string     { return s.list.View() }
+func (s *actionsScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
 
-func (s *actionsScreen) SetSize(sh *shared, width, bodyHeight int) {
+func (s *actionsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	s.list.SetSize(width, bodyHeight)
 }
