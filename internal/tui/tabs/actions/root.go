@@ -31,10 +31,11 @@ func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 		return s, cmd
 	}
 	if key, ok := msg.(tea.KeyMsg); ok {
-		switch key.String() {
-		case "q":
+		k := key.String()
+		switch {
+		case core.MatchKey(k, core.Keys.Quit):
 			return s, tea.Quit
-		case "enter":
+		case core.MatchKey(k, core.Keys.Select):
 			if it, ok := s.list.SelectedItem().(components.Item); ok && it.Pick != nil {
 				sh.StatusMsg = ""
 				return s, it.Pick(sh)
@@ -48,7 +49,7 @@ func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 }
 
 func (s *ActionsScreen) View(*core.Shared) string     { return s.list.View() }
-func (s *ActionsScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
+func (s *ActionsScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 func (s *ActionsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	s.list.SetSize(width, bodyHeight)

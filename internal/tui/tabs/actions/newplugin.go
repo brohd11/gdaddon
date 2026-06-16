@@ -52,23 +52,24 @@ func (s *NewPluginForm) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 	if !ok {
 		return s, nil
 	}
-	switch key.String() {
-	case "esc":
+	k := key.String()
+	switch {
+	case core.MatchKey(k, core.Keys.Back):
 		return s, core.Pop()
-	case "up", "shift+tab":
+	case core.MatchKey(k, core.Keys.PrevField):
 		s.formFocus = (s.formFocus - 1 + fldCount) % fldCount
 		return s, s.syncFormFocus()
-	case "down", "tab":
+	case core.MatchKey(k, core.Keys.NextField):
 		s.formFocus = (s.formFocus + 1) % fldCount
 		return s, s.syncFormFocus()
-	case "left", "right", "h", "l":
+	case core.MatchKey(k, core.Keys.Left), core.MatchKey(k, core.Keys.Right):
 		// On the target row these toggle Project↔Global; on text rows they fall
 		// through to the input (cursor movement / literal characters).
 		if s.formFocus == fldTarget {
 			s.addTarget = otherTarget(s.addTarget)
 			return s, nil
 		}
-	case "enter":
+	case core.MatchKey(k, core.Keys.Select):
 		url := strings.TrimSpace(s.inputs[fldURL].Value())
 		if url == "" {
 			s.formFocus = fldURL
@@ -130,14 +131,12 @@ func (s *NewPluginForm) View(sh *core.Shared) string {
 }
 
 func (s *NewPluginForm) HelpView(sh *core.Shared) string {
-	// return sh.bindingHelp(newPluginInputHelp)
-	var newPluginInputHelp = []key.Binding{
-		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "field")),
-		key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "target")),
-		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "next")),
-		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
-	}
-	return sh.BindingHelp(newPluginInputHelp)
+	return sh.BindingHelp([]key.Binding{
+		core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
+		core.Hint("target", core.Keys.Left, core.Keys.Right),
+		core.Hint("next", core.Keys.Select),
+		core.Hint("cancel", core.Keys.Back),
+	})
 }
 
 func (s *NewPluginForm) SetSize(sh *core.Shared, width, bodyHeight int) {

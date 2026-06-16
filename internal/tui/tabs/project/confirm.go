@@ -20,8 +20,8 @@ import (
 // plugin). confirmHelp and newPluginConfirmHelp are the per-builder key hints.
 
 var confirmHelp = []key.Binding{
-	key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y/enter", "confirm")),
-	key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n/esc", "cancel")),
+	core.Hint("confirm", core.Keys.Yes),
+	core.Hint("cancel", core.Keys.No),
 }
 
 // ---------- install confirm ----------
@@ -52,9 +52,9 @@ const (
 )
 
 var removeConfirmHelp = []key.Binding{
-	key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "option")),
-	key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "remove")),
-	key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+	core.Hint("option", core.Keys.Up, core.Keys.Down),
+	core.Hint("remove", core.Keys.Select),
+	core.Hint("cancel", core.Keys.Back),
 }
 
 // newRemoveConfirm builds the project Remove confirm: a vertical selector between
@@ -66,12 +66,12 @@ func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
 		Crumb:  core.RenderTitleBar(core.HeaderTitle(st.Addon.Name, st.LocalVersion, "Remove")),
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
 		OnKey: func(sh *core.Shared, k string) tea.Cmd {
-			switch k {
-			case "up", "k":
+			switch {
+			case core.MatchKey(k, core.Keys.Up):
 				if mode > removeProject {
 					mode--
 				}
-			case "down", "j":
+			case core.MatchKey(k, core.Keys.Down):
 				if mode < removeProjectLocal {
 					mode++
 				}

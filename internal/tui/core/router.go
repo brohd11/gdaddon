@@ -138,14 +138,14 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	// When the output pane holds focus, navigation keys scroll it; everything
 	// else either toggles back or clears.
 	if r.sh.focus == focusOutput {
-		switch k {
-		case "tab", "esc":
+		switch {
+		case MatchKey(k, Keys.ToggleOutput), MatchKey(k, Keys.Back):
 			r.sh.focus = focusList
 			return nil, true
-		case "c":
+		case MatchKey(k, Keys.Clear):
 			r.sh.clearLogs()
 			return nil, true
-		case "q":
+		case MatchKey(k, Keys.Quit):
 			return tea.Quit, true
 		}
 		var cmd tea.Cmd
@@ -158,21 +158,21 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	// unwinds a deep stack back to the root for a quick exit — unless the active
 	// screen is capturing filter text.
 	if f, ok := r.Top().(Filterer); !ok || !f.Filtering() {
-		switch k {
-		case "tab":
+		switch {
+		case MatchKey(k, Keys.ToggleOutput):
 			if ov, ok := r.Top().(OutputViewer); ok && ov.WantsOutput() && len(r.sh.Logs) > 0 {
 				r.sh.focus = focusOutput
 				r.sh.output.GotoBottom()
 			}
 			return nil, true
-		case "c":
+		case MatchKey(k, Keys.Clear):
 			r.sh.clearLogs()
 			return nil, true
-		case "]":
+		case MatchKey(k, Keys.NextTab):
 			return nil, r.switchTab(1)
-		case "[":
+		case MatchKey(k, Keys.PrevTab):
 			return nil, r.switchTab(-1)
-		case "`":
+		case MatchKey(k, Keys.Unwind):
 			// Unwind a deep stack back to the root for a quick exit. Only consume it
 			// when there's something to unwind, so at the root the key passes through
 			// to the active screen instead of being swallowed.

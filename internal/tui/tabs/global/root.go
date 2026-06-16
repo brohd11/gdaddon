@@ -63,10 +63,11 @@ func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 		return s, cmd
 	}
 	if key, ok := msg.(tea.KeyMsg); ok {
-		switch key.String() {
-		case "q":
+		k := key.String()
+		switch {
+		case core.MatchKey(k, core.Keys.Quit):
 			return s, tea.Quit
-		case "enter":
+		case core.MatchKey(k, core.Keys.Select):
 			if it, ok := s.list.SelectedItem().(components.Item); ok && it.Pick != nil {
 				sh.StatusMsg = ""
 				return s, it.Pick(sh)
@@ -80,7 +81,7 @@ func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 }
 
 func (s *GlobalScreen) View(*core.Shared) string     { return s.list.View() }
-func (s *GlobalScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
+func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 // HandleRoot rebuilds the global list from disk on a MsgRefresh targeting the global
 // list (after an add/remove), so the Global tab reflects the change. The router routes

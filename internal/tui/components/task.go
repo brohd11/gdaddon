@@ -63,8 +63,8 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd)
 
 	case tea.KeyMsg:
 		if s.stay && s.done {
-			switch msg.String() {
-			case "esc", "enter", "q":
+			k := msg.String()
+			if core.MatchKey(k, core.Keys.Back) || core.MatchKey(k, core.Keys.Select) || core.MatchKey(k, core.Keys.Quit) {
 				return s, s.onDismiss(sh)
 			}
 		}
@@ -95,9 +95,7 @@ func (s *TaskScreen) View(sh *core.Shared) string {
 
 func (s *TaskScreen) HelpView(sh *core.Shared) string {
 	if s.stay && s.done {
-		return sh.BindingHelp([]key.Binding{
-			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-		})
+		return sh.BindingHelp([]key.Binding{core.Hint("back", core.Keys.Back)})
 	}
 	return sh.NoteHelp("non-interactive · working…")
 }

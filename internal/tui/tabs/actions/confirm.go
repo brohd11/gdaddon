@@ -29,9 +29,9 @@ const (
 )
 
 var newPluginConfirmHelp = []key.Binding{
-	key.NewBinding(key.WithKeys("left", "right"), key.WithHelp("←/→", "target")),
-	key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "add")),
-	key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+	core.Hint("target", core.Keys.Left, core.Keys.Right),
+	core.Hint("add", core.Keys.Select),
+	core.Hint("back", core.Keys.Back),
 }
 
 // ---------- new plugin confirm ----------
@@ -42,8 +42,7 @@ func newNewPluginConfirm(name, url, path string, addTarget int) *components.Conf
 		Crumb:  core.RenderTitleBar("New Plugin"),
 		Render: func(sh *core.Shared) string { return sh.Box(newPluginConfirmBody(sh, name, url, path, target)) },
 		OnKey: func(sh *core.Shared, k string) tea.Cmd {
-			switch k {
-			case "left", "right", "h", "l":
+			if core.MatchKey(k, core.Keys.Left) || core.MatchKey(k, core.Keys.Right) {
 				target = otherTarget(target)
 			}
 			return nil

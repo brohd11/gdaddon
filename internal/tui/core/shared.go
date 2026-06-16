@@ -80,7 +80,7 @@ var (
 
 	// tab strip: sits under the header, active tab highlighted, inactive muted,
 	// closed off from the content below by a full-width rule. The switch keys are
-	// shown in the help bar (rootHelp), not here.
+	// shown in the help bar (ShortHelp), not here.
 	tabStripStyle  = lipgloss.NewStyle().Padding(0, 1)
 	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
 	tabStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(MutedColor)
@@ -191,9 +191,6 @@ func HelpView(l list.Model) string {
 	return l.Styles.HelpStyle.Render(l.Help.View(l))
 }
 
-// tabSwitchKey is the help-bar hint for top-level tab switching (shown by rootHelp).
-var tabSwitchKey = key.NewBinding(key.WithKeys("[", "]"), key.WithHelp("[ ]", "tabs"))
-
 // newSelectList builds a list styled like the others (no status bar, help drawn
 // separately, esc/enter hints) for the versions and submenu screens. It's sized
 // to zero; the owning screen's SetSize gives it real dimensions.
@@ -225,6 +222,10 @@ func NewDelegate() list.DefaultDelegate {
 func StyleList(l *list.Model) {
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
+	// Drive list scrolling from the central keymap so an added scheme (e.g. wasd)
+	// reaches lists too; FullHint keeps the list's own full (?) help reading well.
+	l.KeyMap.CursorUp = FullHint("up", Keys.Up)
+	l.KeyMap.CursorDown = FullHint("down", Keys.Down)
 	l.Help.Styles.ShortKey = l.Help.Styles.ShortKey.Foreground(MutedColor)
 	l.Help.Styles.ShortDesc = l.Help.Styles.ShortDesc.Foreground(MutedColor)
 	l.Help.Styles.ShortSeparator = l.Help.Styles.ShortSeparator.Foreground(MutedColor)
@@ -242,23 +243,26 @@ const (
 	HelpTabbed
 )
 
-// rootHelp renders a tab root's decluttered short help for the given preset; the
+// ShortHelp renders a tab root's decluttered short help for the given preset; the
 // full (?) help still lists everything via the list's own FullHelp. Tab roots use
 // this instead of helpView so secondary keys (filter, output, clear) stay out of
 // the short bar.
-func RootHelp(l list.Model, mode HelpMode) string {
+func ShortHelp(l list.Model, mode HelpMode) string {
 	if l.Help.ShowAll {
 		return l.Styles.HelpStyle.Render(l.Help.FullHelpView(l.FullHelp()))
 	}
 	short := []key.Binding{
-		l.KeyMap.CursorUp,
-		l.KeyMap.CursorDown,
-		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+		Hint("up", Keys.Up),
+		Hint("down", Keys.Down),
+		Hint("select", Keys.Select),
 	}
-	if mode == HelpTabbed {
-		short = append(short, tabSwitchKey)
+	switch mode {
+	case HelpTabbed:
+		short = append(short, tabHint())
+	case HelpMinimal:
+		short = append(short, Hint("back", Keys.Back))
 	}
-	short = append(short, l.KeyMap.Quit, l.KeyMap.ShowFullHelp)
+	short = append(short, l.KeyMap.ShowFullHelp)
 	return l.Styles.HelpStyle.Render(l.Help.ShortHelpView(short))
 }
 

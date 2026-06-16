@@ -11,7 +11,7 @@
 //	             (Filterer, OutputViewer, RootHandler, PopStopper), router-handled
 //	             messages (MsgRefresh — one message targeting any tab's root —
 //	             and InstallEvent), and generic list/help/style helpers (NewSelectList,
-//	             RootHelp, RenderTitleBar, …).
+//	             ShortHelp, RenderTitleBar, …).
 //	components/  reusable, context-agnostic pieces configured by closures — they
 //	             name no domain type: the Item list row (carries its own Pick
 //	             closure) and the screens PickerScreen, ConfirmScreen, LoadingScreen,

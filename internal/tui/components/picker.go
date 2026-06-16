@@ -2,6 +2,7 @@ package components
 
 import (
 	"gdaddon/internal/tui/core"
+
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -58,10 +59,11 @@ func (s *PickerScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 		return s, cmd
 	}
 	if key, ok := msg.(tea.KeyMsg); ok {
-		switch k := key.String(); k {
-		case "esc", "q":
+		k := key.String()
+		switch {
+		case core.MatchKey(k, core.Keys.Back), core.MatchKey(k, core.Keys.Quit):
 			return s, core.Pop()
-		case "enter":
+		case core.MatchKey(k, core.Keys.Select):
 			if s.OnSelect != nil {
 				return s, s.OnSelect(sh, s.list.SelectedItem())
 			}
@@ -88,7 +90,7 @@ func (s *PickerScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 }
 
 func (s *PickerScreen) View(*core.Shared) string     { return s.list.View() }
-func (s *PickerScreen) HelpView(*core.Shared) string { return core.HelpView(s.list) }
+func (s *PickerScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpMinimal) }
 
 func (s *PickerScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	s.list.SetSize(width, bodyHeight)

@@ -25,13 +25,13 @@ func NewProjectScreen(statuses []addon.Status) *ProjectScreen {
 	l := list.New(addonListItems(statuses), core.NewDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	core.StyleList(&l)
-	// The browse short help is decluttered (see HelpView / rootHelp); these extras
+	// The browse short help is decluttered (see HelpView / ShortHelp); these extras
 	// only show in the full (?) help.
 	l.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
-			key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
-			key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "output")),
-			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear log")),
+			core.FullHint("select", core.Keys.Select),
+			core.FullHint("output", core.Keys.ToggleOutput),
+			core.FullHint("clear log", core.Keys.Clear),
 		}
 	}
 	return &ProjectScreen{list: l}
@@ -49,10 +49,11 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 		return s, cmd
 	}
 	if key, ok := msg.(tea.KeyMsg); ok {
-		switch key.String() {
-		case "q":
+		k := key.String()
+		switch {
+		case core.MatchKey(k, core.Keys.Quit):
 			return s, tea.Quit
-		case "enter":
+		case core.MatchKey(k, core.Keys.Select):
 			if it, ok := s.list.SelectedItem().(components.Item); ok && it.Pick != nil {
 				sh.StatusMsg = ""
 				return s, it.Pick(sh)
@@ -79,7 +80,7 @@ func (s *ProjectScreen) View(sh *core.Shared) string {
 
 // HelpView renders the decluttered tab-root help (nav · select · tabs · quit ·
 // more); filter, output, and clear-log live only in the full (?) help.
-func (s *ProjectScreen) HelpView(*core.Shared) string { return core.RootHelp(s.list, core.HelpTabbed) }
+func (s *ProjectScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	h := bodyHeight

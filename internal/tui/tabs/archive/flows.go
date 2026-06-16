@@ -14,8 +14,8 @@ import (
 )
 
 var removeConfirmHelp = []key.Binding{
-	key.NewBinding(key.WithKeys("y", "enter"), key.WithHelp("y", "remove")),
-	key.NewBinding(key.WithKeys("n", "esc"), key.WithHelp("n", "cancel")),
+	core.Hint("remove", core.Keys.Yes),
+	core.Hint("cancel", core.Keys.No),
 }
 
 // newVersionsPicker lists a repo's archived versions (newest first). A version

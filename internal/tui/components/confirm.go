@@ -29,14 +29,15 @@ func (s *ConfirmScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 	if !ok {
 		return s, nil
 	}
-	switch key.String() {
-	case "y", "Y", "enter":
+	k := key.String()
+	switch {
+	case core.MatchKey(k, core.Keys.Yes):
 		return s, s.OnYes(sh)
-	case "n", "N", "esc":
+	case core.MatchKey(k, core.Keys.No):
 		return s, core.Pop()
 	}
 	if s.OnKey != nil {
-		return s, s.OnKey(sh, key.String())
+		return s, s.OnKey(sh, k)
 	}
 	return s, nil
 }

@@ -19,9 +19,9 @@ const (
 )
 
 var removeConfirmHelp = []key.Binding{
-	key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "option")),
-	key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "remove")),
-	key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+	core.Hint("option", core.Keys.Up, core.Keys.Down),
+	core.Hint("remove", core.Keys.Select),
+	core.Hint("cancel", core.Keys.Back),
 }
 
 // newRemoveConfirm builds the global Remove confirm: a vertical selector between
@@ -33,12 +33,12 @@ func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
 		Crumb:  core.RenderTitleBar(g.name + " — Remove"),
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, g, mode)) },
 		OnKey: func(sh *core.Shared, k string) tea.Cmd {
-			switch k {
-			case "up", "k":
+			switch {
+			case core.MatchKey(k, core.Keys.Up):
 				if mode > removeGlobal {
 					mode--
 				}
-			case "down", "j":
+			case core.MatchKey(k, core.Keys.Down):
 				if mode < removeGlobalArchive {
 					mode++
 				}
