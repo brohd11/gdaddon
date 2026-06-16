@@ -14,6 +14,13 @@ import (
 // to be edited here. To add an alternate scheme (e.g. wasd) append the keys to
 // the relevant WithKeys list below and it propagates to dispatch, list scrolling,
 // the help bar, and the full (?) help automatically.
+//
+// Convention: ALL key handling — tab/screen Update loops, the shared components,
+// and the help bars — dispatches via these bindings with MatchKey and builds help
+// with Hint/FullHint; no site matches a raw keycode or key.Type. The shared Update
+// helpers that apply these bindings (components.RootUpdate for tab roots,
+// components.QueryUpdate for text-entry screens) live in components/update.go,
+// since they operate on the reusable list.Model / Item pieces.
 type KeyMap struct {
 	// navigation
 	Up    key.Binding
@@ -42,6 +49,10 @@ type KeyMap struct {
 	// form
 	NextField key.Binding
 	PrevField key.Binding
+
+	// pagination
+	PageNext key.Binding
+	PagePrev key.Binding
 }
 
 // Keys is the active keymap. Edit a WithKeys list here (e.g. add "w"/"s" to
@@ -69,6 +80,9 @@ var Keys = KeyMap{
 
 	NextField: key.NewBinding(key.WithKeys("down", "tab")),
 	PrevField: key.NewBinding(key.WithKeys("up", "shift+tab")),
+
+	PageNext: key.NewBinding(key.WithKeys(";", "2")),
+	PagePrev: key.NewBinding(key.WithKeys("'", "3")),
 }
 
 // MatchKey reports whether the pressed key string k is one of binding b's keys.

@@ -250,6 +250,25 @@ func DefaultSources() []SourceConfig {
 		},
 		{
 			Name: "Codeberg",
+			Type: "json",
+			Search: &SearchRule{
+				URL:         "https://codeberg.org/api/v1/repos/search?q={query}&limit=50&page={page}",
+				PageBase:    1,
+				ResultsPath: "data",
+				Fields: FieldPaths{
+					ID:            "full_name",
+					Title:         "full_name",
+					Author:        "owner.login",
+					VersionString: "default_branch",
+				},
+			},
+			Detail: &DetailRule{
+				URL:             "https://codeberg.org/api/v1/repos/{id}",
+				BrowseURLPath:   "clone_url",
+				DescriptionPath: "description",
+				TitlePath:       "full_name",
+				AuthorPath:      "owner.login",
+			},
 			VCS: &VCSRule{
 				Host: "codeberg.org",
 				Releases: ReleasesRule{

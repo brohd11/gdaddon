@@ -15,8 +15,8 @@ import (
 )
 
 // ArchiveScreen is the Archive tab root. Its rows are self-dispatching
-// components.Item values, so the only hand-written list logic in the whole tab is
-// this screen's Update (the pushed pickers run their items' Pick closures).
+// components.Item values, so it has no bespoke list logic: Update delegates to the
+// shared components.RootUpdate (the pushed pickers run their items' Pick closures).
 type ArchiveScreen struct{ list list.Model }
 
 var _ core.Filterer = (*ArchiveScreen)(nil)
@@ -53,27 +53,7 @@ func (s *ArchiveScreen) Init(*core.Shared) tea.Cmd { return nil }
 func (s *ArchiveScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
-	if s.Filtering() {
-		var cmd tea.Cmd
-		s.list, cmd = s.list.Update(msg)
-		return s, cmd
-	}
-	if key, ok := msg.(tea.KeyMsg); ok {
-		k := key.String()
-		switch {
-		case core.MatchKey(k, core.Keys.Quit):
-			return s, tea.Quit
-		case core.MatchKey(k, core.Keys.Select):
-			if it, ok := s.list.SelectedItem().(components.Item); ok && it.Pick != nil {
-				sh.StatusMsg = ""
-				return s, it.Pick(sh)
-			}
-			return s, nil
-		}
-	}
-	var cmd tea.Cmd
-	s.list, cmd = s.list.Update(msg)
-	return s, cmd
+	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
 func (s *ArchiveScreen) View(*core.Shared) string     { return s.list.View() }

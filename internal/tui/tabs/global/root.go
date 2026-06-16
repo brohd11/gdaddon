@@ -57,27 +57,7 @@ func (s *GlobalScreen) Init(*core.Shared) tea.Cmd { return nil }
 func (s *GlobalScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
-	if s.Filtering() {
-		var cmd tea.Cmd
-		s.list, cmd = s.list.Update(msg)
-		return s, cmd
-	}
-	if key, ok := msg.(tea.KeyMsg); ok {
-		k := key.String()
-		switch {
-		case core.MatchKey(k, core.Keys.Quit):
-			return s, tea.Quit
-		case core.MatchKey(k, core.Keys.Select):
-			if it, ok := s.list.SelectedItem().(components.Item); ok && it.Pick != nil {
-				sh.StatusMsg = ""
-				return s, it.Pick(sh)
-			}
-			return s, nil
-		}
-	}
-	var cmd tea.Cmd
-	s.list, cmd = s.list.Update(msg)
-	return s, cmd
+	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
 func (s *GlobalScreen) View(*core.Shared) string     { return s.list.View() }

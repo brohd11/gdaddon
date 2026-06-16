@@ -83,7 +83,16 @@ func (s *NewPluginForm) Init(*core.Shared) tea.Cmd { return s.syncFormFocus() }
 // steal characters typed into them.
 func (s *NewPluginForm) Filtering() bool { return true }
 
+// Typable: every row but the target toggle is a text field; QueryUpdate keeps
+// typed characters in the focused input instead of letting letter-aliases like
+// "c"/"e" trigger Back/Select.
+func (s *NewPluginForm) Typing() bool            { return s.formFocus != fldTarget }
+func (s *NewPluginForm) Input() *textinput.Model { return &s.inputs[s.formFocus] }
+
 func (s *NewPluginForm) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+	if cmd, ok := components.QueryUpdate(s, msg); ok {
+		return s, cmd
+	}
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return s, nil

@@ -42,8 +42,9 @@ const (
 
 // queryScreen is the search entry point: pick a source (a list/submenu) and type
 // a query. It captures keys (Filtering) so the global chrome shortcuts don't steal
-// what's typed; it matches raw key types (enter/esc/tab) rather than the
-// letter-bearing bindings so the query box accepts every character.
+// what's typed, and dispatches navigation via core.Keys; the typing-vs-navigation
+// split (so letter-aliases like "c"/"e" reach the query box instead of triggering
+// Back/Select) is handled centrally by components.QueryUpdate via the Typable interface.
 type queryScreen struct {
 	src      searchpkg.Source
 	godotVer string
@@ -64,21 +65,30 @@ func (s *queryScreen) Init(*core.Shared) tea.Cmd { return s.syncFocus() }
 
 func (s *queryScreen) Filtering() bool { return true }
 
+// Typable: the query box has focus only on the query field; QueryUpdate keeps
+// typed characters there instead of letting them trigger navigation.
+func (s *queryScreen) Typing() bool            { return s.focus == fldQuery }
+func (s *queryScreen) Input() *textinput.Model { return &s.input }
+
 func (s *queryScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+	if cmd, ok := components.QueryUpdate(s, msg); ok {
+		return s, cmd
+	}
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
 		return s, nil
 	}
-	switch key.Type {
-	case tea.KeyEsc:
+	k := key.String()
+	switch {
+	case core.MatchKey(k, core.Keys.Back):
 		return s, core.Pop()
-	case tea.KeyTab, tea.KeyDown:
+	case core.MatchKey(k, core.Keys.NextField):
 		s.focus = (s.focus + 1) % fldCount
 		return s, s.syncFocus()
-	case tea.KeyShiftTab, tea.KeyUp:
+	case core.MatchKey(k, core.Keys.PrevField):
 		s.focus = (s.focus - 1 + fldCount) % fldCount
 		return s, s.syncFocus()
-	case tea.KeyEnter:
+	case core.MatchKey(k, core.Keys.Select):
 		if s.focus == fldSource {
 			return s, core.Push(newSourcePicker(s))
 		}
@@ -88,6 +98,7 @@ func (s *queryScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd
 		}
 		return s, core.Push(newSearchLoading(s.src, query, s.godotVer, 0))
 	}
+	// Editing keys (backspace, cursor) fall through to the focused query box.
 	if s.focus == fldQuery {
 		var cmd tea.Cmd
 		s.input, cmd = s.input.Update(msg)
@@ -184,11 +195,8 @@ func newSearchLoading(src searchpkg.Source, query, godotVer string, page int) *c
 	return components.NewLoadingScreen(src.Name(), "searching…", cmd, onResult)
 }
 
-// pageHelp is the n/p pagination hint shown in the results picker's help bar.
-var pageHelp = key.NewBinding(key.WithKeys("n", "p"), key.WithHelp("n/p", "page"))
-
 // newResultsPicker shows one page of results. Each row hands off to the asset
-// detail fetch; n/p (and ←/→) page within the bounds reported by the source.
+// detail fetch; PageNext/PagePrev page within the bounds reported by the source.
 func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchpkg.Page) *components.PickerScreen {
 	items := make([]list.Item, 0, len(res.Results))
 	for _, r := range res.Results {
@@ -204,12 +212,12 @@ func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchp
 
 	onKey := func(sh *core.Shared, k string, _ list.Item) (tea.Cmd, bool) {
 		switch {
-		case k == "n" || k == "right":
+		case core.MatchKey(k, core.Keys.PageNext):
 			if res.Page+1 < res.Pages {
 				return core.Replace(newSearchLoading(src, query, godotVer, res.Page+1)), true
 			}
 			return nil, true
-		case k == "p" || k == "left":
+		case core.MatchKey(k, core.Keys.PagePrev):
 			if res.Page > 0 {
 				return core.Replace(newSearchLoading(src, query, godotVer, res.Page-1)), true
 			}
@@ -217,7 +225,8 @@ func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchp
 		}
 		return nil, false
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: title, OnKey: onKey, Help: []key.Binding{pageHelp}})
+	help := []key.Binding{core.Hint("page", core.Keys.PageNext, core.Keys.PagePrev)}
+	return components.NewPicker(items, components.PickerOpts{Title: title, OnKey: onKey, Help: help})
 }
 
 func resultDesc(r searchpkg.Summary) string {
