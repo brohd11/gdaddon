@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"gdaddon/internal/addon"
+	"gdaddon/internal/config"
 	"gdaddon/internal/tui"
 
 	"github.com/spf13/cobra"
@@ -34,6 +35,12 @@ func Execute() {
 // runRoot resolves the manifest/project paths and either runs the non-interactive
 // install (--install) or launches the TUI (default).
 func runRoot(cmd *cobra.Command, args []string) error {
+	// Dump the default config.yml on first run so it's the editable source of
+	// truth (search sources, archive dir). A failure here is non-fatal.
+	if created, path, err := config.Ensure(); err == nil && created {
+		fmt.Fprintf(os.Stderr, "wrote default config to %s\n", path)
+	}
+
 	yamlFile, projectRoot, err := resolvePaths(args)
 	if err != nil {
 		return err

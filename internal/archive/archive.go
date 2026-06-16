@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"gdaddon/internal/config"
 	"gdaddon/internal/source"
 
 	"gopkg.in/yaml.v3"
@@ -23,43 +24,14 @@ import (
 // archivedSuffix marks an asset name as coming from the local archive.
 const archivedSuffix = " - archived"
 
-// gdaddonDir is ~/.gdaddon, the home for the config and the default archive.
-func gdaddonDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".gdaddon"), nil
-}
-
 // Dir resolves the archive root: ~/.gdaddon/config.yml's archive_dir if set,
 // otherwise ~/.gdaddon/archive. A leading "~" in archive_dir is expanded.
 func Dir() (string, error) {
-	base, err := gdaddonDir()
+	cfg, err := config.Load()
 	if err != nil {
 		return "", err
 	}
-
-	if data, err := os.ReadFile(filepath.Join(base, "config.yml")); err == nil {
-		var cfg struct {
-			ArchiveDir string `yaml:"archive_dir"`
-		}
-		if err := yaml.Unmarshal(data, &cfg); err == nil && strings.TrimSpace(cfg.ArchiveDir) != "" {
-			return expandHome(strings.TrimSpace(cfg.ArchiveDir))
-		}
-	}
-	return filepath.Join(base, "archive"), nil
-}
-
-func expandHome(path string) (string, error) {
-	if path == "~" || strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(path, "~"), "/")), nil
-	}
-	return path, nil
+	return cfg.ResolvedArchiveDir()
 }
 
 // repoDir is the per-repo folder name derived from a repo id, e.g.

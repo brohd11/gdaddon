@@ -5,7 +5,11 @@
 // shows up in the source selector automatically.
 package search
 
-import "context"
+import (
+	"context"
+
+	"gdaddon/internal/config"
+)
 
 // Summary is one search-result row. The list endpoint returns no repo/download
 // URL — that only comes from Detail.
@@ -48,8 +52,23 @@ type Source interface {
 	Detail(ctx context.Context, id string) (*Detail, error) // resolves the repo URL for prefill
 }
 
-// Sources is the registry of available backends, in display order. Append a new
-// Source here to expose it in the search tab's source selector.
+// Sources is the registry of available backends, in display order: the
+// config-defined JSON sources from ~/.gdaddon/config.yml (the source of truth,
+// dumped with defaults on first run — see config.Ensure), then the hard-coded
+// Asset Store. The first entry is the default selection. A misconfigured source
+// is skipped, not fatal; a missing or unreadable file falls back to the built-in
+// defaults so search always works.
 func Sources() []Source {
-	return []Source{assetLib{}, assetStore{}}
+	rules := config.DefaultSources()
+	if cfg, err := config.Load(); err == nil && len(cfg.Sources) > 0 {
+		rules = cfg.Sources
+	}
+
+	var srcs []Source
+	for _, sc := range rules {
+		if cs := (configSource{cfg: sc}); cs.validate() == nil {
+			srcs = append(srcs, cs)
+		}
+	}
+	return append(srcs, assetStore{})
 }

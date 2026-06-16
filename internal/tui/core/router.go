@@ -67,6 +67,12 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.resize()
 		return r, cmd
 
+	case replaceMsg:
+		r.stack[len(r.stack)-1] = msg.s
+		cmd := msg.s.Init(r.sh)
+		r.resize()
+		return r, cmd
+
 	case popMsg:
 		for i := 0; i < msg.n && len(r.stack) > 1; i++ {
 			r.stack = r.stack[:len(r.stack)-1]
@@ -85,12 +91,6 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		r.resize()
 		return r, nil
-
-	case replaceMsg:
-		r.stack[len(r.stack)-1] = msg.s
-		cmd := msg.s.Init(r.sh)
-		r.resize()
-		return r, cmd
 
 	case resetToRootMsg:
 		r.stack = r.stack[:1]
