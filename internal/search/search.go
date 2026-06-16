@@ -51,5 +51,5 @@ type Source interface {
 // Sources is the registry of available backends, in display order. Append a new
 // Source here to expose it in the search tab's source selector.
 func Sources() []Source {
-	return []Source{assetLib{}}
+	return []Source{assetLib{}, assetStore{}}
 }
