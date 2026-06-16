@@ -3,6 +3,7 @@ package actions
 import (
 	"gdaddon/internal/tui/components"
 	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/flows/newplugin"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,7 +22,7 @@ func actionItems() []list.Item {
 		components.Item{
 			Name: "+ New Plugin",
 			Desc: "add a plugin to the project or your global list",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(NewNewPluginForm()) },
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newplugin.NewNewPluginForm()) },
 		},
 	}
 }

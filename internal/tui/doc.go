@@ -8,7 +8,7 @@
 //	             over a screen stack, navigation commands (Push/Pop/Replace/
 //	             ResetToRoot/RootRefresh/GlobalRefresh/ArchiveRefresh), the Screen
 //	             interface plus the optional interfaces the router type-asserts
-//	             (Filterer, OutputViewer, RootHandler, PopStopper), router-handled
+//	             (Filterer, RootHandler, PopStopper), router-handled
 //	             messages (MsgRefresh — one message targeting any tab's root —
 //	             and InstallEvent), and generic list/help/style helpers (NewSelectList,
 //	             ShortHelp, RenderTitleBar, …).
@@ -16,6 +16,11 @@
 //	             name no domain type: the Item list row (carries its own Pick
 //	             closure) and the screens PickerScreen, ConfirmScreen, LoadingScreen,
 //	             and the generic streaming TaskScreen. A tab supplies the closures.
+//	flows/…      shared, domain-aware flow screens composed by more than one tab
+//	             (so they can't live in any single tab without a cross-tab import):
+//	             e.g. flows/newplugin, the Add Plugin form+confirm used by both the
+//	             Actions and Search tabs. Unlike components these DO name domain
+//	             types; they sit between components and tabs.
 //	tabs/…       one package per top-level tab (the domain): its root screen, its
 //	             flow screens, and the builders that wire components to features
 //	             (e.g. a tab defines its own newInstallConfirm rather than confirm
@@ -37,10 +42,10 @@
 //
 // # Dependency direction
 //
-// core ← components ← tabs/* ← tui (this package). core names no concrete screen
-// (the router reaches the browse root via the RootHandler interface); components
-// name no domain type (Item/loading/task/confirm take closures); tabs do not import
-// each other. That acyclic layering is
+// core ← components ← flows/* ← tabs/* ← tui (this package). core names no concrete
+// screen (the router reaches the browse root via the RootHandler interface);
+// components name no domain type (Item/loading/task/confirm take closures); flows
+// hold domain-aware screens shared by several tabs; tabs do not import each other. That acyclic layering is
 // what lets the screens live in separate packages — Go forbids import cycles only
 // between packages, and the closure + optional-interface inversions remove the
 // concrete cross-references that would otherwise straddle a boundary.

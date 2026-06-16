@@ -142,6 +142,10 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		case MatchKey(k, Keys.ToggleOutput), MatchKey(k, Keys.Back):
 			r.sh.focus = focusList
 			return nil, true
+		case MatchKey(k, Keys.Output):
+			r.sh.OutputShown = false
+			r.sh.focus = focusList
+			return nil, true
 		case MatchKey(k, Keys.Clear):
 			r.sh.clearLogs()
 			return nil, true
@@ -160,9 +164,15 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if f, ok := r.Top().(Filterer); !ok || !f.Filtering() {
 		switch {
 		case MatchKey(k, Keys.ToggleOutput):
-			if ov, ok := r.Top().(OutputViewer); ok && ov.WantsOutput() && len(r.sh.Logs) > 0 {
+			if r.sh.OutputShown {
 				r.sh.focus = focusOutput
 				r.sh.output.GotoBottom()
+			}
+			return nil, true
+		case MatchKey(k, Keys.Output):
+			r.sh.OutputShown = !r.sh.OutputShown
+			if !r.sh.OutputShown {
+				r.sh.focus = focusList
 			}
 			return nil, true
 		case MatchKey(k, Keys.Clear):
@@ -234,10 +244,37 @@ func (r Router) topChrome() string {
 	return lipgloss.JoinVertical(lipgloss.Left, r.sh.headerView(), strip)
 }
 
+// belowChrome is the shared chrome rendered between the active screen's body and
+// the help bar: the status line (if any) then the output box (when shown). It is
+// drawn by the router around every screen, so output/status persist across tab
+// switches and screen pushes. Empty when there's neither.
+func (r Router) belowChrome() string {
+	var parts []string
+	if r.sh.StatusMsg != "" {
+		parts = append(parts, StatusStyle.Render(r.sh.StatusMsg))
+	}
+	if r.sh.OutputBoxHeight() > 0 {
+		parts = append(parts, r.sh.OutputView())
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+// vheight is lipgloss.Height but reports 0 for an empty string (lipgloss.Height("")
+// is 1), so optional chrome contributes no rows when absent.
+func vheight(s string) int {
+	if s == "" {
+		return 0
+	}
+	return lipgloss.Height(s)
+}
+
 // bodyHeight is the rows available to the active screen's body: the space between
-// the top chrome and the help bar.
+// the top chrome and the help bar, minus the status/output chrome below the body.
 func (r Router) bodyHeight() int {
-	h := r.sh.height - lipgloss.Height(r.topChrome()) - r.helpHeight()
+	h := r.sh.height - lipgloss.Height(r.topChrome()) - vheight(r.belowChrome()) - r.helpHeight()
 	if h < 1 {
 		h = 1
 	}
@@ -263,9 +300,17 @@ func (r Router) View() string {
 	sh := r.sh
 	chrome := r.topChrome()
 	body := r.Top().View(sh)
-	// Pad the body so the always-visible help bar sits at the very bottom.
-	if pad := (sh.height - lipgloss.Height(chrome) - r.helpHeight()) - lipgloss.Height(body); pad > 0 {
+	below := r.belowChrome()
+	help := r.Top().HelpView(sh)
+	// Pad the body so the status/output chrome and the always-visible help bar sit
+	// at the very bottom.
+	if pad := (sh.height - lipgloss.Height(chrome) - vheight(below) - lipgloss.Height(help)) - lipgloss.Height(body); pad > 0 {
 		body = lipgloss.JoinVertical(lipgloss.Left, body, Blanks(pad))
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, chrome, body, r.Top().HelpView(sh))
+	parts := []string{chrome, body}
+	if below != "" {
+		parts = append(parts, below)
+	}
+	parts = append(parts, help)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }

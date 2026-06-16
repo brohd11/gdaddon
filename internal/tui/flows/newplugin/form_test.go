@@ -1,4 +1,4 @@
-package actions
+package newplugin
 
 import (
 	"strings"
@@ -9,6 +9,16 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// stubRoot is a minimal tab root so the test can build a router to push the form
+// onto (the flow itself is tab-agnostic).
+type stubRoot struct{}
+
+func (stubRoot) Init(*core.Shared) tea.Cmd                           { return nil }
+func (stubRoot) Update(*core.Shared, tea.Msg) (core.Screen, tea.Cmd) { return stubRoot{}, nil }
+func (stubRoot) View(*core.Shared) string                            { return "" }
+func (stubRoot) HelpView(*core.Shared) string                        { return "" }
+func (stubRoot) SetSize(*core.Shared, int, int)                      {}
 
 func sized(tm tea.Model) tea.Model {
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -32,7 +42,7 @@ func pump(tm tea.Model, msg tea.Msg) tea.Model {
 
 func newTestRouter() core.Router {
 	sh := core.NewShared("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test")
-	return core.NewRouter(sh, []core.TabEntry{{Title: "Actions", Root: NewActionsScreen()}})
+	return core.NewRouter(sh, []core.TabEntry{{Title: "Test", Root: stubRoot{}}})
 }
 
 // TestNewPluginFormToConfirm checks the form validates the URL (empty stays put)
@@ -57,5 +67,16 @@ func TestNewPluginFormToConfirm(t *testing.T) {
 	}
 	if !strings.Contains(tm.View(), "owner/repo") {
 		t.Fatal("confirm view should show the entered url")
+	}
+}
+
+// TestNewWithURL prefills the URL and focuses the Name field.
+func TestNewWithURL(t *testing.T) {
+	f := NewWithURL("https://github.com/owner/repo")
+	if got := f.inputs[fldURL].Value(); got != "https://github.com/owner/repo" {
+		t.Fatalf("url not prefilled, got %q", got)
+	}
+	if f.formFocus != fldName {
+		t.Fatalf("focus should jump to Name field, got %d", f.formFocus)
 	}
 }

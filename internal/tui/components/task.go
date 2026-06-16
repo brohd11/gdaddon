@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // RunFunc executes a streaming background task: report() pipes progress lines into
@@ -25,7 +24,6 @@ type TaskScreen struct {
 	onDone           func(*core.Shared, core.InstallEvent) tea.Cmd
 	onDismiss        func(*core.Shared) tea.Cmd
 	done             bool
-	bodyHeight       int
 }
 
 // NewTask builds a task that navigates away as soon as it finishes (install,
@@ -40,10 +38,6 @@ func NewStayTask(label, doneLabel string, run RunFunc,
 	onDone func(*core.Shared, core.InstallEvent) tea.Cmd, onDismiss func(*core.Shared) tea.Cmd) *TaskScreen {
 	return &TaskScreen{label: label, doneLabel: doneLabel, stay: true, run: run, onDone: onDone, onDismiss: onDismiss}
 }
-
-var _ core.OutputViewer = (*TaskScreen)(nil)
-
-func (s *TaskScreen) WantsOutput() bool { return true }
 
 func (s *TaskScreen) Init(sh *core.Shared) tea.Cmd { return startTask(sh, s.run) }
 
@@ -72,6 +66,8 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd)
 	return s, nil
 }
 
+// View renders just the spinner/progress line; the streaming log is drawn by the
+// router as shared output chrome below it.
 func (s *TaskScreen) View(sh *core.Shared) string {
 	glyph := sh.Spinner.View()
 	if s.done {
@@ -81,16 +77,7 @@ func (s *TaskScreen) View(sh *core.Shared) string {
 	if s.stay && s.done {
 		label = s.doneLabel
 	}
-	progress := fmt.Sprintf("\n  %s %s", glyph, label)
-	if len(sh.Logs) == 0 {
-		return progress
-	}
-	out := sh.OutputView()
-	filler := s.bodyHeight - lipgloss.Height(progress) - lipgloss.Height(out)
-	if filler < 1 {
-		filler = 1
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, progress, core.Blanks(filler), out)
+	return fmt.Sprintf("\n  %s %s", glyph, label)
 }
 
 func (s *TaskScreen) HelpView(sh *core.Shared) string {
@@ -100,7 +87,7 @@ func (s *TaskScreen) HelpView(sh *core.Shared) string {
 	return sh.NoteHelp("non-interactive · working…")
 }
 
-func (s *TaskScreen) SetSize(sh *core.Shared, width, bodyHeight int) { s.bodyHeight = bodyHeight }
+func (s *TaskScreen) SetSize(sh *core.Shared, width, bodyHeight int) {}
 
 // ---------- streaming task pump ----------
 

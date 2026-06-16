@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/flows/newplugin"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/project"
 
@@ -75,9 +76,9 @@ func TestTabSwitch(t *testing.T) {
 // drilling into a sub-screen, the tab key is ignored.
 func TestTabSwitchGatedAtDepth(t *testing.T) {
 	tm := sized(newTestRouter())
-	tm, _ = tm.Update(core.Push(actions.NewNewPluginForm())()) // depth 2 on the Browse tab
+	tm, _ = tm.Update(core.Push(newplugin.NewNewPluginForm())()) // depth 2 on the Browse tab
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
-	if _, ok := tm.(core.Router).Top().(*actions.NewPluginForm); !ok {
+	if _, ok := tm.(core.Router).Top().(*newplugin.NewPluginForm); !ok {
 		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(core.Router).Top())
 	}
 }

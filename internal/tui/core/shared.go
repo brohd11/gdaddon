@@ -30,12 +30,13 @@ type Shared struct {
 	width  int
 	height int
 
-	Spinner   spinner.Model
-	output    viewport.Model
-	help      help.Model // renders static (non-list) help bars
-	Logs      []string
-	focus     focusArea
-	StatusMsg string
+	Spinner     spinner.Model
+	output      viewport.Model
+	help        help.Model // renders static (non-list) help bars
+	Logs        []string
+	focus       focusArea
+	StatusMsg   string
+	OutputShown bool // whether the output box is rendered (toggled with o)
 
 	Events chan InstallEvent // the in-flight streaming task channel
 }
@@ -283,6 +284,7 @@ func (s *Shared) NoteHelp(text string) string {
 // keeps it scrolled to the newest entry (unless the user is scrolling it).
 func (s *Shared) AppendLog(line string) {
 	s.Logs = append(s.Logs, line)
+	s.OutputShown = true // new output auto-reveals the box
 }
 
 // clearLogs empties the output pane and the status line, and returns focus to
@@ -291,6 +293,7 @@ func (s *Shared) clearLogs() {
 	s.Logs = nil
 	s.StatusMsg = ""
 	s.focus = focusList
+	s.OutputShown = false
 	s.output.SetContent("")
 }
 
@@ -316,9 +319,9 @@ func (s *Shared) outputContentHeight() int {
 }
 
 // outputBoxHeight is the total rows the output pane occupies (content + the top
-// and bottom border lines) when there are logs to show, else 0.
+// and bottom border lines) when shown, else 0.
 func (s *Shared) OutputBoxHeight() int {
-	if len(s.Logs) == 0 {
+	if !s.OutputShown {
 		return 0
 	}
 	return s.outputContentHeight() + 2
@@ -343,7 +346,7 @@ func (s *Shared) OutputView() string {
 	label := "Output"
 	if s.focus == focusOutput {
 		color = FocusedColor
-		label = "Output · ↑/↓ scroll · tab/esc back"
+		label = "Output · ↑/↓ scroll · tab/esc back · o hide"
 	}
 
 	inner := s.outputInnerWidth()

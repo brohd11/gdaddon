@@ -8,6 +8,7 @@ import (
 	"gdaddon/internal/tui/tabs/archive"
 	"gdaddon/internal/tui/tabs/global"
 	"gdaddon/internal/tui/tabs/project"
+	"gdaddon/internal/tui/tabs/search"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -25,6 +26,7 @@ func Run(manifestPath, projectRoot string) error {
 		{Title: "Global", Root: global.NewGlobalScreen()},
 		{Title: "Archive", Root: archive.NewArchiveScreen()},
 		{Title: "Actions", Root: actions.NewActionsScreen()},
+		{Title: "Search", Root: search.NewSearchScreen()},
 	}
 	r := core.NewRouter(sh, tabs)
 	_, err = tea.NewProgram(r, tea.WithAltScreen()).Run()

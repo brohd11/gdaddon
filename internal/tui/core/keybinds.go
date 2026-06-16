@@ -34,7 +34,8 @@ type KeyMap struct {
 	// global chrome
 	NextTab      key.Binding
 	PrevTab      key.Binding
-	ToggleOutput key.Binding
+	ToggleOutput key.Binding // focus/unfocus the output pane for scrolling
+	Output       key.Binding // show/hide the output box
 	Clear        key.Binding
 	Unwind       key.Binding
 
@@ -62,7 +63,8 @@ var Keys = KeyMap{
 	NextTab:      key.NewBinding(key.WithKeys("]", "x")),
 	PrevTab:      key.NewBinding(key.WithKeys("[", "z")),
 	ToggleOutput: key.NewBinding(key.WithKeys("tab")),
-	Clear:        key.NewBinding(key.WithKeys("shift+c")),
+	Output:       key.NewBinding(key.WithKeys("o")),
+	Clear:        key.NewBinding(key.WithKeys("C")),
 	Unwind:       key.NewBinding(key.WithKeys("`", "r")),
 
 	NextField: key.NewBinding(key.WithKeys("down", "tab")),
