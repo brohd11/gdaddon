@@ -17,7 +17,7 @@ import tea "github.com/charmbracelet/bubbletea"
 type Chrome struct {
 	Header *HeaderPane // nil ⇒ no header box
 	Output Output      // nil ⇒ no output pane (default impl: components.LogPane)
-	Status string      // transient one-liner under the body (empty ⇒ none)
+	Status Status      // nil ⇒ no status line (default impl: components.StatusLine)
 
 	// outputFocused routes input to the output pane (scrolling) instead of the
 	// active screen. Owned by the router; the pane itself is focus-agnostic and only
@@ -65,4 +65,20 @@ type Output interface {
 	View(focused bool) string          // render (focused ⇒ scroll affordance)
 	Update(msg tea.Msg) tea.Cmd        // handle a key while focused (scrolling)
 	GotoBottom()                       // pin to the newest content
+}
+
+// Status is the pluggable transient one-liner the router draws below the body
+// (parallel to Output). The default implementation is the themed line in components
+// (NewStatusLine); a consumer may supply its own. Core treats it opaquely: it Sets the
+// text (via Shared.WriteStatus/SetStatus), measures it (Shown/Height), renders it
+// (View), and clears it — explicitly (the Clear key) or via the auto-clear timer the
+// router schedules and keys on Gen, so a newer write's timer never lets a stale one
+// clear a fresh message.
+type Status interface {
+	Set(line string) // replace the message and bump the generation
+	Clear()          // drop the message (does NOT bump the generation)
+	Shown() bool     // occupies layout space (non-empty message)
+	Height() int     // rows occupied when shown (0 when empty)
+	View() string    // render the themed line
+	Gen() int        // current generation; the auto-clear timer compares against this
 }

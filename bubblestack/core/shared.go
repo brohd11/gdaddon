@@ -60,13 +60,35 @@ func (s *Shared) Log(line string) {
 	}
 }
 
-// SetStatus sets the transient status line shown under the body (no-op without
-// chrome).
-func (s *Shared) SetStatus(msg string) {
-	if s.Chrome != nil {
-		s.Chrome.Status = msg
+// WriteStatus sets the transient status line and, when log is true, also appends the
+// line to the output log (one call, both effects). The status auto-clears ~5s after
+// the most recent write (the router schedules the timer); the log keeps it as the
+// durable record. No-op without chrome.
+func (s *Shared) WriteStatus(line string, log ...bool) {
+	var wr_log = true
+	if len(log) > 0 {
+		wr_log = log[0]
+	}
+	if s.Chrome == nil {
+		return
+	}
+	if s.Chrome.Status != nil {
+		s.Chrome.Status.Set(line) // Set("") clears (Shown() == false)
+	}
+	if wr_log && line != "" {
+		s.Log(line)
 	}
 }
+
+func (s *Shared) ClearStatus() {
+	if s.Chrome == nil && s.Chrome.Status != nil {
+		s.Chrome.Status.Clear()
+	}
+}
+
+// SetStatus sets the status line only (no log) — the thin wrapper the existing call
+// sites use. Migrate selected sites to WriteStatus(line, true) to also log the line.
+func (s *Shared) SetStatus(msg string) { s.WriteStatus(msg, false) }
 
 // App recovers the consumer's context from a Shared, type-asserted to *T. The
 // consumer stores a *T in NewShared and reads it back here, so the framework stays
@@ -89,7 +111,7 @@ var (
 	FocusedColor   lipgloss.Color
 	OnFocusedColor lipgloss.Color // text drawn on the accent (title bar)
 
-	StatusStyle lipgloss.Style
+	statusStyle lipgloss.Style
 	logStyle    lipgloss.Style
 
 	// tab strip: sits under the header, active tab highlighted, inactive muted,
@@ -114,7 +136,7 @@ func init() { applyTheme(current) }
 // rebuildStyles rebuilds the derived styles from the current palette. applyTheme
 // calls it after swapping colors so a theme switch repaints every chrome element.
 func rebuildStyles() {
-	StatusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
+	statusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
 	logStyle = lipgloss.NewStyle().Foreground(logColor)
 
 	tabStripStyle = lipgloss.NewStyle().Padding(0, 1)
@@ -257,6 +279,8 @@ func StyleList(l *list.Model) {
 	// reaches lists too; FullHint keeps the list's own full (?) help reading well.
 	l.KeyMap.CursorUp = FullHint("up", Keys.Up)
 	l.KeyMap.CursorDown = FullHint("down", Keys.Down)
+	l.KeyMap.PrevPage = FullHint("prev page", Keys.Left)
+	l.KeyMap.NextPage = FullHint("next page", Keys.Right)
 	l.Help.Styles.ShortKey = l.Help.Styles.ShortKey.Foreground(MutedColor)
 	l.Help.Styles.ShortDesc = l.Help.Styles.ShortDesc.Foreground(MutedColor)
 	l.Help.Styles.ShortSeparator = l.Help.Styles.ShortSeparator.Foreground(MutedColor)
@@ -314,6 +338,11 @@ func (s *Shared) NoteHelp(text string) string {
 // default components) output pane renders log lines in the active palette. Read at
 // render time, it picks up theme switches (rebuildStyles reassigns logStyle).
 func LogStyle() lipgloss.Style { return logStyle }
+
+// StatusStyle is the themed style for the transient status line, exported so a custom
+// (or the default components) status element renders in the active palette. Read at
+// render time, it picks up theme switches (rebuildStyles reassigns statusStyle).
+func StatusStyle() lipgloss.Style { return statusStyle }
 
 // ---------- text helpers ----------
 

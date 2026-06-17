@@ -10,6 +10,14 @@ type ctrlMsg interface{ isCtrl() }
 
 func (propagateMsg) isCtrl()    {}
 func (MsgThemeChanged) isCtrl() {}
+func (statusClearMsg) isCtrl()  {}
+
+// statusClearMsg is the router's auto-clear timer firing for the status line: a tick
+// scheduled when the status's generation advances (a fresh write). It clears the
+// status only if gen still matches the current generation, so a newer write (which
+// bumped the generation) leaves the stale tick a no-op. Resolved on the control path
+// like the other ctrlMsgs (see router.applyCtrl).
+type statusClearMsg struct{ gen int }
 
 // TaskEvent streams a streaming task's progress (one line per event) and its
 // terminating done event (with any error and an opaque result Payload). Produced by

@@ -22,6 +22,7 @@ type (
 	TabEntry   = core.TabEntry
 	Screen     = core.Screen
 	Output     = core.Output
+	Status     = core.Status
 	ChromeMask = core.ChromeMask
 )
 
@@ -30,12 +31,14 @@ type (
 var FullscreenMask = core.FullscreenMask
 
 // Config is the consumer-supplied input to Run. App and Tabs are required; Header,
-// Output, and Theme are optional. A nil Header ⇒ no header box; a nil Output ⇒ no
-// output pane (pass components.NewLogPane() for the default scrollable log).
+// Output, Status, and Theme are optional. A nil Header ⇒ no header box; a nil Output ⇒
+// no output pane (pass components.NewLogPane() for the default scrollable log); a nil
+// Status ⇒ no status line (pass components.NewStatusLine() for the default).
 type Config struct {
 	App    any                       // consumer context, recovered via core.App[T]
 	Header func(*core.Shared) string // persistent context box (nil ⇒ none)
 	Output core.Output               // below-body pane (nil ⇒ none)
+	Status core.Status               // transient status line (nil ⇒ none)
 	Tabs   []core.TabEntry           // top-level tabs
 	Theme  string                    // named theme; empty ⇒ leave the default
 }
@@ -44,7 +47,7 @@ type Config struct {
 // the tabs, and blocks on the bubbletea program until the user quits.
 func Run(cfg Config) error {
 	sh := core.NewShared(cfg.App)
-	sh.Chrome = &core.Chrome{Output: cfg.Output}
+	sh.Chrome = &core.Chrome{Output: cfg.Output, Status: cfg.Status}
 	if cfg.Header != nil {
 		sh.Chrome.Header = core.NewHeaderPane(cfg.Header)
 	}

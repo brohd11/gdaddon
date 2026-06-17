@@ -8,6 +8,7 @@ import (
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 )
@@ -60,7 +61,7 @@ func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.As
 		return core.Action{}
 	}
 	onDismiss := func(sh *core.Shared) core.Action {
-		sh.SetStatus("")
+		sh.Chrome.Status.Clear()
 		return core.PopTo() // back to the addon submenu (its command hub)
 	}
 	return components.NewStayTask("archiving "+tag+"…", "done — esc to go back", run, onDone, onDismiss)

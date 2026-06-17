@@ -38,11 +38,26 @@ func (f *fakeOutput) View(bool) string       { return "OUT" }
 func (f *fakeOutput) Update(tea.Msg) tea.Cmd { return nil }
 func (f *fakeOutput) GotoBottom()            {}
 
+// fakeStatus is a minimal core.Status for exercising the router's status rendering and
+// auto-clear plumbing without importing components.
+type fakeStatus struct {
+	msg string
+	gen int
+}
+
+func (f *fakeStatus) Set(line string) { f.msg = line; f.gen++ }
+func (f *fakeStatus) Clear()          { f.msg = "" }
+func (f *fakeStatus) Shown() bool     { return f.msg != "" }
+func (f *fakeStatus) Height() int     { return 0 }
+func (f *fakeStatus) View() string    { return f.msg }
+func (f *fakeStatus) Gen() int        { return f.gen }
+
 func newCoreTestRouter() Router {
 	// nil App: stubScreen reads no context, so the router needs no domain dependency.
-	// Chrome carries only a fake output pane (no header) to exercise the output keys.
+	// Chrome carries fake output/status panes (no header) to exercise the output keys
+	// and the status rendering.
 	sh := NewShared(nil)
-	sh.Chrome = &Chrome{Output: &fakeOutput{}}
+	sh.Chrome = &Chrome{Output: &fakeOutput{}, Status: &fakeStatus{}}
 	return NewRouter(sh, []TabEntry{{Title: "Stub", New: func(*Shared) Screen { return stubScreen{} }}})
 }
 
@@ -152,7 +167,7 @@ func TestChromeMaskSuppressesChrome(t *testing.T) {
 	tm := sized(newCoreTestRouter())
 	r := tm.(Router)
 	r.sh.Log("hello") // reveal the output pane
-	r.sh.Chrome.Status = "working"
+	r.sh.Chrome.Status.Set("working")
 	if r.belowChrome(r.currentMask()) == "" {
 		t.Fatal("output/status should render under an unmasked screen")
 	}

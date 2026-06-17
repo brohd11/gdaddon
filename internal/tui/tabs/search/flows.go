@@ -7,6 +7,7 @@ import (
 
 	searchpkg "gdaddon/internal/search"
 	"gdaddon/internal/tui/flows/newplugin"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -142,7 +143,7 @@ func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchp
 		}
 		return core.Action{}, false
 	}
-	help := []key.Binding{core.Hint("page", core.Keys.PageNext, core.Keys.PagePrev)}
+	help := []key.Binding{core.Hint("results", core.Keys.PageNext, core.Keys.PagePrev)}
 	return components.NewPicker(items, components.PickerOpts{Title: title, OnKey: onKey, Help: help})
 }
 

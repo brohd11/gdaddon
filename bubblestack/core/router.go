@@ -2,11 +2,16 @@ package core
 
 import (
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// statusClearDelay is how long a status line stays up after the most recent write
+// before the router's auto-clear timer hides it.
+const statusClearDelay = 5 * time.Second
 
 // tabEntry is one top-level tab: a title for the strip and a constructor for its
 // root screen. The router builds the root lazily (NewRouter) and caches it, so the
@@ -32,6 +37,11 @@ type Router struct {
 	roots  []Screen // cached root per tab, built from tabs[i].New(sh)
 	active int      // index into tabs of the visible tab
 	stack  []Screen // live nav stack for the active tab; stack[0] == roots[active]
+
+	// statusGen is the status generation the router has already scheduled an
+	// auto-clear timer for; when the element's Gen advances past it (a fresh write),
+	// scheduleStatusClear arms a new timer keyed on the new generation.
+	statusGen int
 }
 
 func NewRouter(sh *Shared, tabs []TabEntry) Router {
@@ -56,6 +66,7 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		if act, handled := r.globalKey(key); handled {
 			r.apply(act, &cmds)
+			r.scheduleStatusClear(&cmds)
 			r.resize()
 			return r, tea.Batch(cmds...)
 		}
@@ -78,13 +89,15 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// path as an Action a screen returns from Update.
 	if act, ok := msg.(Action); ok {
 		r.apply(act, &cmds)
+		r.scheduleStatusClear(&cmds)
 		r.resize()
 		return r, tea.Batch(cmds...)
 	}
-	// A bare control message arriving via the queue (a screen's Init, a batch) is
-	// resolved the same way.
+	// A bare control message arriving via the queue (a screen's Init, a batch, the
+	// auto-clear tick) is resolved the same way.
 	if _, ok := msg.(ctrlMsg); ok {
 		r.resolveCtrl(msg, &cmds)
+		r.scheduleStatusClear(&cmds)
 		r.resize()
 		return r, tea.Batch(cmds...)
 	}
@@ -95,6 +108,7 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	s, act := r.Top().Update(r.sh, msg)
 	r.stack[len(r.stack)-1] = s
 	r.apply(act, &cmds)
+	r.scheduleStatusClear(&cmds)
 	// Re-lay-out after every message: cheap, and avoids chasing every spot that
 	// changes content height (help expansion, log growth, screen switches).
 	r.resize()
@@ -214,8 +228,40 @@ func (r *Router) applyCtrl(m tea.Msg, cmds *[]tea.Cmd) (follows []tea.Msg) {
 			r.roots[i] = r.tabs[i].New(r.sh)
 		}
 		r.stack[0] = r.roots[r.active]
+
+	case statusClearMsg:
+		// The auto-clear timer fired: clear the status only if its generation hasn't
+		// advanced since this tick was armed. A newer write bumped Gen past m.gen, so
+		// a stale tick is a no-op (the fresh message keeps its own later timer).
+		ch := r.sh.Chrome
+		if ch != nil && ch.Status != nil && ch.Status.Gen() == m.gen {
+			ch.Status.Clear()
+		}
 	}
 	return follows
+}
+
+// scheduleStatusClear arms the status auto-clear timer when a write has advanced the
+// status element's generation since the last one scheduled. It emits the tick through
+// the Action lane (Async) keyed on the new generation, so the firing statusClearMsg is
+// resolved on the control path like any other ctrlMsg. A cleared/empty status (Set("")
+// bumps Gen but isn't Shown) schedules nothing. No-op without a status element.
+func (r *Router) scheduleStatusClear(cmds *[]tea.Cmd) {
+	ch := r.sh.Chrome
+	if ch == nil || ch.Status == nil {
+		return
+	}
+	g := ch.Status.Gen()
+	if g == r.statusGen {
+		return
+	}
+	r.statusGen = g
+	if !ch.Status.Shown() {
+		return
+	}
+	r.apply(Async(tea.Tick(statusClearDelay, func(time.Time) tea.Msg {
+		return statusClearMsg{gen: g}
+	})), cmds)
 }
 
 // globalKey handles the keys available in any screen. It returns (act, true) when it
@@ -338,7 +384,9 @@ func (r *Router) clearOutput() {
 	if ch.Output != nil {
 		ch.Output.Clear()
 	}
-	ch.Status = ""
+	if ch.Status != nil {
+		ch.Status.Clear()
+	}
 	ch.outputFocused = false
 }
 
@@ -408,8 +456,8 @@ func (r Router) belowChrome(mask ChromeMask) string {
 		return ""
 	}
 	var parts []string
-	if !mask.Status && ch.Status != "" {
-		parts = append(parts, StatusStyle.Render(ch.Status))
+	if !mask.Status && ch.Status != nil && ch.Status.Shown() {
+		parts = append(parts, ch.Status.View())
 	}
 	if !mask.Output && r.outputVisible() {
 		parts = append(parts, ch.Output.View(ch.outputFocused))

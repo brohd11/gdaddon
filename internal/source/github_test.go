@@ -175,6 +175,29 @@ func TestRepoID(t *testing.T) {
 	}
 }
 
+func TestRepoURL(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/brohd11/godot-plugin-devtools.git":                                 "https://github.com/brohd11/godot-plugin-devtools",
+		"https://github.com/brohd11/godot-plugin-devtools":                                     "https://github.com/brohd11/godot-plugin-devtools",
+		"https://github.com/brohd11/godot-plugin-devtools/releases/download/0.2.1/p-0.2.1.zip": "https://github.com/brohd11/godot-plugin-devtools",
+		"https://github.com/brohd11/godot-plugin-devtools/archive/refs/heads/main.zip":         "https://github.com/brohd11/godot-plugin-devtools",
+		"https://codeberg.org/bramwell/cogito":                                                 "https://codeberg.org/bramwell/cogito",
+	}
+	for u, want := range cases {
+		got, err := RepoURL(u)
+		if err != nil {
+			t.Errorf("RepoURL(%q) error: %v", u, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("RepoURL(%q) = %q, want %q", u, got, want)
+		}
+	}
+	if _, err := RepoURL("https://github.com/onlyowner"); err == nil {
+		t.Error("expected error for url missing owner/repo")
+	}
+}
+
 // TestLiveAvailableVersions hits the real GitHub + Codeberg APIs. Run with GDUTIL_LIVE=1.
 func TestLiveAvailableVersions(t *testing.T) {
 	if os.Getenv("GDUTIL_LIVE") == "" {

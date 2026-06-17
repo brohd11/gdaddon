@@ -22,6 +22,30 @@ func GlobalListPath() (string, error) {
 	return filepath.Join(home, ".gdaddon", "plugins.yml"), nil
 }
 
+// InGlobalList reports whether the global plugin list already has an entry for
+// the same repo as url (matched by source.RepoID, so .git vs release-zip forms
+// collapse). A missing/unparseable list or url reads as "not present".
+func InGlobalList(url string) bool {
+	globalPath, err := GlobalListPath()
+	if err != nil {
+		return false
+	}
+	id, err := source.RepoID(url)
+	if err != nil {
+		return false
+	}
+	entries, err := Parse(globalPath)
+	if err != nil { // includes file-not-exist → empty list
+		return false
+	}
+	for _, e := range entries {
+		if eid, err := source.RepoID(e.URL); err == nil && eid == id {
+			return true
+		}
+	}
+	return false
+}
+
 // DeriveName extracts a plugin name from a repo URL: the last path segment with
 // any .git/.zip suffix stripped (e.g. github.com/u/Foo.git → "Foo"). Falls back
 // to "plugin" if nothing usable is found.
@@ -112,10 +136,15 @@ func AddEntry(manifestPath, name, url, path string) error {
 		b.WriteString(trimmed)
 		b.WriteString("\n\n")
 	}
-	b.WriteString(name + ":\n")
-	b.WriteString("    url: " + url + "\n")
+	b.WriteString(name)
+	b.WriteString(":\n")
+	b.WriteString("    url: ")
+	b.WriteString(url)
+	b.WriteString("\n")
 	if path != "" {
-		b.WriteString("    path: " + path + "\n")
+		b.WriteString("    path: ")
+		b.WriteString(path)
+		b.WriteString("\n")
 	}
 
 	return os.WriteFile(manifestPath, []byte(b.String()), 0o644)

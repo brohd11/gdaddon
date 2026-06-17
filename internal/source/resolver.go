@@ -109,6 +109,18 @@ func RepoID(rawURL string) (string, error) {
 	return strings.ToLower(ref.Host + "/" + ref.Owner + "/" + ref.Repo), nil
 }
 
+// RepoURL strips any standard git-host URL (a .git clone URL, a release-download
+// asset, an archive/refs URL, …) down to its canonical repo-level form
+// "https://<host>/<owner>/<repo>". Used to record a clean, version-agnostic url in
+// the global list instead of the project entry's pinned release/archive url.
+func RepoURL(rawURL string) (string, error) {
+	ref, err := parseRepoURL(rawURL)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("https://%s/%s/%s", ref.Host, ref.Owner, ref.Repo), nil
+}
+
 // vars builds the placeholder set for a vcs rule's URL templates.
 func vars(owner, repo, tag, branch string) map[string]string {
 	return map[string]string{"owner": owner, "repo": repo, "tag": tag, "branch": branch}

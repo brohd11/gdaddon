@@ -2,6 +2,9 @@ package project
 
 import (
 	"gdaddon/internal/addon"
+	"gdaddon/internal/source"
+	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -29,6 +32,13 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st)) },
 		})
 	}
+	if a.URL != "" && !addon.InGlobalList(a.URL) {
+		items = append(items, components.Item{
+			Name: "⬆ Export to Global",
+			Desc: "add this plugin to your global library (~/.gdaddon)",
+			Pick: func(sh *core.Shared) core.Action { return exportToGlobal(sh, a) },
+		})
+	}
 	items = append(items, components.Item{
 		Name: "✗ Remove",
 		Desc: "remove from the project (and optionally delete files)",
@@ -39,4 +49,29 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 		Title:   core.HeaderTitle(a.Name, local, ""),
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 	})
+}
+
+// exportToGlobal copies the project addon into the global list, stripping the
+// (often release/archive-pinned) url down to its canonical repo url and dropping
+// the project-relative path — global entries are url-only. It then broadcasts
+// GlobalDirty (Focus false → the Global list reloads silently without leaving the
+// Project tab) and pops the submenu back. The row that triggers this is only shown
+// when the repo isn't already in the global list (addon.InGlobalList).
+func exportToGlobal(sh *core.Shared, a addon.Addon) core.Action {
+	url := a.URL
+	if stripped, err := source.RepoURL(a.URL); err == nil {
+		url = stripped
+	}
+	globalPath, err := addon.GlobalListPath()
+	if err == nil {
+		err = addon.AddEntry(globalPath, a.Name, url, "")
+	}
+	if err != nil {
+		sh.SetStatus("error: " + err.Error())
+		return core.ResetToRoot()
+	}
+	return core.Seq(
+		core.PropagateAll(appctx.GlobalDirty{Status: "added " + a.Name + " to global list", Focus: false}),
+		core.Pop(),
+	)
 }

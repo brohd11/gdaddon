@@ -21,6 +21,7 @@ func Run(manifestPath, projectRoot string) error {
 		App:    appctx.New(manifestPath, projectRoot),
 		Header: appctx.Header,
 		Output: components.NewLogPane(),
+		Status: components.NewStatusLine(),
 		Theme:  "mono",
 		Tabs: []bubblestack.TabEntry{
 			{Title: appctx.TitleProject, New: func(sh *bubblestack.Shared) bubblestack.Screen { return project.NewProjectScreen(sh) }},
