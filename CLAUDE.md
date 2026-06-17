@@ -64,7 +64,7 @@ internal/
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin)
-bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd/bubblestack, replace => ./bubblestack); imports no gdaddon package
+bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd11/bubblestack, replace => ./bubblestack); imports no gdaddon package
   core/              — Shared state (consumer context behind App any, recovered via App[T]; Header closure), Router over a screen stack, nav commands (Push/Pop/Replace/ResetToRoot/Refresh), Screen + optional interfaces, router messages (MsgRefresh with opaque Target, streaming TaskEvent with opaque Payload), list/help/style helpers
   components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen, FormScreen) — they name no domain type
 ```

@@ -3,7 +3,7 @@ module gdaddon
 go 1.26.3
 
 require (
-	github.com/brohd/bubblestack v0.0.0-00010101000000-000000000000
+	github.com/brohd11/bubblestack v0.0.0-00010101000000-000000000000
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
@@ -14,7 +14,7 @@ require (
 
 // bubblestack is the reusable TUI framework (core + components), developed in-tree.
 // Local replace keeps gdaddon building against the working copy until it's published.
-replace github.com/brohd/bubblestack => ./bubblestack
+replace github.com/brohd11/bubblestack => ./bubblestack
 
 require (
 	github.com/atotto/clipboard v0.1.4 // indirect

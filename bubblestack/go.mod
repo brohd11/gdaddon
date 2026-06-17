@@ -1,4 +1,4 @@
-module github.com/brohd/bubblestack
+module github.com/brohd11/bubblestack
 
 go 1.26.3
 
