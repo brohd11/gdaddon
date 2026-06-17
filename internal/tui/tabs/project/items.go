@@ -10,7 +10,6 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ---------- browse rows ----------
@@ -42,9 +41,9 @@ func addonDesc(s addon.Status) string {
 // addonItem builds one browse row. A non-installable addon gets a nil Pick (an
 // inert row), which replaces the old Installable() gate in the screen's Update.
 func addonItem(s addon.Status) components.Item {
-	var pick func(*core.Shared) (tea.Msg, tea.Cmd)
+	var pick func(*core.Shared) core.Action
 	if s.Installable() {
-		pick = func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newSubmenuScreen(s)), nil }
+		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s)) }
 	}
 	return components.Item{Name: s.Addon.Name, Desc: addonDesc(s), Pick: pick}
 }

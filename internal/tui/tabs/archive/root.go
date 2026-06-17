@@ -37,7 +37,7 @@ func repoItems() []list.Item {
 		items = append(items, components.Item{
 			Name: repo.ID,
 			Desc: fmt.Sprintf("%d version(s)", len(repo.Releases)),
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newVersionsPicker(repo)), nil },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newVersionsPicker(repo)) },
 		})
 	}
 	if len(items) == 0 {
@@ -53,9 +53,8 @@ func (s *ArchiveScreen) Init(*core.Shared) tea.Cmd { return nil }
 
 func (s *ArchiveScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
-	m, c := components.RootUpdate(sh, &s.list, msg)
-	return s, m, c
+func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
 func (s *ArchiveScreen) View(*core.Shared) string     { return s.list.View() }
@@ -65,17 +64,17 @@ func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.
 // removal), so the tab reflects the change. A removal in this tab is focused; a removal
 // triggered as a side effect of a global remove is not (Focus false), so the Archive
 // tab reloads silently while focus stays on the Global tab.
-func (s *ArchiveScreen) Receive(sh *core.Shared, payload any) tea.Msg {
+func (s *ArchiveScreen) Receive(sh *core.Shared, payload any) core.Action {
 	d, ok := payload.(appctx.ArchiveDirty)
 	if !ok {
-		return nil
+		return core.Action{}
 	}
 	sh.SetStatus(d.Status)
 	s.list.SetItems(repoItems())
 	if d.Focus {
 		return core.ShowTab(appctx.TitleArchive)
 	}
-	return nil
+	return core.Action{}
 }
 
 func (s *ArchiveScreen) SetSize(sh *core.Shared, width, bodyHeight int) {

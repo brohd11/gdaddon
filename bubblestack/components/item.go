@@ -2,8 +2,6 @@ package components
 
 import (
 	"github.com/brohd11/bubblestack/core"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Item is a self-dispatching list row: instead of a domain-specific item type +
@@ -16,8 +14,8 @@ import (
 // placeholder); Keys is optional per-row key handling.
 type Item struct {
 	Name, Desc, Filter string
-	Pick               func(*core.Shared) (tea.Msg, tea.Cmd) // (sync control msg, async cmd)
-	Keys               func(*core.Shared, string) (tea.Msg, tea.Cmd, bool)
+	Pick               func(*core.Shared) core.Action // sync control msg and/or async cmd
+	Keys               func(*core.Shared, string) (core.Action, bool)
 }
 
 func (i Item) Title() string       { return i.Name }

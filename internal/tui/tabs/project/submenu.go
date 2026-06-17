@@ -6,7 +6,6 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // newSubmenuScreen builds the per-addon command submenu (the screen reached by
@@ -20,20 +19,20 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 		components.Item{
 			Name: "↧ Install / update",
 			Desc: "pick a version, branch, or asset to install",
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newReleasesLoading(a, local)), nil },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newReleasesLoading(a, local)) },
 		},
 	}
 	if st.Present() {
 		items = append(items, components.Item{
 			Name: "📦 Archive",
 			Desc: "save a local copy of this addon",
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newArchiveSubmenu(st)), nil },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st)) },
 		})
 	}
 	items = append(items, components.Item{
 		Name: "✗ Remove",
 		Desc: "remove from the project (and optionally delete files)",
-		Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newRemoveConfirm(st)), nil },
+		Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(st)) },
 	})
 
 	return components.NewPicker(items, components.PickerOpts{

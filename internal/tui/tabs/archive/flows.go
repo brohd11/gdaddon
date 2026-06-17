@@ -11,7 +11,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 var removeConfirmHelp = []key.Binding{
@@ -29,11 +28,11 @@ func newVersionsPicker(repo arch.RepoArchive) *components.PickerScreen {
 		items = append(items, components.Item{
 			Name: rel.Tag,
 			Desc: fmt.Sprintf("%d asset(s)", len(rel.Assets)),
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
+			Pick: func(sh *core.Shared) core.Action {
 				if len(rel.Assets) == 1 {
-					return core.Push(newPackageSubmenu(repo.ID, rel.Assets[0])), nil
+					return core.Push(newPackageSubmenu(repo.ID, rel.Assets[0]))
 				}
-				return core.Push(newAssetPicker(repo.ID, rel)), nil
+				return core.Push(newAssetPicker(repo.ID, rel))
 			},
 		})
 	}
@@ -48,7 +47,7 @@ func newAssetPicker(repoID string, rel source.Release) *components.PickerScreen 
 		a := a
 		items = append(items, components.Item{
 			Name: a.Name,
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newPackageSubmenu(repoID, a)), nil },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newPackageSubmenu(repoID, a)) },
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: repoID + " — " + rel.Tag})
@@ -61,7 +60,7 @@ func newPackageSubmenu(repoID string, asset source.Asset) *components.PickerScre
 		components.Item{
 			Name: "✗ Remove from archive",
 			Desc: "delete this archived package",
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newRemoveConfirm(repoID, asset)), nil },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(repoID, asset)) },
 		},
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: repoID})
@@ -74,12 +73,12 @@ func newRemoveConfirm(repoID string, asset source.Asset) *components.ConfirmScre
 		Render: func(sh *core.Shared) string {
 			return sh.Box(fmt.Sprintf("Remove from archive\n\n  %s\n\n  %s", asset.Name, asset.URL))
 		},
-		OnYes: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
+		OnYes: func(sh *core.Shared) core.Action {
 			if err := arch.Remove(asset.URL); err != nil {
 				sh.SetStatus("error: " + err.Error())
-				return core.ResetToRoot(), nil
+				return core.ResetToRoot()
 			}
-			return core.PropagateAll(appctx.ArchiveDirty{Status: "removed " + asset.Name, Focus: true}), nil
+			return core.PropagateAll(appctx.ArchiveDirty{Status: "removed " + asset.Name, Focus: true})
 		},
 		Help: removeConfirmHelp,
 	}

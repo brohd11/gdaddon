@@ -16,8 +16,8 @@ import (
 type stubRoot struct{}
 
 func (stubRoot) Init(*core.Shared) tea.Cmd { return nil }
-func (stubRoot) Update(*core.Shared, tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
-	return stubRoot{}, nil, nil
+func (stubRoot) Update(*core.Shared, tea.Msg) (core.Screen, core.Action) {
+	return stubRoot{}, core.Action{}
 }
 func (stubRoot) View(*core.Shared) string       { return "" }
 func (stubRoot) HelpView(*core.Shared) string   { return "" }

@@ -32,8 +32,8 @@ func searchItems() []list.Item {
 		components.Item{
 			Name: "⌕ New search",
 			Desc: "search a Godot asset source for an addon to add",
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
-				return core.Push(newQueryScreen(defaultSource(), detectGodotVersion(appctx.Of(sh).ProjectRoot))), nil
+			Pick: func(sh *core.Shared) core.Action {
+				return core.Push(newQueryScreen(defaultSource(), detectGodotVersion(appctx.Of(sh).ProjectRoot)))
 			},
 		},
 	}
@@ -46,9 +46,8 @@ func (s *SearchScreen) Init(*core.Shared) tea.Cmd { return nil }
 
 func (s *SearchScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *SearchScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
-	m, c := components.RootUpdate(sh, &s.list, msg)
-	return s, m, c
+func (s *SearchScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
 func (s *SearchScreen) View(*core.Shared) string     { return s.list.View() }

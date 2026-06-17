@@ -15,11 +15,11 @@ import (
 type LoadingScreen struct {
 	Title    string
 	label    string
-	cmd      tea.Cmd                                        // the fetch command, run on Init
-	onResult func(*core.Shared, tea.Msg) (tea.Msg, tea.Cmd) // caller's result handler; (nil, nil) ⇒ ignore msg
+	cmd      tea.Cmd                                 // the fetch command, run on Init
+	onResult func(*core.Shared, tea.Msg) core.Action // caller's result handler; the zero Action ⇒ ignore msg
 }
 
-func NewLoadingScreen(Title, label string, cmd tea.Cmd, onResult func(*core.Shared, tea.Msg) (tea.Msg, tea.Cmd)) *LoadingScreen {
+func NewLoadingScreen(Title, label string, cmd tea.Cmd, onResult func(*core.Shared, tea.Msg) core.Action) *LoadingScreen {
 	return &LoadingScreen{Title: Title, label: label, cmd: cmd, onResult: onResult}
 }
 
@@ -27,9 +27,8 @@ func (s *LoadingScreen) Init(sh *core.Shared) tea.Cmd {
 	return tea.Batch(sh.Spinner.Tick, s.cmd)
 }
 
-func (s *LoadingScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
-	m, c := s.onResult(sh, msg)
-	return s, m, c
+func (s *LoadingScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	return s, s.onResult(sh, msg)
 }
 
 func (s *LoadingScreen) View(sh *core.Shared) string {

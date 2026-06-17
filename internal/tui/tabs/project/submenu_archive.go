@@ -9,7 +9,6 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // newArchiveSubmenu builds the Archive command submenu for an installed addon.
@@ -20,7 +19,7 @@ func newArchiveSubmenu(st addon.Status) *components.PickerScreen {
 		components.Item{
 			Name: "Current Version - " + st.LocalVersion,
 			Desc: "save a local copy of the installed version",
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return archiveCurrentVersion(sh, st) },
+			Pick: func(sh *core.Shared) core.Action { return archiveCurrentVersion(sh, st) },
 		},
 	}
 	return components.NewPicker(items, components.PickerOpts{
@@ -32,10 +31,10 @@ func newArchiveSubmenu(st addon.Status) *components.PickerScreen {
 // url + local version through the shared archive confirm (download + store under
 // repo/version). It reuses buildArchiveConfirm so the confirm body, repoID
 // resolution, already-archived check, and task wiring stay in one place.
-func archiveCurrentVersion(sh *core.Shared, st addon.Status) (tea.Msg, tea.Cmd) {
+func archiveCurrentVersion(sh *core.Shared, st addon.Status) core.Action {
 	if st.LocalVersion == "" {
 		sh.SetStatus("cannot archive: installed version unknown")
-		return nil, nil
+		return core.Action{}
 	}
 	asset := source.Asset{Name: archiveAssetName(st.Addon.URL), URL: st.Addon.URL}
 	sel := versionItem{tag: st.LocalVersion, asset: asset}
@@ -44,9 +43,9 @@ func archiveCurrentVersion(sh *core.Shared, st addon.Status) (tea.Msg, tea.Cmd) 
 		sh.SetStatus(status)
 	}
 	if !ok {
-		return nil, nil
+		return core.Action{}
 	}
-	return core.Push(cs), nil
+	return core.Push(cs)
 }
 
 // archiveAssetName derives a stored filename from the manifest url (e.g.

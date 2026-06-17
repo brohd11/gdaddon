@@ -8,7 +8,6 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -32,7 +31,7 @@ func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
 	return &components.ConfirmScreen{
 		Crumb:  core.RenderTitleBar(g.name + " — Remove"),
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, g, mode)) },
-		OnKey: func(sh *core.Shared, k string) (tea.Msg, tea.Cmd) {
+		OnKey: func(sh *core.Shared, k string) core.Action {
 			switch {
 			case core.MatchKey(k, core.Keys.Up):
 				if mode > removeGlobal {
@@ -43,9 +42,9 @@ func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
 					mode++
 				}
 			}
-			return nil, nil
+			return core.Action{}
 		},
-		OnYes: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return commitRemove(sh, g, mode) },
+		OnYes: func(sh *core.Shared) core.Action { return commitRemove(sh, g, mode) },
 		Help:  removeConfirmHelp,
 	}
 }

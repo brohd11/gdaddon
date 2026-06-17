@@ -24,9 +24,8 @@ func (s *ActionsScreen) Init(*core.Shared) tea.Cmd { return nil }
 
 func (s *ActionsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
-	m, c := components.RootUpdate(sh, &s.list, msg)
-	return s, m, c
+func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
 func (s *ActionsScreen) View(*core.Shared) string     { return s.list.View() }

@@ -5,7 +5,6 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // newThemePicker lists the registered themes; selecting one applies it live via
@@ -24,7 +23,7 @@ func newThemePicker() core.Screen {
 		items = append(items, components.Item{
 			Name: name,
 			Desc: desc,
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.ApplyTheme(name), nil },
+			Pick: func(sh *core.Shared) core.Action { return core.ApplyTheme(name) },
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: "Theme"})

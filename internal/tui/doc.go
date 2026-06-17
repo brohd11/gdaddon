@@ -15,14 +15,15 @@
 //	             spinner/help/task channel, and the optional *Chrome — header closure,
 //	             status line, and pluggable Output pane, each independently toggleable
 //	             and gateable per-screen), the Router (tea.Model) over a screen stack,
-//	             navigation commands that return a tea.Msg (Push/Pop/Replace/ResetToRoot/
-//	             ShowTab, plus Seq to issue several at once), the Screen
+//	             navigation commands that return a core.Action (Push/Pop/Replace/
+//	             ResetToRoot/ShowTab, plus Seq to issue several at once), the Screen
 //	             interface plus the optional interfaces the router type-asserts
 //	             (Filterer, Receiver, PopStopper, ChromeMasker — a screen suppresses
 //	             chrome elements while on top, e.g. FullscreenMask). A Screen's Update
-//	             returns (Screen, tea.Msg, tea.Cmd): the middle tea.Msg is a control
-//	             message the router applies to the stack synchronously this same tick
-//	             (no command round-trip), the tea.Cmd is genuine async work for bubbletea.
+//	             returns (Screen, core.Action): the Action bundles a control message
+//	             the router applies to the stack synchronously this same tick (no command
+//	             round-trip) and a genuine async tea.Cmd for bubbletea (Async wraps a
+//	             cmd-only Action; the zero Action does nothing).
 //	             Router-handled messages include the PropagateAll broadcast — one message
 //	             whose opaque payload the router only routes to every Receiver, never
 //	             interprets —, MsgThemeChanged, and the streaming TaskEvent with an opaque
@@ -59,7 +60,7 @@
 // # Self-dispatching list rows (components.Item)
 //
 // Lists are built from components.Item values, each carrying its own Pick closure
-// (and optional Keys). Pick returns (tea.Msg, tea.Cmd): a control message the router
+// (and optional Keys). Pick returns a core.Action: a control message the router
 // applies synchronously (e.g. core.Push) and/or an async cmd. On enter a PickerScreen
 // runs the selected row's Pick, so a menu of mixed commands needs no per-row kind enum,
 // no switch, and — for a pushed screen — no Update method at all: building the rows is

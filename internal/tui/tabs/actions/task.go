@@ -5,8 +5,6 @@ import (
 	"gdaddon/internal/tui/appctx"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // newInstallAllTask runs a batch install of everything in the manifest, then lands
@@ -22,8 +20,8 @@ func newInstallAllTask() *components.TaskScreen {
 		}
 		done <- core.TaskEvent{Done: true}
 	}
-	onDone := func(sh *core.Shared, ev core.TaskEvent) (tea.Msg, tea.Cmd) {
-		return core.PropagateAll(appctx.ProjectDirty{Status: "install complete", Focus: true}), nil
+	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
+		return core.PropagateAll(appctx.ProjectDirty{Status: "install complete", Focus: true})
 	}
 	return components.NewTask("installing all addons…", run, onDone)
 }

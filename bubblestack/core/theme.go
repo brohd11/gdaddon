@@ -3,7 +3,6 @@ package core
 import (
 	"sort"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -59,11 +58,11 @@ func SetTheme(name string) bool {
 func CurrentTheme() string { return current.Name }
 
 // ApplyTheme is the in-TUI form of SetTheme: it switches the theme (synchronously) and
-// returns MsgThemeChanged so the router rebuilds the cached tab roots with the new
-// palette. A picker's row returns this control message on select.
-func ApplyTheme(name string) tea.Msg {
+// returns an Action carrying MsgThemeChanged so the router rebuilds the cached tab roots
+// with the new palette. A picker's row returns this Action on select.
+func ApplyTheme(name string) Action {
 	SetTheme(name)
-	return MsgThemeChanged{}
+	return Action{Msg: MsgThemeChanged{}}
 }
 
 // ThemeNames returns the registered preset names, sorted, for a picker/listing.

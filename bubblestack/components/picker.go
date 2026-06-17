@@ -18,8 +18,8 @@ import (
 // back to it.
 type PickerScreen struct {
 	list     list.Model
-	OnSelect func(*core.Shared, list.Item) (tea.Msg, tea.Cmd)
-	OnKey    func(*core.Shared, string, list.Item) (tea.Msg, tea.Cmd, bool)
+	OnSelect func(*core.Shared, list.Item) core.Action
+	OnKey    func(*core.Shared, string, list.Item) (core.Action, bool)
 	popStop  bool
 }
 
@@ -29,8 +29,8 @@ type PickerScreen struct {
 type PickerOpts struct {
 	Title    string
 	Help     []key.Binding // extra help/hint bindings shown in the list help
-	OnSelect func(*core.Shared, list.Item) (tea.Msg, tea.Cmd)
-	OnKey    func(*core.Shared, string, list.Item) (tea.Msg, tea.Cmd, bool)
+	OnSelect func(*core.Shared, list.Item) core.Action
+	OnKey    func(*core.Shared, string, list.Item) (core.Action, bool)
 	PopStop  bool // mark this picker as a PopTo boundary (a command hub)
 }
 
@@ -52,43 +52,41 @@ func (s *PickerScreen) Init(*core.Shared) tea.Cmd { return nil }
 
 func (s *PickerScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *PickerScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
+func (s *PickerScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
 	if s.Filtering() {
 		var cmd tea.Cmd
 		s.list, cmd = s.list.Update(msg)
-		return s, nil, cmd
+		return s, core.Async(cmd)
 	}
 	if key, ok := msg.(tea.KeyMsg); ok {
 		k := key.String()
 		switch {
 		case core.MatchKey(k, core.Keys.Back), core.MatchKey(k, core.Keys.Quit):
-			return s, core.Pop(), nil
+			return s, core.Pop()
 		case core.MatchKey(k, core.Keys.Select):
 			if s.OnSelect != nil {
-				m, c := s.OnSelect(sh, s.list.SelectedItem())
-				return s, m, c
+				return s, s.OnSelect(sh, s.list.SelectedItem())
 			}
 			// No screen-level handler: let a self-dispatching Item pick itself.
 			if it, ok := s.list.SelectedItem().(Item); ok && it.Pick != nil {
-				m, c := it.Pick(sh)
-				return s, m, c
+				return s, it.Pick(sh)
 			}
-			return s, nil, nil
+			return s, core.Action{}
 		default:
 			if s.OnKey != nil {
-				if m, c, handled := s.OnKey(sh, k, s.list.SelectedItem()); handled {
-					return s, m, c
+				if act, handled := s.OnKey(sh, k, s.list.SelectedItem()); handled {
+					return s, act
 				}
 			} else if it, ok := s.list.SelectedItem().(Item); ok && it.Keys != nil {
-				if m, c, handled := it.Keys(sh, k); handled {
-					return s, m, c
+				if act, handled := it.Keys(sh, k); handled {
+					return s, act
 				}
 			}
 		}
 	}
 	var cmd tea.Cmd
 	s.list, cmd = s.list.Update(msg)
-	return s, nil, cmd
+	return s, core.Async(cmd)
 }
 
 func (s *PickerScreen) View(*core.Shared) string     { return s.list.View() }

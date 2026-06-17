@@ -40,7 +40,7 @@ func newQueryScreen(src searchpkg.Source, godotVer string) *components.FormScree
 	cur := src
 	source := components.NewPickField("source", "Source:  ",
 		func() string { return cur.Name() },
-		func(sh *core.Shared) (tea.Msg, tea.Cmd, bool) { return core.Push(newSourcePicker(&cur)), nil, true })
+		func(sh *core.Shared) (core.Action, bool) { return core.Push(newSourcePicker(&cur)), true })
 	query := components.NewTextField("query", "Query:   ", "search terms (e.g. dialogue)")
 
 	return components.NewForm(components.FormOpts{
@@ -59,12 +59,12 @@ func newQueryScreen(src searchpkg.Source, godotVer string) *components.FormScree
 			core.Hint("go", core.Keys.Select),
 			core.Hint("cancel", core.Keys.Back),
 		},
-		OnSubmit: func(sh *core.Shared, f *components.FormScreen) (tea.Msg, tea.Cmd) {
+		OnSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
 			q := strings.TrimSpace(f.Value("query"))
 			if q == "" {
-				return nil, nil
+				return core.Action{}
 			}
-			return core.Push(newSearchLoading(cur, q, godotVer, 0)), nil
+			return core.Push(newSearchLoading(cur, q, godotVer, 0))
 		},
 	})
 }
@@ -81,7 +81,7 @@ func newSourcePicker(dst *searchpkg.Source) *components.PickerScreen {
 		src := src
 		items = append(items, components.Item{
 			Name: src.Name(),
-			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { *dst = src; return core.Pop(), nil },
+			Pick: func(sh *core.Shared) core.Action { *dst = src; return core.Pop() },
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: "Select source"})
@@ -94,20 +94,20 @@ func newSearchLoading(src searchpkg.Source, query, godotVer string, page int) *c
 		res, err := src.Search(context.Background(), query, godotVer, page)
 		return searchResultMsg{res: res, err: err}
 	}
-	onResult := func(sh *core.Shared, msg tea.Msg) (tea.Msg, tea.Cmd) {
+	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
 		m, ok := msg.(searchResultMsg)
 		if !ok {
-			return nil, nil
+			return core.Action{}
 		}
 		if m.err != nil {
 			sh.SetStatus("error: " + m.err.Error())
-			return core.Pop(), nil
+			return core.Pop()
 		}
 		if len(m.res.Results) == 0 {
 			sh.SetStatus(fmt.Sprintf("no results for %q", query))
-			return core.Pop(), nil
+			return core.Pop()
 		}
-		return core.Replace(newResultsPicker(src, query, godotVer, m.res)), nil
+		return core.Replace(newResultsPicker(src, query, godotVer, m.res))
 	}
 	return components.NewLoadingScreen(src.Name(), "searching…", cmd, onResult)
 }
@@ -122,25 +122,25 @@ func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchp
 			Name:   r.Title,
 			Desc:   resultDesc(r),
 			Filter: r.Title + " " + r.Author,
-			Pick:   func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newDetailLoading(src, r.ID)), nil },
+			Pick:   func(sh *core.Shared) core.Action { return core.Push(newDetailLoading(src, r.ID)) },
 		})
 	}
 	title := fmt.Sprintf("%s · page %d/%d · %d results", src.Name(), res.Page+1, res.Pages, res.TotalItems)
 
-	onKey := func(sh *core.Shared, k string, _ list.Item) (tea.Msg, tea.Cmd, bool) {
+	onKey := func(sh *core.Shared, k string, _ list.Item) (core.Action, bool) {
 		switch {
 		case core.MatchKey(k, core.Keys.PageNext):
 			if res.Page+1 < res.Pages {
-				return core.Replace(newSearchLoading(src, query, godotVer, res.Page+1)), nil, true
+				return core.Replace(newSearchLoading(src, query, godotVer, res.Page+1)), true
 			}
-			return nil, nil, true
+			return core.Action{}, true
 		case core.MatchKey(k, core.Keys.PagePrev):
 			if res.Page > 0 {
-				return core.Replace(newSearchLoading(src, query, godotVer, res.Page-1)), nil, true
+				return core.Replace(newSearchLoading(src, query, godotVer, res.Page-1)), true
 			}
-			return nil, nil, true
+			return core.Action{}, true
 		}
-		return nil, nil, false
+		return core.Action{}, false
 	}
 	help := []key.Binding{core.Hint("page", core.Keys.PageNext, core.Keys.PagePrev)}
 	return components.NewPicker(items, components.PickerOpts{Title: title, OnKey: onKey, Help: help})
@@ -172,20 +172,20 @@ func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen
 		d, err := src.Detail(context.Background(), id)
 		return detailMsg{detail: d, err: err}
 	}
-	onResult := func(sh *core.Shared, msg tea.Msg) (tea.Msg, tea.Cmd) {
+	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
 		m, ok := msg.(detailMsg)
 		if !ok {
-			return nil, nil
+			return core.Action{}
 		}
 		if m.err != nil {
 			sh.SetStatus("error: " + m.err.Error())
-			return core.Pop(), nil
+			return core.Pop()
 		}
 		if m.detail.BrowseURL == "" {
 			sh.SetStatus("asset has no repository url")
-			return core.Pop(), nil
+			return core.Pop()
 		}
-		return core.Replace(newplugin.NewWithURL(m.detail.BrowseURL)), nil
+		return core.Replace(newplugin.NewWithURL(m.detail.BrowseURL))
 	}
 	return components.NewLoadingScreen("Asset", "fetching asset…", cmd, onResult)
 }

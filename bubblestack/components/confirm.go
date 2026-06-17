@@ -17,31 +17,29 @@ import (
 type ConfirmScreen struct {
 	Crumb  string
 	Render func(*core.Shared) string
-	OnYes  func(*core.Shared) (tea.Msg, tea.Cmd)
-	OnKey  func(*core.Shared, string) (tea.Msg, tea.Cmd) // handles keys other than the reserved confirm/cancel keys
+	OnYes  func(*core.Shared) core.Action
+	OnKey  func(*core.Shared, string) core.Action // handles keys other than the reserved confirm/cancel keys
 	Help   []key.Binding
 }
 
 func (s *ConfirmScreen) Init(*core.Shared) tea.Cmd { return nil }
 
-func (s *ConfirmScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
+func (s *ConfirmScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
-		return s, nil, nil
+		return s, core.Action{}
 	}
 	k := key.String()
 	switch {
 	case core.MatchKey(k, core.Keys.Yes):
-		m, c := s.OnYes(sh)
-		return s, m, c
+		return s, s.OnYes(sh)
 	case core.MatchKey(k, core.Keys.No):
-		return s, core.Pop(), nil
+		return s, core.Pop()
 	}
 	if s.OnKey != nil {
-		m, c := s.OnKey(sh, k)
-		return s, m, c
+		return s, s.OnKey(sh, k)
 	}
-	return s, nil, nil
+	return s, core.Action{}
 }
 
 func (s *ConfirmScreen) View(sh *core.Shared) string {

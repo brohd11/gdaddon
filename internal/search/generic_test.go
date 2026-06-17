@@ -81,7 +81,7 @@ func TestConfigSourceValidate(t *testing.T) {
 	bad := []config.SourceConfig{
 		{Name: "", Type: "json"},
 		{Name: "x", Type: "html"},
-		{Name: "x", Type: "json", Search: &config.SearchRule{URL: "u"}},                    // missing results_path
+		{Name: "x", Type: "json", Search: &config.SearchRule{URL: "u"}},                   // missing results_path
 		{Name: "x", Type: "json", Search: &config.SearchRule{URL: "u", ResultsPath: "r"}}, // missing detail
 	}
 	for i, c := range bad {

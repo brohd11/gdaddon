@@ -69,17 +69,17 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 // commitRemove removes the addon from the project: the installed files too when
 // the chosen mode is "project + local", then the manifest entry. On success it
 // broadcasts ProjectDirty, which reloads the browse list from the manifest and focuses it.
-func commitRemove(sh *core.Shared, st addon.Status, mode int) (tea.Msg, tea.Cmd) {
+func commitRemove(sh *core.Shared, st addon.Status, mode int) core.Action {
 	c := appctx.Of(sh)
 	if mode == removeProjectLocal {
 		if err := addon.Uninstall(st.Addon, c.ProjectRoot); err != nil {
 			sh.SetStatus("error: " + err.Error())
-			return core.ResetToRoot(), nil
+			return core.ResetToRoot()
 		}
 	}
 	if err := addon.RemoveEntry(c.ManifestPath, st.Addon.Name); err != nil {
 		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot(), nil
+		return core.ResetToRoot()
 	}
-	return core.PropagateAll(appctx.ProjectDirty{Status: "removed " + st.Addon.Name, Focus: true}), nil
+	return core.PropagateAll(appctx.ProjectDirty{Status: "removed " + st.Addon.Name, Focus: true})
 }

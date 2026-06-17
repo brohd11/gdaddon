@@ -55,29 +55,29 @@ func QueryUpdate(s Typable, msg tea.Msg) (tea.Cmd, bool) {
 // the list is filtering, keys go to the list; otherwise Quit quits and Select runs
 // the highlighted Item's Pick closure (clearing the status line first). Any other
 // key or message falls through to the list. A tab root's Update is then just
-// `m, c := components.RootUpdate(sh, &s.list, msg); return s, m, c`; roots that also
-// react to broadcast notifications keep doing so via core.Receiver.Receive, which the
-// router routes separately from Update. Returns the (sync control msg, async cmd) pair.
-func RootUpdate(sh *core.Shared, l *list.Model, msg tea.Msg) (tea.Msg, tea.Cmd) {
+// `return s, components.RootUpdate(sh, &s.list, msg)`; roots that also react to
+// broadcast notifications keep doing so via core.Receiver.Receive, which the router
+// routes separately from Update. Returns the screen's Action.
+func RootUpdate(sh *core.Shared, l *list.Model, msg tea.Msg) core.Action {
 	if l.FilterState() == list.Filtering {
 		var cmd tea.Cmd
 		*l, cmd = l.Update(msg)
-		return nil, cmd
+		return core.Async(cmd)
 	}
 	if key, ok := msg.(tea.KeyMsg); ok {
 		k := key.String()
 		switch {
 		case core.MatchKey(k, core.Keys.Quit):
-			return nil, tea.Quit
+			return core.Async(tea.Quit)
 		case core.MatchKey(k, core.Keys.Select):
 			if it, ok := l.SelectedItem().(Item); ok && it.Pick != nil {
 				sh.SetStatus("")
 				return it.Pick(sh)
 			}
-			return nil, nil
+			return core.Action{}
 		}
 	}
 	var cmd tea.Cmd
 	*l, cmd = l.Update(msg)
-	return nil, cmd
+	return core.Async(cmd)
 }

@@ -10,8 +10,6 @@ import (
 	"gdaddon/internal/tui/appctx"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // The streaming task screen itself is the generic components.TaskScreen. These
@@ -28,15 +26,15 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 		res, err := addon.Install(target, appctx.Of(sh).ProjectRoot, report)
 		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
 	}
-	onDone := func(sh *core.Shared, ev core.TaskEvent) (tea.Msg, tea.Cmd) {
+	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
 		if ev.Err != nil {
 			sh.Log(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err))
 			sh.SetStatus("install failed")
-			return core.ResetToRoot(), nil
+			return core.ResetToRoot()
 		}
 		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
 		res, _ := ev.Payload.(installResult)
-		return nil, finishInstallCmd(sh, selected, pick, res.Path, res.Version)
+		return core.Async(finishInstallCmd(sh, selected, pick, res.Path, res.Version))
 	}
 	return components.NewTask("installing "+selected.Name+"…", run, onDone)
 }
@@ -53,17 +51,17 @@ func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.As
 		}
 		done <- core.TaskEvent{Done: true}
 	}
-	onDone := func(sh *core.Shared, ev core.TaskEvent) (tea.Msg, tea.Cmd) {
+	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
 		if ev.Err != nil {
 			sh.Log("archive failed: " + ev.Err.Error())
 		} else {
 			sh.Log("archived " + tag)
 		}
-		return nil, nil
+		return core.Action{}
 	}
-	onDismiss := func(sh *core.Shared) (tea.Msg, tea.Cmd) {
+	onDismiss := func(sh *core.Shared) core.Action {
 		sh.SetStatus("")
-		return core.PopTo(), nil // back to the addon submenu (its command hub)
+		return core.PopTo() // back to the addon submenu (its command hub)
 	}
 	return components.NewStayTask("archiving "+tag+"…", "done — esc to go back", run, onDone, onDismiss)
 }

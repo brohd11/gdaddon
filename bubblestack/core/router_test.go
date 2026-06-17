@@ -11,8 +11,8 @@ import (
 type stubScreen struct{}
 
 func (stubScreen) Init(*Shared) tea.Cmd { return nil }
-func (stubScreen) Update(*Shared, tea.Msg) (Screen, tea.Msg, tea.Cmd) {
-	return stubScreen{}, nil, nil
+func (stubScreen) Update(*Shared, tea.Msg) (Screen, Action) {
+	return stubScreen{}, Action{}
 }
 func (stubScreen) View(*Shared) string       { return "stub" }
 func (stubScreen) HelpView(*Shared) string   { return "" }
