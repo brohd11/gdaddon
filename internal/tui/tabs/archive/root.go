@@ -7,8 +7,9 @@ import (
 	"fmt"
 
 	arch "gdaddon/internal/archive"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -63,7 +64,7 @@ func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.
 // (after a package removal), so the tab reflects the change. Routed here by the router.
 func (s *ArchiveScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 	m, ok := msg.(core.MsgRefresh)
-	if !ok || m.Target != core.RefreshArchive {
+	if !ok || m.Target != appctx.Archive {
 		return false
 	}
 	sh.StatusMsg = m.Status

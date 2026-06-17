@@ -5,8 +5,9 @@ package global
 
 import (
 	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -68,7 +69,7 @@ func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.l
 // the message here by finding the root that claims it.
 func (s *GlobalScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 	m, ok := msg.(core.MsgRefresh)
-	if !ok || m.Target != core.RefreshGlobal {
+	if !ok || m.Target != appctx.Global {
 		return false
 	}
 	sh.StatusMsg = m.Status

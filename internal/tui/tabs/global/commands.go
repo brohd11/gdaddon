@@ -4,14 +4,15 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // commitRemove removes the plugin from the global list, plus its archived packages
 // when the chosen mode is "global + archive". On success it refreshes the Global
-// tab (GlobalRefresh) so the removed row disappears.
+// tab so the removed row disappears.
 func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
 	if mode == removeGlobalArchive {
 		if repoID, err := source.RepoID(g.url); err == nil {
@@ -31,5 +32,5 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
 		sh.StatusMsg = "error: " + err.Error()
 		return core.ResetToRoot()
 	}
-	return core.GlobalRefresh("removed " + g.name)
+	return core.Refresh(appctx.Global, true, "removed "+g.name)
 }

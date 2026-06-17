@@ -2,10 +2,7 @@ package core
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
-
-	"gdaddon/internal/addon"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
@@ -15,17 +12,16 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// shared holds the cross-cutting state owned by the router and rendered as
-// chrome around every screen: the project context box, terminal size, the
+// Shared holds the cross-cutting state owned by the router and rendered as chrome
+// around every screen: the consumer's own context (App), terminal size, the
 // spinner, the output/log pane (with its own focus mode), and a help model for
-// rendering static help bars. A single instance is created in newShared and
-// pointed at by the router; screens receive it as a method argument.
+// rendering static help bars. A single instance is created in NewShared and
+// pointed at by the router; screens receive it as a method argument. The framework
+// names no domain type: App carries whatever struct the consumer wants (recover it
+// typed with App[T]), and Header is the consumer's persistent context-box renderer.
 type Shared struct {
-	ManifestPath string
-	ProjectRoot  string
-	manifestRel  string
-	projectName  string
-	hasProject   bool
+	App    any                  // consumer-owned context; recover it with App[T]
+	Header func(*Shared) string // renders the persistent context box (nil ⇒ none)
 
 	width  int
 	height int
@@ -38,18 +34,12 @@ type Shared struct {
 	StatusMsg   string
 	OutputShown bool // whether the output box is rendered (toggled with o)
 
-	Events chan InstallEvent // the in-flight streaming task channel
+	Events chan TaskEvent // the in-flight streaming task channel
 }
 
-func NewShared(manifestPath, projectRoot string) *Shared {
+func NewShared(app any) *Shared {
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
-
-	rel, err := filepath.Rel(projectRoot, manifestPath)
-	if err != nil {
-		rel = manifestPath
-	}
-	name, exists := addon.ProjectName(projectRoot)
 
 	h := help.New()
 	h.Styles.ShortKey = h.Styles.ShortKey.Foreground(MutedColor)
@@ -57,16 +47,21 @@ func NewShared(manifestPath, projectRoot string) *Shared {
 	h.Styles.ShortSeparator = h.Styles.ShortSeparator.Foreground(MutedColor)
 
 	return &Shared{
-		ManifestPath: manifestPath,
-		ProjectRoot:  projectRoot,
-		manifestRel:  rel,
-		projectName:  name,
-		hasProject:   exists,
-		Spinner:      sp,
-		output:       viewport.New(0, 0),
-		help:         h,
+		App:     app,
+		Spinner: sp,
+		output:  viewport.New(0, 0),
+		help:    h,
 	}
 }
+
+// App recovers the consumer's context from a Shared, type-asserted to *T. The
+// consumer stores a *T in NewShared and reads it back here, so the framework stays
+// domain-agnostic while tabs get a typed handle: c := core.App[MyCtx](sh).
+func App[T any](s *Shared) *T { return s.App.(*T) }
+
+// Width reports the current terminal width, so a Header closure can size/truncate
+// its content to fit (see HeaderInnerWidth).
+func (s *Shared) Width() int { return s.width }
 
 var (
 	// mutedColor is the secondary/muted gray (borders, labels, help, list
@@ -105,36 +100,38 @@ const (
 
 // ---------- header ----------
 
-// headerView renders the persistent context box shown on every screen.
+// headerView renders the persistent context box shown on every screen by
+// delegating to the consumer's Header closure (nil ⇒ no box). Kept as a method so
+// the router measures/draws it the same way regardless of what the consumer renders.
 func (s *Shared) headerView() string {
-	name := "No Project File"
-	if s.hasProject {
-		name = s.projectName
-		if name == "" {
-			name = "(unnamed project)"
-		}
+	if s.Header != nil {
+		return s.Header(s)
 	}
+	return ""
+}
 
-	inner := s.width - 4 // minus border (2) and padding (2)
+// HeaderInnerWidth is the content width inside the persistent context box for a
+// terminal of the given width, so a Header closure can size/truncate values to fit.
+func HeaderInnerWidth(width int) int {
+	inner := width - 4 // minus border (2) and padding (2)
 	if inner < 20 {
 		inner = 20
 	}
-	valWidth := inner - 10 // minus the "Manifest: " label
-
-	line := func(label, value string) string {
-		return labelStyle.Render(label) + truncLeft(value, valWidth)
-	}
-	body := strings.Join([]string{
-		labelStyle.Render("Project:  ") + name,
-		line("Root:     ", s.ProjectRoot),
-		line("Manifest: ", s.manifestRel),
-	}, "\n")
-
-	return headerStyle.Width(inner).Render(body)
+	return inner
 }
 
-// truncLeft keeps the right (most informative) end of a path, prefixing "…".
-func truncLeft(s string, max int) string {
+// HeaderBox renders body inside the persistent bordered context box, sized to the
+// terminal width. A consumer's Header closure builds body (e.g. with Label +
+// TruncLeft) and returns HeaderBox(sh.Width(), body).
+func HeaderBox(width int, body string) string {
+	return headerStyle.Width(HeaderInnerWidth(width)).Render(body)
+}
+
+// Label renders a context-box/field label in the muted label style.
+func Label(s string) string { return labelStyle.Render(s) }
+
+// TruncLeft keeps the right (most informative) end of a path, prefixing "…".
+func TruncLeft(s string, max int) string {
 	if max < 4 {
 		max = 4
 	}

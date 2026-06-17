@@ -7,8 +7,9 @@ package search
 
 import (
 	searchpkg "gdaddon/internal/search"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,7 +33,7 @@ func searchItems() []list.Item {
 			Name: "⌕ New search",
 			Desc: "search a Godot asset source for an addon to add",
 			Pick: func(sh *core.Shared) tea.Cmd {
-				return core.Push(newQueryScreen(defaultSource(), detectGodotVersion(sh.ProjectRoot)))
+				return core.Push(newQueryScreen(defaultSource(), detectGodotVersion(appctx.Of(sh).ProjectRoot)))
 			},
 		},
 	}

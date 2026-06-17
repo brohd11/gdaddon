@@ -2,8 +2,9 @@ package project
 
 import (
 	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -61,11 +62,12 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 // browse-specific list logic out of the router.
 func (s *ProjectScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 	m, ok := msg.(core.MsgRefresh)
-	if !ok || m.Target != core.RefreshProject {
+	if !ok || m.Target != appctx.Project {
 		return false
 	}
 	sh.StatusMsg = m.Status
-	if statuses, err := addon.Inspect(sh.ManifestPath, sh.ProjectRoot); err == nil {
+	c := appctx.Of(sh)
+	if statuses, err := addon.Inspect(c.ManifestPath, c.ProjectRoot); err == nil {
 		s.list.SetItems(addonListItems(statuses))
 	}
 	return true

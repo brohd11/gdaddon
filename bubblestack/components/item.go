@@ -1,7 +1,7 @@
 package components
 
 import (
-	"gdaddon/internal/tui/core"
+	"github.com/brohd/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -20,7 +20,7 @@ type Item struct {
 	Keys               func(*core.Shared, string) (tea.Cmd, bool)
 }
 
-func (i Item) Title() string      { return i.Name }
+func (i Item) Title() string       { return i.Name }
 func (i Item) Description() string { return i.Desc }
 func (i Item) FilterValue() string {
 	if i.Filter != "" {

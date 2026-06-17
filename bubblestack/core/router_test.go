@@ -18,7 +18,9 @@ func (stubScreen) SetSize(*Shared, int, int)                 {}
 func (stubScreen) Filtering() bool                           { return false }
 
 func newCoreTestRouter() Router {
-	sh := NewShared("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test")
+	// nil App: stubScreen reads no context and Header is nil, so the router renders
+	// no context box — exercises pure framework plumbing with no domain dependency.
+	sh := NewShared(nil)
 	return NewRouter(sh, []TabEntry{{Title: "Stub", Root: stubScreen{}}})
 }
 

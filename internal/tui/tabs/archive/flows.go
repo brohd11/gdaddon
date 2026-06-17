@@ -5,8 +5,9 @@ import (
 
 	arch "gdaddon/internal/archive"
 	"gdaddon/internal/source"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -78,7 +79,7 @@ func newRemoveConfirm(repoID string, asset source.Asset) *components.ConfirmScre
 				sh.StatusMsg = "error: " + err.Error()
 				return core.ResetToRoot()
 			}
-			return core.ArchiveRefresh("removed " + asset.Name)
+			return core.Refresh(appctx.Archive, true, "removed "+asset.Name)
 		},
 		Help: removeConfirmHelp,
 	}

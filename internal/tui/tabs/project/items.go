@@ -6,8 +6,8 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

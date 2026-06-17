@@ -35,20 +35,10 @@ func PopTo() tea.Cmd { return func() tea.Msg { return popToMsg{} } }
 func Replace(s Screen) tea.Cmd { return func() tea.Msg { return replaceMsg{s} } }
 func ResetToRoot() tea.Cmd     { return func() tea.Msg { return resetToRootMsg{} } }
 
-// RootRefresh asks the router to switch to the project tab, unwind to its root, and
-// rebuild the browse list from the manifest, with the given status text.
-func RootRefresh(status string) tea.Cmd {
-	return func() tea.Msg { return MsgRefresh{Target: RefreshProject, Switch: true, Status: status} }
-}
-
-// GlobalRefresh asks the router to show the Global tab rebuilt (after a global-list
-// change), with the given status text. Works from any tab.
-func GlobalRefresh(status string) tea.Cmd {
-	return func() tea.Msg { return MsgRefresh{Target: RefreshGlobal, Switch: true, Status: status} }
-}
-
-// ArchiveRefresh asks the router to show the Archive tab rebuilt (after an archive
-// change, e.g. a package removal), with the given status text. Works from any tab.
-func ArchiveRefresh(status string) tea.Cmd {
-	return func() tea.Msg { return MsgRefresh{Target: RefreshArchive, Switch: true, Status: status} }
+// Refresh asks the router to rebuild the tab root that claims target, with the given
+// status text. When switchTo is set the router also makes that tab active and unwinds
+// it to its root; otherwise the root refreshes in place. target is a consumer-defined
+// identifier the framework only routes (see MsgRefresh) — works from any tab.
+func Refresh(target any, switchTo bool, status string) tea.Cmd {
+	return func() tea.Msg { return MsgRefresh{Target: target, Switch: switchTo, Status: status} }
 }

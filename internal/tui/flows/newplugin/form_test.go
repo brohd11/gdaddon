@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -41,7 +42,7 @@ func pump(tm tea.Model, msg tea.Msg) tea.Model {
 }
 
 func newTestRouter() core.Router {
-	sh := core.NewShared("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test")
+	sh := core.NewShared(appctx.New("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test"))
 	return core.NewRouter(sh, []core.TabEntry{{Title: "Test", Root: stubRoot{}}})
 }
 

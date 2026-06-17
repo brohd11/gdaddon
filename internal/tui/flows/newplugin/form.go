@@ -12,8 +12,9 @@ import (
 	"strings"
 
 	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -126,14 +127,14 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) tea
 		}
 		// Show the Global tab rebuilt with the new entry (parallel to a project add
 		// switching to Browse).
-		return core.GlobalRefresh(fmt.Sprintf("added %s to global list", name))
+		return core.Refresh(appctx.Global, true, fmt.Sprintf("added %s to global list", name))
 	}
 
-	if err := addon.AddEntry(sh.ManifestPath, name, url, path); err != nil {
+	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, name, url, path); err != nil {
 		sh.StatusMsg = "error: " + err.Error()
 		return core.ResetToRoot()
 	}
-	return tea.Batch(core.ResetToRoot(), core.RootRefresh("added "+name))
+	return tea.Batch(core.ResetToRoot(), core.Refresh(appctx.Project, true, "added "+name))
 }
 
 func otherTarget(t int) int {

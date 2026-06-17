@@ -2,7 +2,7 @@ package components
 
 import (
 	"fmt"
-	"gdaddon/internal/tui/core"
+	"github.com/brohd/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

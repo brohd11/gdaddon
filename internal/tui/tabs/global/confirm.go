@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"

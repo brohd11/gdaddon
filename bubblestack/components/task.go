@@ -3,15 +3,15 @@ package components
 import (
 	"fmt"
 
-	"gdaddon/internal/tui/core"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // RunFunc executes a streaming background task: report() pipes progress lines into
-// the log, and the terminating core.InstallEvent (Done:true) is sent on done.
-type RunFunc func(sh *core.Shared, report func(string, ...any), done chan<- core.InstallEvent)
+// the log, and the terminating core.TaskEvent (Done:true) is sent on done.
+type RunFunc func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent)
 
 // TaskScreen runs a streaming background task and shows its log. It is context-
 // agnostic: the calling tab supplies run (the work), onDone (what to do with the
@@ -21,21 +21,21 @@ type TaskScreen struct {
 	label, doneLabel string
 	stay             bool
 	run              RunFunc
-	onDone           func(*core.Shared, core.InstallEvent) tea.Cmd
+	onDone           func(*core.Shared, core.TaskEvent) tea.Cmd
 	onDismiss        func(*core.Shared) tea.Cmd
 	done             bool
 }
 
 // NewTask builds a task that navigates away as soon as it finishes (install,
 // install-all): onDone returns the navigation command for the terminating event.
-func NewTask(label string, run RunFunc, onDone func(*core.Shared, core.InstallEvent) tea.Cmd) *TaskScreen {
+func NewTask(label string, run RunFunc, onDone func(*core.Shared, core.TaskEvent) tea.Cmd) *TaskScreen {
 	return &TaskScreen{label: label, run: run, onDone: onDone}
 }
 
 // NewStayTask builds a task that stays on the log after finishing (archive) until
 // the user dismisses it: onDone records the result, onDismiss runs on esc/enter/q.
 func NewStayTask(label, doneLabel string, run RunFunc,
-	onDone func(*core.Shared, core.InstallEvent) tea.Cmd, onDismiss func(*core.Shared) tea.Cmd) *TaskScreen {
+	onDone func(*core.Shared, core.TaskEvent) tea.Cmd, onDismiss func(*core.Shared) tea.Cmd) *TaskScreen {
 	return &TaskScreen{label: label, doneLabel: doneLabel, stay: true, run: run, onDone: onDone, onDismiss: onDismiss}
 }
 
@@ -43,7 +43,7 @@ func (s *TaskScreen) Init(sh *core.Shared) tea.Cmd { return startTask(sh, s.run)
 
 func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
 	switch msg := msg.(type) {
-	case core.InstallEvent:
+	case core.TaskEvent:
 		if !msg.Done {
 			sh.AppendLog(msg.Line)
 			return s, waitForEvent(sh.Events)
@@ -95,17 +95,17 @@ func (s *TaskScreen) SetSize(sh *core.Shared, width, bodyHeight int) {}
 // log via the shared events channel, and returns the spinner tick + the wait for
 // the first event.
 func startTask(sh *core.Shared, run RunFunc) tea.Cmd {
-	sh.Events = make(chan core.InstallEvent)
+	sh.Events = make(chan core.TaskEvent)
 	ch := sh.Events
 	go func() {
 		report := func(format string, args ...any) {
-			ch <- core.InstallEvent{Line: fmt.Sprintf(format, args...)}
+			ch <- core.TaskEvent{Line: fmt.Sprintf(format, args...)}
 		}
 		run(sh, report, ch)
 	}()
 	return tea.Batch(sh.Spinner.Tick, waitForEvent(ch))
 }
 
-func waitForEvent(events chan core.InstallEvent) tea.Cmd {
+func waitForEvent(events chan core.TaskEvent) tea.Cmd {
 	return func() tea.Msg { return <-events }
 }

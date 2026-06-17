@@ -3,12 +3,13 @@ package tui
 
 import (
 	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/archive"
 	"gdaddon/internal/tui/tabs/global"
 	"gdaddon/internal/tui/tabs/project"
 	"gdaddon/internal/tui/tabs/search"
+	"github.com/brohd/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -20,7 +21,8 @@ func Run(manifestPath, projectRoot string) error {
 		return err
 	}
 
-	sh := core.NewShared(manifestPath, projectRoot)
+	sh := core.NewShared(appctx.New(manifestPath, projectRoot))
+	sh.Header = appctx.Header
 	tabs := []core.TabEntry{
 		{Title: "Project", Root: project.NewProjectScreen(statuses)},
 		{Title: "Global", Root: global.NewGlobalScreen()},

@@ -4,11 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/newplugin"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/project"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -16,7 +17,8 @@ import (
 // newTestRouter builds a router with the Browse + Actions tabs and no real project
 // on disk (statuses nil → an empty browse list).
 func newTestRouter() core.Router {
-	sh := core.NewShared("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test")
+	sh := core.NewShared(appctx.New("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test"))
+	sh.Header = appctx.Header
 	return core.NewRouter(sh, []core.TabEntry{
 		{Title: "Browse", Root: project.NewProjectScreen(nil)},
 		{Title: "Actions", Root: actions.NewActionsScreen()},

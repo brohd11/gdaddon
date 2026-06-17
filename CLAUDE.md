@@ -61,9 +61,12 @@ internal/
   archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   tui/               — bubbletea front-end (see internal/tui/doc.go)
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
-    core/            — the framework: Shared state, Router over a screen stack, nav commands, Screen + optional interfaces, router messages, list/help/style helpers
-    components/      — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen) — they name no domain type
-    tabs/<domain>/   — one package per top-level tab (project, global, archive, actions): its root screen, flow screens, and the builders that wire components to features
+    appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
+    tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
+    flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin)
+bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd/bubblestack, replace => ./bubblestack); imports no gdaddon package
+  core/              — Shared state (consumer context behind App any, recovered via App[T]; Header closure), Router over a screen stack, nav commands (Push/Pop/Replace/ResetToRoot/Refresh), Screen + optional interfaces, router messages (MsgRefresh with opaque Target, streaming TaskEvent with opaque Payload), list/help/style helpers
+  components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen, FormScreen) — they name no domain type
 ```
 
 ### TUI design goals
@@ -74,10 +77,13 @@ The TUI was restructured for scalability around three ideas:
   (`project`, `global`, `archive`, `actions`) owning its root screen and flows.
   Adding a feature area means adding a tab package, not editing a monolith.
 - **Domains share `components` to simplify logic.** Reusable screens
-  (picker/confirm/loading/streaming-task) live in `tui/components`, are
+  (picker/confirm/loading/streaming-task) live in `bubblestack/components`, are
   context-agnostic, and are configured by closures the tab supplies — so a tab
   composes flows from shared pieces instead of reimplementing list/confirm/task
-  plumbing.
+  plumbing. The framework (`bubblestack/core` + `bubblestack/components`) is a
+  standalone module that names no domain type, so it can be reused by another tool;
+  gdaddon's domain state rides on `core.Shared.App` and is read back via
+  `appctx.Of(sh)`.
 - **List rows carry their own behavior (`components.Item`).** Every list is built
   from `components.Item` values, each holding its own `Pick func(*core.Shared)
   tea.Cmd` closure. A `PickerScreen` runs the selected row's `Pick` on enter, so a
@@ -89,12 +95,14 @@ The TUI was restructured for scalability around three ideas:
   *through* a flow (e.g. `versionItem`, `globalItem`) stay plain payload structs
   captured inside the closures, not used as list rows.
 
-Dependency direction is strictly `core ← components ← tabs/* ← tui`: `core` names
-no concrete screen (reaches them via optional interfaces like `RootHandler`/
-`PopStopper`), `components` name no domain type (closures only), and tabs never
-import each other. That acyclic layering is what lets the screens live in
-separate packages. See `internal/tui/doc.go` for the full contract and how to
-add a tab.
+Dependency direction is strictly `core ← components ← appctx ← flows/* ← tabs/* ←
+tui`: `core` names no concrete screen (reaches them via optional interfaces like
+`RootHandler`/`PopStopper`), `core` and `components` name no domain type (closures
+only; context behind `Shared.App`), `appctx` is the single leaf binding the domain
+to the framework, and tabs never import each other. That acyclic layering — across
+the `bubblestack` module boundary for `core`/`components` — is what lets the screens
+live in separate packages. See `internal/tui/doc.go` for the full contract and how
+to add a tab.
 
 Key packages/functions:
 - `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing.

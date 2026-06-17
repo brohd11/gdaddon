@@ -2,8 +2,8 @@ package project
 
 import (
 	"fmt"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 	"strings"
 
 	"gdaddon/internal/addon"

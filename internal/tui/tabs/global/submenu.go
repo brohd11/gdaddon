@@ -2,8 +2,9 @@ package global
 
 import (
 	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/components"
-	"gdaddon/internal/tui/core"
+	"gdaddon/internal/tui/appctx"
+	"github.com/brohd/bubblestack/components"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,11 +29,11 @@ func newSubmenuScreen(g globalItem) *components.PickerScreen {
 }
 
 // importToProject copies the global entry into the project manifest, then refreshes
-// the Project tab (RootRefresh), which reloads the new row from the manifest.
+// the Project tab, which reloads the new row from the manifest.
 func importToProject(sh *core.Shared, g globalItem) tea.Cmd {
-	if err := addon.AddEntry(sh.ManifestPath, g.name, g.url, g.path); err != nil {
+	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, g.name, g.url, g.path); err != nil {
 		sh.StatusMsg = "error: " + err.Error()
 		return core.ResetToRoot()
 	}
-	return core.RootRefresh("imported " + g.name)
+	return core.Refresh(appctx.Project, true, "imported "+g.name)
 }

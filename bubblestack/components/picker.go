@@ -1,7 +1,7 @@
 package components
 
 import (
-	"gdaddon/internal/tui/core"
+	"github.com/brohd/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
