@@ -22,7 +22,7 @@ func newVersionsScreen(selected addon.Addon, local string, listing *source.Listi
 		components.Item{
 			Name: "HEAD",
 			Desc: "track a branch (refs/heads)",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newBranchesLoading(selected, local)) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newBranchesLoading(selected, local)), nil },
 		},
 	}
 	for _, r := range listing.Releases {
@@ -30,13 +30,13 @@ func newVersionsScreen(selected addon.Addon, local string, listing *source.Listi
 		items = append(items, components.Item{
 			Name: r.Tag,
 			Desc: releaseDesc(r),
-			Pick: func(sh *core.Shared) tea.Cmd {
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
 				if len(r.Assets) == 1 {
 					a := r.Assets[0]
 					pick := versionItem{tag: r.Tag, asset: a, prerelease: r.Prerelease, archived: isArchived(a)}
-					return core.Push(newInstallConfirm(selected, local, pick))
+					return core.Push(newInstallConfirm(selected, local, pick)), nil
 				}
-				return core.Push(newAssetPicker(selected, local, r))
+				return core.Push(newAssetPicker(selected, local, r)), nil
 			},
 		})
 	}
@@ -64,7 +64,9 @@ func newAssetPicker(selected addon.Addon, local string, r source.Release) *compo
 		items = append(items, components.Item{
 			Name: a.Name,
 			Desc: desc,
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newInstallConfirm(selected, local, pick)) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
+				return core.Push(newInstallConfirm(selected, local, pick)), nil
+			},
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: core.HeaderTitle(selected.Name, local, "Assets "+r.Tag)})
@@ -78,7 +80,9 @@ func newBranchPicker(selected addon.Addon, local string, branches []source.Asset
 		items = append(items, components.Item{
 			Name: "branch: " + b.Name,
 			Desc: "latest commit · " + b.Name,
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newInstallConfirm(selected, local, pick)) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
+				return core.Push(newInstallConfirm(selected, local, pick)), nil
+			},
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: core.HeaderTitle(selected.Name, local, "Branches")})
@@ -89,10 +93,10 @@ func newBranchPicker(selected addon.Addon, local string, branches []source.Asset
 // hard failure with no archive fallback) — the merge/next-screen logic the generic
 // loadingScreen no longer owns.
 func newReleasesLoading(a addon.Addon, local string) *components.LoadingScreen {
-	onResult := func(sh *core.Shared, msg tea.Msg) tea.Cmd {
+	onResult := func(sh *core.Shared, msg tea.Msg) (tea.Msg, tea.Cmd) {
 		m, ok := msg.(releasesMsg)
 		if !ok {
-			return nil
+			return nil, nil
 		}
 		var archived []source.Release
 		if repoID, err := source.RepoID(a.URL); err == nil {
@@ -100,10 +104,10 @@ func newReleasesLoading(a addon.Addon, local string) *components.LoadingScreen {
 		}
 		if m.err != nil && len(archived) == 0 {
 			sh.SetStatus("error: " + m.err.Error())
-			return core.Pop()
+			return core.Pop(), nil
 		}
 		listing := archive.Merge(cloneListing(m.listing), archived)
-		return core.Replace(newVersionsScreen(a, local, listing))
+		return core.Replace(newVersionsScreen(a, local, listing)), nil
 	}
 	return components.NewLoadingScreen(core.HeaderTitle(a.Name, local, ""), "fetching versions…", fetchReleases(a.URL), onResult)
 }
@@ -111,20 +115,20 @@ func newReleasesLoading(a addon.Addon, local string) *components.LoadingScreen {
 // newBranchesLoading builds the loading screen for a HEAD/branch fetch. Its onResult
 // opens the branch picker (or unwinds on error / empty).
 func newBranchesLoading(a addon.Addon, local string) *components.LoadingScreen {
-	onResult := func(sh *core.Shared, msg tea.Msg) tea.Cmd {
+	onResult := func(sh *core.Shared, msg tea.Msg) (tea.Msg, tea.Cmd) {
 		m, ok := msg.(branchesMsg)
 		if !ok {
-			return nil
+			return nil, nil
 		}
 		if m.err != nil {
 			sh.SetStatus("error: " + m.err.Error())
-			return core.ResetToRoot()
+			return core.ResetToRoot(), nil
 		}
 		if len(m.branches) == 0 {
 			sh.SetStatus("no branches found")
-			return core.Pop()
+			return core.Pop(), nil
 		}
-		return core.Replace(newBranchPicker(a, local, m.branches))
+		return core.Replace(newBranchPicker(a, local, m.branches)), nil
 	}
 	return components.NewLoadingScreen(core.HeaderTitle(a.Name, local, ""), "fetching branches…", fetchBranches(a.URL), onResult)
 }

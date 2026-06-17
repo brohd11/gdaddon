@@ -65,7 +65,7 @@ internal/
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin)
 bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd11/bubblestack, replace => ./bubblestack); imports no gdaddon package
-  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask), Router over a screen stack, nav commands (Push/Pop/Replace/ResetToRoot/ShowTab), Screen + optional interfaces, router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
+  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask), Router over a screen stack, nav commands that return a tea.Msg (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, tea.Msg, tea.Cmd): the msg is control the router applies synchronously, the cmd is async work) + optional interfaces, router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
   components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen, FormScreen; LogPane = default core.Output) — they name no domain type
 ```
 
@@ -86,12 +86,13 @@ The TUI was restructured for scalability around three ideas:
   `appctx.Of(sh)`.
 - **List rows carry their own behavior (`components.Item`).** Every list is built
   from `components.Item` values, each holding its own `Pick func(*core.Shared)
-  tea.Cmd` closure. A `PickerScreen` runs the selected row's `Pick` on enter, so a
+  (tea.Msg, tea.Cmd)` closure (a control message the router applies synchronously
+  and/or an async cmd). A `PickerScreen` runs the selected row's `Pick` on enter, so a
   menu of mixed commands needs no per-row `kind` enum, no `switch`, and — for a
   pushed screen — no `Update` method at all (building the rows *is* the flow). An
   inert row (placeholder / disabled) is just an `Item` with a nil `Pick`. Tab
-  roots still own an `Update` (quit-on-`q`, refresh, output pane) but dispatch
-  with the same one-liner `it.(components.Item).Pick(sh)`. Domain values carried
+  roots still own an `Update` (quit-on-`q`, notifications, output pane) but just
+  forward `components.RootUpdate`'s `(tea.Msg, tea.Cmd)` pair. Domain values carried
   *through* a flow (e.g. `versionItem`, `globalItem`) stay plain payload structs
   captured inside the closures, not used as list rows.
 

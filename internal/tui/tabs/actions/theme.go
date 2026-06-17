@@ -24,7 +24,7 @@ func newThemePicker() core.Screen {
 		items = append(items, components.Item{
 			Name: name,
 			Desc: desc,
-			Pick: func(sh *core.Shared) tea.Cmd { return core.ApplyTheme(name) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.ApplyTheme(name), nil },
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: "Theme"})

@@ -10,12 +10,14 @@ import (
 // without pulling in any domain screen.
 type stubScreen struct{}
 
-func (stubScreen) Init(*Shared) tea.Cmd                      { return nil }
-func (stubScreen) Update(*Shared, tea.Msg) (Screen, tea.Cmd) { return stubScreen{}, nil }
-func (stubScreen) View(*Shared) string                       { return "stub" }
-func (stubScreen) HelpView(*Shared) string                   { return "" }
-func (stubScreen) SetSize(*Shared, int, int)                 {}
-func (stubScreen) Filtering() bool                           { return false }
+func (stubScreen) Init(*Shared) tea.Cmd { return nil }
+func (stubScreen) Update(*Shared, tea.Msg) (Screen, tea.Msg, tea.Cmd) {
+	return stubScreen{}, nil, nil
+}
+func (stubScreen) View(*Shared) string       { return "stub" }
+func (stubScreen) HelpView(*Shared) string   { return "" }
+func (stubScreen) SetSize(*Shared, int, int) {}
+func (stubScreen) Filtering() bool           { return false }
 
 // fakeOutput is a minimal core.Output (plus the Log capability) for exercising the
 // router's output key/layout plumbing without importing components (core ←
@@ -155,7 +157,7 @@ func TestChromeMaskSuppressesChrome(t *testing.T) {
 		t.Fatal("output/status should render under an unmasked screen")
 	}
 
-	tm = pump(tm, Push(maskScreen{})())
+	tm = pump(tm, Push(maskScreen{}))
 	r = tm.(Router)
 	if got := r.belowChrome(r.currentMask()); got != "" {
 		t.Fatalf("FullscreenMask should suppress the below chrome, got %q", got)
@@ -164,7 +166,7 @@ func TestChromeMaskSuppressesChrome(t *testing.T) {
 		t.Fatalf("FullscreenMask should suppress the top chrome, got %q", got)
 	}
 
-	tm = pump(tm, Pop()())
+	tm = pump(tm, Pop())
 	r = tm.(Router)
 	if r.belowChrome(r.currentMask()) == "" {
 		t.Fatal("popping back to the unmasked screen should restore the chrome")

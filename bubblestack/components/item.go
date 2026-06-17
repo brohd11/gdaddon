@@ -16,8 +16,8 @@ import (
 // placeholder); Keys is optional per-row key handling.
 type Item struct {
 	Name, Desc, Filter string
-	Pick               func(*core.Shared) tea.Cmd
-	Keys               func(*core.Shared, string) (tea.Cmd, bool)
+	Pick               func(*core.Shared) (tea.Msg, tea.Cmd) // (sync control msg, async cmd)
+	Keys               func(*core.Shared, string) (tea.Msg, tea.Cmd, bool)
 }
 
 func (i Item) Title() string       { return i.Name }

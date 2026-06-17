@@ -15,11 +15,13 @@ import (
 // onto (the flow itself is tab-agnostic).
 type stubRoot struct{}
 
-func (stubRoot) Init(*core.Shared) tea.Cmd                           { return nil }
-func (stubRoot) Update(*core.Shared, tea.Msg) (core.Screen, tea.Cmd) { return stubRoot{}, nil }
-func (stubRoot) View(*core.Shared) string                            { return "" }
-func (stubRoot) HelpView(*core.Shared) string                        { return "" }
-func (stubRoot) SetSize(*core.Shared, int, int)                      {}
+func (stubRoot) Init(*core.Shared) tea.Cmd { return nil }
+func (stubRoot) Update(*core.Shared, tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
+	return stubRoot{}, nil, nil
+}
+func (stubRoot) View(*core.Shared) string       { return "" }
+func (stubRoot) HelpView(*core.Shared) string   { return "" }
+func (stubRoot) SetSize(*core.Shared, int, int) {}
 
 func sized(tm tea.Model) tea.Model {
 	tm, _ = tm.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -50,7 +52,7 @@ func newTestRouter() core.Router {
 // and a filled URL pushes the confirm screen.
 func TestNewPluginFormToConfirm(t *testing.T) {
 	tm := sized(newTestRouter())
-	tm, _ = tm.Update(core.Push(NewNewPluginForm())())
+	tm, _ = tm.Update(core.Push(NewNewPluginForm()))
 	form, ok := tm.(core.Router).Top().(*components.FormScreen)
 	if !ok {
 		t.Fatalf("want *components.FormScreen, got %T", tm.(core.Router).Top())

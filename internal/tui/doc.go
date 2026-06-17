@@ -15,13 +15,18 @@
 //	             spinner/help/task channel, and the optional *Chrome — header closure,
 //	             status line, and pluggable Output pane, each independently toggleable
 //	             and gateable per-screen), the Router (tea.Model) over a screen stack,
-//	             navigation commands (Push/Pop/Replace/ResetToRoot/ShowTab), the Screen
+//	             navigation commands that return a tea.Msg (Push/Pop/Replace/ResetToRoot/
+//	             ShowTab, plus Seq to issue several at once), the Screen
 //	             interface plus the optional interfaces the router type-asserts
 //	             (Filterer, Receiver, PopStopper, ChromeMasker — a screen suppresses
-//	             chrome elements while on top, e.g. FullscreenMask), router-handled
-//	             messages (the PropagateAll broadcast — one message whose
-//	             opaque payload the router only routes to every Receiver, never interprets —,
-//	             MsgThemeChanged, and the streaming TaskEvent with an opaque Payload), themes (SetTheme/
+//	             chrome elements while on top, e.g. FullscreenMask). A Screen's Update
+//	             returns (Screen, tea.Msg, tea.Cmd): the middle tea.Msg is a control
+//	             message the router applies to the stack synchronously this same tick
+//	             (no command round-trip), the tea.Cmd is genuine async work for bubbletea.
+//	             Router-handled messages include the PropagateAll broadcast — one message
+//	             whose opaque payload the router only routes to every Receiver, never
+//	             interprets —, MsgThemeChanged, and the streaming TaskEvent with an opaque
+//	             Payload. Themes (SetTheme/
 //	             ApplyTheme/ThemeNames/CurrentTheme), and generic list/help/style
 //	             helpers (NewSelectList, ShortHelp, RenderTitleBar, HeaderBox,
 //	             TruncLeft, …). A TabEntry is {Title, New func(*Shared) Screen}: the
@@ -54,12 +59,13 @@
 // # Self-dispatching list rows (components.Item)
 //
 // Lists are built from components.Item values, each carrying its own Pick closure
-// (and optional Keys). On enter a PickerScreen runs the selected row's Pick, so a
-// menu of mixed commands needs no per-row kind enum, no switch, and — for a pushed
-// screen — no Update method at all: building the rows is the whole flow. An inert
-// row (a placeholder, or a disabled/non-installable entry) is just an Item with a
-// nil Pick. A tab root still writes Update (it owns quit-on-q, refresh, the output
-// pane), but its enter handler is the same one-liner: it.(components.Item).Pick(sh).
+// (and optional Keys). Pick returns (tea.Msg, tea.Cmd): a control message the router
+// applies synchronously (e.g. core.Push) and/or an async cmd. On enter a PickerScreen
+// runs the selected row's Pick, so a menu of mixed commands needs no per-row kind enum,
+// no switch, and — for a pushed screen — no Update method at all: building the rows is
+// the whole flow. An inert row (a placeholder, or a disabled/non-installable entry) is
+// just an Item with a nil Pick. A tab root still writes Update (it owns quit-on-q,
+// notifications, the output pane), but it just forwards components.RootUpdate's pair.
 //
 // Domain values that are *carried* through a flow rather than rendered (e.g.
 // project.versionItem, global.globalItem) stay plain payload structs — they are
@@ -85,8 +91,9 @@
 // own state (read context via appctx.Of(sh)). The router calls New lazily and rebuilds
 // it on a theme change, so a root must construct cleanly from sh alone and hold no
 // state it can't reproduce. A root that must rebuild after an out-of-band change
-// (like Global/Archive after a remove) implements core.Receiver: a core.PropagateAll(payload)
-// command broadcasts an appctx Dirty payload to every root, and the root that recognizes
-// it reloads itself and (when the payload's Focus is set) returns core.ShowTab(title) to
-// make itself active — the router interprets neither the payload nor the focus.
+// (like Global/Archive after a remove) implements core.Receiver: core.PropagateAll(payload)
+// broadcasts an appctx Dirty payload to every root, and the root that recognizes it reloads
+// itself and (when the payload's Focus is set) returns core.ShowTab(title) to make itself
+// active — the router interprets neither the payload nor the focus. To issue several control
+// messages from one handler (e.g. reload a tab and pop the submenu), wrap them in core.Seq.
 package tui

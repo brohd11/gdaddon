@@ -20,20 +20,20 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 		components.Item{
 			Name: "↧ Install / update",
 			Desc: "pick a version, branch, or asset to install",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newReleasesLoading(a, local)) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newReleasesLoading(a, local)), nil },
 		},
 	}
 	if st.Present() {
 		items = append(items, components.Item{
 			Name: "📦 Archive",
 			Desc: "save a local copy of this addon",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newArchiveSubmenu(st)) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newArchiveSubmenu(st)), nil },
 		})
 	}
 	items = append(items, components.Item{
 		Name: "✗ Remove",
 		Desc: "remove from the project (and optionally delete files)",
-		Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newRemoveConfirm(st)) },
+		Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newRemoveConfirm(st)), nil },
 	})
 
 	return components.NewPicker(items, components.PickerOpts{

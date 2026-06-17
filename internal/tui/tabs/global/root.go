@@ -39,7 +39,7 @@ func globalItems() []list.Item {
 				items = append(items, components.Item{
 					Name: g.name,
 					Desc: g.url,
-					Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newSubmenuScreen(g)) },
+					Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newSubmenuScreen(g)), nil },
 				})
 			}
 		}
@@ -57,8 +57,9 @@ func (s *GlobalScreen) Init(*core.Shared) tea.Cmd { return nil }
 
 func (s *GlobalScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
-	return s, components.RootUpdate(sh, &s.list, msg)
+func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
+	m, c := components.RootUpdate(sh, &s.list, msg)
+	return s, m, c
 }
 
 func (s *GlobalScreen) View(*core.Shared) string     { return s.list.View() }
@@ -67,7 +68,7 @@ func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.l
 // Receive rebuilds the global list from disk on a GlobalDirty broadcast (after an
 // add/remove), so the Global tab reflects the change. When the event is focused it
 // returns ShowTab so the router makes this tab active at its root.
-func (s *GlobalScreen) Receive(sh *core.Shared, payload any) tea.Cmd {
+func (s *GlobalScreen) Receive(sh *core.Shared, payload any) tea.Msg {
 	d, ok := payload.(appctx.GlobalDirty)
 	if !ok {
 		return nil

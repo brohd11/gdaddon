@@ -43,8 +43,9 @@ func cloneListing(l *source.Listing) *source.Listing {
 	return &c
 }
 
-// finishInstallCmd pins the freshly installed url, resolved path, and version into
-// the manifest, then broadcasts ProjectDirty so the browse list reloads and focuses.
+// finishInstallCmd pins the freshly installed url, resolved path, and version into the
+// manifest (disk IO, so it stays an async cmd), then returns ProjectDirty as its result
+// message; the router broadcasts it (reload + focus) when it arrives.
 func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
 	manifestPath := appctx.Of(sh).ManifestPath
 	name, url := selected.Name, pick.asset.URL
@@ -61,24 +62,24 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 	status := "updated " + name + " → " + version
 	return func() tea.Msg {
 		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version)
-		return core.PropagateAll(appctx.ProjectDirty{Status: status, Focus: true})()
+		return core.PropagateAll(appctx.ProjectDirty{Status: status, Focus: true})
 	}
 }
 
 // commitRemove removes the addon from the project: the installed files too when
 // the chosen mode is "project + local", then the manifest entry. On success it
 // broadcasts ProjectDirty, which reloads the browse list from the manifest and focuses it.
-func commitRemove(sh *core.Shared, st addon.Status, mode int) tea.Cmd {
+func commitRemove(sh *core.Shared, st addon.Status, mode int) (tea.Msg, tea.Cmd) {
 	c := appctx.Of(sh)
 	if mode == removeProjectLocal {
 		if err := addon.Uninstall(st.Addon, c.ProjectRoot); err != nil {
 			sh.SetStatus("error: " + err.Error())
-			return core.ResetToRoot()
+			return core.ResetToRoot(), nil
 		}
 	}
 	if err := addon.RemoveEntry(c.ManifestPath, st.Addon.Name); err != nil {
 		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.ResetToRoot(), nil
 	}
-	return core.PropagateAll(appctx.ProjectDirty{Status: "removed " + st.Addon.Name, Focus: true})
+	return core.PropagateAll(appctx.ProjectDirty{Status: "removed " + st.Addon.Name, Focus: true}), nil
 }

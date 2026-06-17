@@ -15,13 +15,13 @@ import (
 // the removed row disappears (and focuses Global); when it also deleted archive files
 // it broadcasts ArchiveDirty so the Archive tab reloads too — silently, since focus
 // stays on Global.
-func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
+func commitRemove(sh *core.Shared, g globalItem, mode int) (tea.Msg, tea.Cmd) {
 	archiveRemoved := false
 	if mode == removeGlobalArchive {
 		if repoID, err := source.RepoID(g.url); err == nil {
 			if err := archive.RemoveRepo(repoID); err != nil {
 				sh.SetStatus("error: " + err.Error())
-				return core.ResetToRoot()
+				return core.ResetToRoot(), nil
 			}
 			archiveRemoved = true
 		}
@@ -34,11 +34,11 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
 	}
 	if err != nil {
 		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.ResetToRoot(), nil
 	}
-	cmd := core.PropagateAll(appctx.GlobalDirty{Status: "removed " + g.name, Focus: true})
+	global := core.PropagateAll(appctx.GlobalDirty{Status: "removed " + g.name, Focus: true})
 	if archiveRemoved {
-		return tea.Batch(cmd, core.PropagateAll(appctx.ArchiveDirty{}))
+		return core.Seq(global, core.PropagateAll(appctx.ArchiveDirty{})), nil
 	}
-	return cmd
+	return global, nil
 }

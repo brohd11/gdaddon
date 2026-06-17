@@ -17,17 +17,17 @@ func actionItems() []list.Item {
 		components.Item{
 			Name: "↧ Install / update all",
 			Desc: "download everything per the manifest",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newInstallAllTask()) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newInstallAllTask()), nil },
 		},
 		components.Item{
 			Name: "+ New Plugin",
 			Desc: "add a plugin to the project or your global list",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newplugin.NewNewPluginForm()) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newplugin.NewNewPluginForm()), nil },
 		},
 		components.Item{
 			Name: "◑ Theme",
 			Desc: "change the color theme",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newThemePicker()) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newThemePicker()), nil },
 		},
 	}
 }

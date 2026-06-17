@@ -64,17 +64,17 @@ func NewWithURL(url string) *components.FormScreen {
 			core.Hint("next", core.Keys.Select),
 			core.Hint("cancel", core.Keys.Back),
 		},
-		OnSubmit: func(sh *core.Shared, f *components.FormScreen) tea.Cmd {
+		OnSubmit: func(sh *core.Shared, f *components.FormScreen) (tea.Msg, tea.Cmd) {
 			url := strings.TrimSpace(f.Value("url"))
 			if url == "" {
-				return f.Focus("url")
+				return nil, f.Focus("url")
 			}
 			name := strings.TrimSpace(f.Value("name"))
 			if name == "" {
 				name = addon.DeriveName(url)
 			}
 			path := strings.TrimSpace(f.Value("path"))
-			return core.Push(newNewPluginConfirm(name, addon.NormalizeRepoURL(url), path, target.Index()))
+			return core.Push(newNewPluginConfirm(name, addon.NormalizeRepoURL(url), path, target.Index())), nil
 		},
 	})
 }
@@ -92,13 +92,13 @@ func newNewPluginConfirm(name, url, path string, addTarget int) *components.Conf
 	return &components.ConfirmScreen{
 		Crumb:  core.RenderTitleBar("New Plugin"),
 		Render: func(sh *core.Shared) string { return sh.Box(newPluginConfirmBody(sh, name, url, path, target)) },
-		OnKey: func(sh *core.Shared, k string) tea.Cmd {
+		OnKey: func(sh *core.Shared, k string) (tea.Msg, tea.Cmd) {
 			if core.MatchKey(k, core.Keys.Left) || core.MatchKey(k, core.Keys.Right) {
 				target = otherTarget(target)
 			}
-			return nil
+			return nil, nil
 		},
-		OnYes: func(sh *core.Shared) tea.Cmd { return commitNewPlugin(sh, name, url, path, target) },
+		OnYes: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return commitNewPlugin(sh, name, url, path, target) },
 		Help:  newPluginConfirmHelp,
 	}
 }
@@ -115,7 +115,7 @@ func newPluginConfirmBody(sh *core.Shared, name, url, path string, addTarget int
 
 // commitNewPlugin writes the pending entry to the project manifest or the global
 // list, then unwinds to the root (rebuilding the Browse list for a project add).
-func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) tea.Cmd {
+func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) (tea.Msg, tea.Cmd) {
 	if addTarget == targetGlobal {
 		globalPath, err := addon.GlobalListPath()
 		if err == nil {
@@ -123,18 +123,18 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) tea
 		}
 		if err != nil {
 			sh.SetStatus("error: " + err.Error())
-			return core.ResetToRoot()
+			return core.ResetToRoot(), nil
 		}
 		// Show the Global tab rebuilt with the new entry (parallel to a project add
 		// switching to Browse).
-		return core.PropagateAll(appctx.GlobalDirty{Status: fmt.Sprintf("added %s to global list", name), Focus: true})
+		return core.PropagateAll(appctx.GlobalDirty{Status: fmt.Sprintf("added %s to global list", name), Focus: true}), nil
 	}
 
 	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, name, url, path); err != nil {
 		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.ResetToRoot(), nil
 	}
-	return tea.Batch(core.ResetToRoot(), core.PropagateAll(appctx.ProjectDirty{Status: "added " + name, Focus: true}))
+	return core.Seq(core.ResetToRoot(), core.PropagateAll(appctx.ProjectDirty{Status: "added " + name, Focus: true})), nil
 }
 
 func otherTarget(t int) int {

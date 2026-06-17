@@ -79,7 +79,7 @@ func TestTabSwitch(t *testing.T) {
 // drilling into a sub-screen, the tab key is ignored.
 func TestTabSwitchGatedAtDepth(t *testing.T) {
 	tm := sized(newTestRouter())
-	tm, _ = tm.Update(core.Push(newplugin.NewNewPluginForm())()) // depth 2 on the Browse tab
+	tm, _ = tm.Update(core.Push(newplugin.NewNewPluginForm())) // depth 2 on the Browse tab
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(core.Router).Top())

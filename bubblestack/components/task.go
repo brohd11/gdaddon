@@ -21,49 +21,50 @@ type TaskScreen struct {
 	label, doneLabel string
 	stay             bool
 	run              RunFunc
-	onDone           func(*core.Shared, core.TaskEvent) tea.Cmd
-	onDismiss        func(*core.Shared) tea.Cmd
+	onDone           func(*core.Shared, core.TaskEvent) (tea.Msg, tea.Cmd)
+	onDismiss        func(*core.Shared) (tea.Msg, tea.Cmd)
 	done             bool
 }
 
 // NewTask builds a task that navigates away as soon as it finishes (install,
-// install-all): onDone returns the navigation command for the terminating event.
-func NewTask(label string, run RunFunc, onDone func(*core.Shared, core.TaskEvent) tea.Cmd) *TaskScreen {
+// install-all): onDone returns the navigation message for the terminating event.
+func NewTask(label string, run RunFunc, onDone func(*core.Shared, core.TaskEvent) (tea.Msg, tea.Cmd)) *TaskScreen {
 	return &TaskScreen{label: label, run: run, onDone: onDone}
 }
 
 // NewStayTask builds a task that stays on the log after finishing (archive) until
 // the user dismisses it: onDone records the result, onDismiss runs on esc/enter/q.
 func NewStayTask(label, doneLabel string, run RunFunc,
-	onDone func(*core.Shared, core.TaskEvent) tea.Cmd, onDismiss func(*core.Shared) tea.Cmd) *TaskScreen {
+	onDone func(*core.Shared, core.TaskEvent) (tea.Msg, tea.Cmd), onDismiss func(*core.Shared) (tea.Msg, tea.Cmd)) *TaskScreen {
 	return &TaskScreen{label: label, doneLabel: doneLabel, stay: true, run: run, onDone: onDone, onDismiss: onDismiss}
 }
 
 func (s *TaskScreen) Init(sh *core.Shared) tea.Cmd { return startTask(sh, s.run) }
 
-func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
 	switch msg := msg.(type) {
 	case core.TaskEvent:
 		if !msg.Done {
 			sh.Log(msg.Line)
-			return s, waitForEvent(sh.Events)
+			return s, nil, waitForEvent(sh.Events)
 		}
 		s.done = true
-		cmd := s.onDone(sh, msg)
+		m, c := s.onDone(sh, msg)
 		if s.stay {
-			return s, nil // wait for the user to dismiss (esc/enter/q)
+			return s, nil, nil // wait for the user to dismiss (esc/enter/q)
 		}
-		return s, cmd
+		return s, m, c
 
 	case tea.KeyMsg:
 		if s.stay && s.done {
 			k := msg.String()
 			if core.MatchKey(k, core.Keys.Back) || core.MatchKey(k, core.Keys.Select) || core.MatchKey(k, core.Keys.Quit) {
-				return s, s.onDismiss(sh)
+				m, c := s.onDismiss(sh)
+				return s, m, c
 			}
 		}
 	}
-	return s, nil
+	return s, nil, nil
 }
 
 // View renders just the spinner/progress line; the streaming log is drawn by the

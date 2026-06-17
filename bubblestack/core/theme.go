@@ -58,14 +58,12 @@ func SetTheme(name string) bool {
 // CurrentTheme is the name of the active theme, for a picker to mark/select it.
 func CurrentTheme() string { return current.Name }
 
-// ApplyTheme is the in-TUI command form of SetTheme: it switches the theme, then
-// raises MsgThemeChanged so the router rebuilds the cached tab roots with the new
-// palette. A picker's row returns this on select.
-func ApplyTheme(name string) tea.Cmd {
-	return func() tea.Msg {
-		SetTheme(name)
-		return MsgThemeChanged{}
-	}
+// ApplyTheme is the in-TUI form of SetTheme: it switches the theme (synchronously) and
+// returns MsgThemeChanged so the router rebuilds the cached tab roots with the new
+// palette. A picker's row returns this control message on select.
+func ApplyTheme(name string) tea.Msg {
+	SetTheme(name)
+	return MsgThemeChanged{}
 }
 
 // ThemeNames returns the registered preset names, sorted, for a picker/listing.

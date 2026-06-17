@@ -32,7 +32,7 @@ func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
 	return &components.ConfirmScreen{
 		Crumb:  core.RenderTitleBar(g.name + " — Remove"),
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, g, mode)) },
-		OnKey: func(sh *core.Shared, k string) tea.Cmd {
+		OnKey: func(sh *core.Shared, k string) (tea.Msg, tea.Cmd) {
 			switch {
 			case core.MatchKey(k, core.Keys.Up):
 				if mode > removeGlobal {
@@ -43,9 +43,9 @@ func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
 					mode++
 				}
 			}
-			return nil
+			return nil, nil
 		},
-		OnYes: func(sh *core.Shared) tea.Cmd { return commitRemove(sh, g, mode) },
+		OnYes: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return commitRemove(sh, g, mode) },
 		Help:  removeConfirmHelp,
 	}
 }

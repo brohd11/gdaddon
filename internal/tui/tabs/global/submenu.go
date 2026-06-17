@@ -18,12 +18,12 @@ func newSubmenuScreen(g globalItem) *components.PickerScreen {
 		components.Item{
 			Name: "⬇ Import to Project",
 			Desc: "add this plugin to the project manifest",
-			Pick: func(sh *core.Shared) tea.Cmd { return importToProject(sh, g) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return importToProject(sh, g) },
 		},
 		components.Item{
 			Name: "✗ Remove",
 			Desc: "remove from the global list (and optionally its archive)",
-			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newRemoveConfirm(g)) },
+			Pick: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return core.Push(newRemoveConfirm(g)), nil },
 		},
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: g.name})
@@ -32,13 +32,13 @@ func newSubmenuScreen(g globalItem) *components.PickerScreen {
 // importToProject copies the global entry into the project manifest, then broadcasts
 // ProjectDirty (Focus false, so the Project list reloads silently without leaving the
 // Global tab) and pops the submenu back to the Global list — handy for importing several.
-func importToProject(sh *core.Shared, g globalItem) tea.Cmd {
+func importToProject(sh *core.Shared, g globalItem) (tea.Msg, tea.Cmd) {
 	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, g.name, g.url, g.path); err != nil {
 		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.ResetToRoot(), nil
 	}
-	return tea.Batch(
+	return core.Seq(
 		core.PropagateAll(appctx.ProjectDirty{Status: "imported " + g.name, Focus: false}),
 		core.Pop(),
-	)
+	), nil
 }

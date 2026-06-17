@@ -41,8 +41,9 @@ func (s *ProjectScreen) Init(*core.Shared) tea.Cmd { return nil }
 
 func (s *ProjectScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
-	return s, components.RootUpdate(sh, &s.list, msg)
+func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
+	m, c := components.RootUpdate(sh, &s.list, msg)
+	return s, m, c
 }
 
 // View renders just the addon list; the status line and output box are drawn by
@@ -60,7 +61,7 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 // Receive rebuilds the browse list by re-inspecting the manifest on a ProjectDirty
 // broadcast, keeping the browse-specific list logic out of the router. When the event
 // is focused it returns ShowTab so the router makes this tab active at its root.
-func (s *ProjectScreen) Receive(sh *core.Shared, payload any) tea.Cmd {
+func (s *ProjectScreen) Receive(sh *core.Shared, payload any) tea.Msg {
 	d, ok := payload.(appctx.ProjectDirty)
 	if !ok {
 		return nil

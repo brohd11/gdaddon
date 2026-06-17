@@ -30,8 +30,10 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 	return &components.ConfirmScreen{
 		Crumb:  core.RenderTitleBar(core.HeaderTitle(selected.Name, local, pickSection(pick))),
 		Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
-		OnYes:  func(sh *core.Shared) tea.Cmd { return core.Replace(newInstallTask(selected, local, pick)) },
-		Help:   confirmHelp,
+		OnYes: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
+			return core.Replace(newInstallTask(selected, local, pick)), nil
+		},
+		Help: confirmHelp,
 	}
 }
 
@@ -65,7 +67,7 @@ func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
 	return &components.ConfirmScreen{
 		Crumb:  core.RenderTitleBar(core.HeaderTitle(st.Addon.Name, st.LocalVersion, "Remove")),
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
-		OnKey: func(sh *core.Shared, k string) tea.Cmd {
+		OnKey: func(sh *core.Shared, k string) (tea.Msg, tea.Cmd) {
 			switch {
 			case core.MatchKey(k, core.Keys.Up):
 				if mode > removeProject {
@@ -76,9 +78,9 @@ func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
 					mode++
 				}
 			}
-			return nil
+			return nil, nil
 		},
-		OnYes: func(sh *core.Shared) tea.Cmd { return commitRemove(sh, st, mode) },
+		OnYes: func(sh *core.Shared) (tea.Msg, tea.Cmd) { return commitRemove(sh, st, mode) },
 		Help:  removeConfirmHelp,
 	}
 }
@@ -140,8 +142,10 @@ func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (
 	cs := &components.ConfirmScreen{
 		Crumb:  core.RenderTitleBar(core.HeaderTitle(selected.Name, local, "Archive "+tag)),
 		Render: func(sh *core.Shared) string { return sh.Box(archiveConfirmBody(selected, tag, remote)) },
-		OnYes:  func(sh *core.Shared) tea.Cmd { return core.Replace(newArchiveTask(selected, tag, repoID, remote)) },
-		Help:   confirmHelp,
+		OnYes: func(sh *core.Shared) (tea.Msg, tea.Cmd) {
+			return core.Replace(newArchiveTask(selected, tag, repoID, remote)), nil
+		},
+		Help: confirmHelp,
 	}
 	return cs, "", true
 }

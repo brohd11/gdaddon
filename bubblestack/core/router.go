@@ -47,13 +47,20 @@ func (r Router) Top() Screen { return r.stack[len(r.stack)-1] }
 func (r Router) Init() tea.Cmd { return r.Top().Init(r.sh) }
 
 func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
 	// Global keys are handled once, here, for whatever screen is on top: quit,
 	// the output-pane focus/scroll mode, and tab/c (gated by the active screen's
-	// filter so they don't steal filter keystrokes).
+	// filter so they don't steal filter keystrokes). globalKey returns a control
+	// message (resolved inline) and/or an async cmd (e.g. tea.Quit).
 	if key, ok := msg.(tea.KeyMsg); ok {
-		if cmd, handled := r.globalKey(key); handled {
+		if navMsg, cmd, handled := r.globalKey(key); handled {
+			r.resolveCtrl(navMsg, &cmds)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 			r.resize()
-			return r, cmd
+			return r, tea.Batch(cmds...)
 		}
 	}
 
@@ -67,25 +74,68 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		r.sh.Spinner, cmd = r.sh.Spinner.Update(msg)
 		return r, cmd
+	}
 
-	case pushMsg:
-		r.stack = append(r.stack, msg.s)
-		cmd := msg.s.Init(r.sh)
+	// Control messages that arrive via the queue (an async cmd's result message, a
+	// screen's Init, a batch) are applied to the stack synchronously — the same path
+	// as a control message a screen returns from Update.
+	if _, ok := msg.(ctrlMsg); ok {
+		r.resolveCtrl(msg, &cmds)
 		r.resize()
-		return r, cmd
+		return r, tea.Batch(cmds...)
+	}
+
+	// Otherwise it's a screen message: dispatch to the active screen, apply any control
+	// message it returns inline (same tick), and hand its async cmd to bubbletea.
+	s, navMsg, cmd := r.Top().Update(r.sh, msg)
+	r.stack[len(r.stack)-1] = s
+	r.resolveCtrl(navMsg, &cmds)
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	// Re-lay-out after every message: cheap, and avoids chasing every spot that
+	// changes content height (help expansion, log growth, screen switches).
+	r.resize()
+	return r, tea.Batch(cmds...)
+}
+
+// resolveCtrl applies a control message (and any control messages it cascades into,
+// e.g. a propagate whose Receivers each request a ShowTab) to the navigation stack in
+// one tick, draining a worklist. Async cmds produced along the way (a pushed screen's
+// Init) are collected into cmds for bubbletea. A nil message is a no-op.
+func (r *Router) resolveCtrl(m tea.Msg, cmds *[]tea.Cmd) {
+	queue := []tea.Msg{m}
+	for len(queue) > 0 {
+		m := queue[0]
+		queue = queue[1:]
+		if m == nil {
+			continue
+		}
+		follows, cmd := r.applyCtrl(m)
+		if cmd != nil {
+			*cmds = append(*cmds, cmd)
+		}
+		queue = append(queue, follows...)
+	}
+}
+
+// applyCtrl mutates the stack for one control message, returning any follow-up control
+// messages (resolved next by resolveCtrl) and an async cmd (a pushed/replaced screen's
+// Init). A non-control message is ignored.
+func (r *Router) applyCtrl(m tea.Msg) (follows []tea.Msg, cmd tea.Cmd) {
+	switch m := m.(type) {
+	case pushMsg:
+		r.stack = append(r.stack, m.s)
+		cmd = m.s.Init(r.sh)
 
 	case replaceMsg:
-		r.stack[len(r.stack)-1] = msg.s
-		cmd := msg.s.Init(r.sh)
-		r.resize()
-		return r, cmd
+		r.stack[len(r.stack)-1] = m.s
+		cmd = m.s.Init(r.sh)
 
 	case popMsg:
-		for i := 0; i < msg.n && len(r.stack) > 1; i++ {
+		for i := 0; i < m.n && len(r.stack) > 1; i++ {
 			r.stack = r.stack[:len(r.stack)-1]
 		}
-		r.resize()
-		return r, nil
 
 	case popToMsg:
 		// Always leave the current screen, then stop at the first screen that opts
@@ -96,24 +146,35 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		r.resize()
-		return r, nil
 
 	case resetToRootMsg:
 		r.stack = r.stack[:1]
-		r.resize()
-		return r, nil
+
+	case seqMsg:
+		// Hand the grouped control messages back to resolveCtrl's worklist, applied
+		// in order this same tick.
+		follows = m.msgs
+
+	case showTabMsg:
+		// Switch to the tab whose title matches and unwind it to its root. The router
+		// addresses tabs only by the title it already renders — no separate identity.
+		for i := range r.tabs {
+			if r.tabs[i].Title == m.title {
+				r.active = i
+				r.stack = []Screen{r.roots[i]}
+				break
+			}
+		}
 
 	case propagateMsg:
 		// Broadcast the opaque payload to every tab root plus the active tab's deeper
 		// screens; each Receiver claims what it recognizes. The router never interprets
-		// the payload (no per-notification case). Batch any commands they return — e.g.
-		// a tab requesting focus via ShowTab after it reloads itself.
-		var cmds []tea.Cmd
+		// the payload (no per-notification case). A Receiver may return a control
+		// message (e.g. ShowTab to grab focus), resolved in this same tick.
 		notify := func(s Screen) {
 			if rc, ok := s.(Receiver); ok {
-				if c := rc.Receive(r.sh, msg.payload); c != nil {
-					cmds = append(cmds, c)
+				if f := rc.Receive(r.sh, m.payload); f != nil {
+					follows = append(follows, f)
 				}
 			}
 		}
@@ -123,21 +184,6 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, s := range r.stack[1:] { // the active root is already covered via r.roots[active]
 			notify(s)
 		}
-		r.resize()
-		return r, tea.Batch(cmds...)
-
-	case showTabMsg:
-		// Switch to the tab whose title matches and unwind it to its root. The router
-		// addresses tabs only by the title it already renders — no separate identity.
-		for i := range r.tabs {
-			if r.tabs[i].Title == msg.title {
-				r.active = i
-				r.stack = []Screen{r.roots[i]}
-				break
-			}
-		}
-		r.resize()
-		return r, nil
 
 	case MsgThemeChanged:
 		// A theme switch repaints the package-level styles (SetTheme), but the
@@ -149,25 +195,19 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.roots[i] = r.tabs[i].New(r.sh)
 		}
 		r.stack[0] = r.roots[r.active]
-		r.resize()
-		return r, nil
 	}
-
-	s, cmd := r.Top().Update(r.sh, msg)
-	r.stack[len(r.stack)-1] = s
-	// Re-lay-out after every message: cheap, and avoids chasing every spot that
-	// changes content height (help expansion, log growth, screen switches).
-	r.resize()
-	return r, cmd
+	return follows, cmd
 }
 
-// globalKey handles the keys available in any screen. It returns (cmd, true) when
-// it consumed the key, or (nil, false) to let the active screen handle it. Pointer
-// receiver: [ / ] mutate active/stack, which must persist back to Update's router.
-func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+// globalKey handles the keys available in any screen. It returns (navMsg, cmd, true)
+// when it consumed the key — navMsg is a control message resolved inline, cmd an async
+// cmd (e.g. tea.Quit or an output-scroll cmd) — or (nil, nil, false) to let the active
+// screen handle it. Pointer receiver: [ / ] mutate active/stack, which must persist
+// back to Update's router.
+func (r *Router) globalKey(msg tea.KeyMsg) (tea.Msg, tea.Cmd, bool) {
 	k := msg.String()
 	if k == "ctrl+c" {
-		return tea.Quit, true
+		return nil, tea.Quit, true
 	}
 
 	ch := r.sh.Chrome
@@ -179,18 +219,18 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		switch {
 		case MatchKey(k, Keys.ToggleOutput), MatchKey(k, Keys.Back):
 			ch.outputFocused = false
-			return nil, true
+			return nil, nil, true
 		case MatchKey(k, Keys.Output):
 			ch.Output.Hide()
 			ch.outputFocused = false
-			return nil, true
+			return nil, nil, true
 		case MatchKey(k, Keys.Clear):
 			r.clearOutput()
-			return nil, true
+			return nil, nil, true
 		case MatchKey(k, Keys.Quit):
-			return tea.Quit, true
+			return nil, tea.Quit, true
 		}
-		return ch.Output.Update(msg), true
+		return nil, ch.Output.Update(msg), true
 	}
 
 	// tab jumps into the output pane, c clears the log, [ / ] switch top-level tabs
@@ -208,7 +248,7 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 				ch.outputFocused = true
 				ch.Output.GotoBottom()
 			}
-			return nil, true
+			return nil, nil, true
 		case MatchKey(k, Keys.Output):
 			if !outputOn {
 				break
@@ -217,27 +257,27 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if !ch.Output.Shown() {
 				ch.outputFocused = false
 			}
-			return nil, true
+			return nil, nil, true
 		case MatchKey(k, Keys.Clear):
 			if ch == nil {
 				break
 			}
 			r.clearOutput()
-			return nil, true
+			return nil, nil, true
 		case MatchKey(k, Keys.NextTab):
-			return nil, r.switchTab(1)
+			return nil, nil, r.switchTab(1)
 		case MatchKey(k, Keys.PrevTab):
-			return nil, r.switchTab(-1)
+			return nil, nil, r.switchTab(-1)
 		case MatchKey(k, Keys.Unwind):
 			// Unwind a deep stack back to the root for a quick exit. Only consume it
 			// when there's something to unwind, so at the root the key passes through
 			// to the active screen instead of being swallowed.
 			if len(r.stack) > 1 {
-				return ResetToRoot(), true
+				return ResetToRoot(), nil, true
 			}
 		}
 	}
-	return nil, false
+	return nil, nil, false
 }
 
 // switchTab moves the active tab by delta (wrapping), but only at the root — when

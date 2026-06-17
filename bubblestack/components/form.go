@@ -41,11 +41,11 @@ type FormField interface {
 type Toggler interface{ OnToggle(forward bool) }
 
 // Activator is a field that handles Enter itself instead of submitting the form
-// (e.g. the search Source row, whose Enter opens a sub-picker). It returns the
-// command to run and whether it consumed the Enter; when not consumed the form runs
-// its OnSubmit.
+// (e.g. the search Source row, whose Enter opens a sub-picker). It returns a sync
+// control message, an async cmd, and whether it consumed the Enter; when not consumed
+// the form runs its OnSubmit.
 type Activator interface {
-	OnSelect(*core.Shared) (tea.Cmd, bool)
+	OnSelect(*core.Shared) (tea.Msg, tea.Cmd, bool)
 }
 
 // editable is the (unexported) field capability QueryUpdate needs: a focused text
@@ -170,18 +170,18 @@ func RenderToggle(options []string, index int, delim string) string {
 type PickField struct {
 	fieldBase
 	value func() string
-	onSel func(*core.Shared) (tea.Cmd, bool)
+	onSel func(*core.Shared) (tea.Msg, tea.Cmd, bool)
 }
 
-func NewPickField(key, label string, value func() string, onSel func(*core.Shared) (tea.Cmd, bool)) *PickField {
+func NewPickField(key, label string, value func() string, onSel func(*core.Shared) (tea.Msg, tea.Cmd, bool)) *PickField {
 	return &PickField{fieldBase: fieldBase{key, label}, value: value, onSel: onSel}
 }
 
-func (p *PickField) Focusable() bool                          { return true }
-func (p *PickField) Focus() tea.Cmd                           { return nil }
-func (p *PickField) Blur()                                    {}
-func (p *PickField) SetWidth(int)                             {}
-func (p *PickField) OnSelect(sh *core.Shared) (tea.Cmd, bool) { return p.onSel(sh) }
+func (p *PickField) Focusable() bool                                   { return true }
+func (p *PickField) Focus() tea.Cmd                                    { return nil }
+func (p *PickField) Blur()                                             {}
+func (p *PickField) SetWidth(int)                                      {}
+func (p *PickField) OnSelect(sh *core.Shared) (tea.Msg, tea.Cmd, bool) { return p.onSel(sh) }
 func (p *PickField) View(focused bool) string {
 	return fieldMarker(focused) + fieldLabel().Render(p.label) + p.value()
 }
@@ -213,7 +213,7 @@ type FormOpts struct {
 	Fields   []FormField
 	Help     []key.Binding
 	Focus    string // initial focused field key; default first focusable
-	OnSubmit func(*core.Shared, *FormScreen) tea.Cmd
+	OnSubmit func(*core.Shared, *FormScreen) (tea.Msg, tea.Cmd)
 }
 
 type FormScreen struct {
@@ -221,7 +221,7 @@ type FormScreen struct {
 	fields   []FormField
 	help     []key.Binding
 	focus    int
-	onSubmit func(*core.Shared, *FormScreen) tea.Cmd
+	onSubmit func(*core.Shared, *FormScreen) (tea.Msg, tea.Cmd)
 }
 
 var _ core.Screen = (*FormScreen)(nil)
@@ -267,49 +267,50 @@ func (f *FormScreen) Input() *textinput.Model   { return f.editable() }
 func (f *FormScreen) Filtering() bool           { return true }
 func (f *FormScreen) Init(*core.Shared) tea.Cmd { return f.syncFocus() }
 
-func (f *FormScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd) {
+func (f *FormScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Msg, tea.Cmd) {
 	if cmd, ok := QueryUpdate(f, msg); ok {
-		return f, cmd
+		return f, nil, cmd
 	}
 	key, ok := msg.(tea.KeyMsg)
 	if !ok {
-		return f, nil
+		return f, nil, nil
 	}
 	k := key.String()
 	switch {
 	case core.MatchKey(k, core.Keys.Back):
-		return f, core.Pop()
+		return f, core.Pop(), nil
 	case core.MatchKey(k, core.Keys.PrevField):
 		f.move(-1)
-		return f, f.syncFocus()
+		return f, nil, f.syncFocus()
 	case core.MatchKey(k, core.Keys.NextField):
 		f.move(1)
-		return f, f.syncFocus()
+		return f, nil, f.syncFocus()
 	case core.MatchKey(k, core.Keys.Left), core.MatchKey(k, core.Keys.Right):
 		// On a Toggler row these cycle the option; on a text row they fall through
 		// to the input (cursor movement / literal characters).
 		if t, ok := f.current().(Toggler); ok {
 			t.OnToggle(core.MatchKey(k, core.Keys.Right))
-			return f, nil
+			return f, nil, nil
 		}
 	case core.MatchKey(k, core.Keys.Select):
 		if a, ok := f.current().(Activator); ok {
-			if cmd, handled := a.OnSelect(sh); handled {
-				return f, cmd
+			if m, c, handled := a.OnSelect(sh); handled {
+				return f, m, c
 			}
 		}
 		if f.onSubmit != nil {
-			return f, f.onSubmit(sh, f)
+			m, c := f.onSubmit(sh, f)
+			return f, m, c
 		}
-		return f, nil
+		return f, nil, nil
 	}
 	// Editing keys (backspace, cursor) fall through to the focused text field.
 	if in := f.editable(); in != nil {
 		var cmd tea.Cmd
 		*in, cmd = in.Update(msg)
-		return f, cmd
+		return f, nil, cmd
 	}
-	return f, nil
+	return f, nil, nil
 }
 
 // move shifts focus by delta, skipping non-focusable fields and wrapping around.
