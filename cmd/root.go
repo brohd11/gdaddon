@@ -46,6 +46,9 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if installFlag {
+		if yamlFile == "" {
+			return fmt.Errorf("no addon_manifest.yml found; create one or pass a path")
+		}
 		return runInstall(yamlFile, projectRoot)
 	}
 	return tui.Run(yamlFile, projectRoot)

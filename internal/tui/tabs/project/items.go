@@ -6,6 +6,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -48,8 +49,9 @@ func addonItem(s addon.Status) components.Item {
 	return components.Item{Name: s.Addon.Name, Desc: addonDesc(s), Pick: pick}
 }
 
-// addonListItems builds the browse list contents: one row per addon.
-func addonListItems(statuses []addon.Status) []list.Item {
+// projectListItems builds the browse list contents: one row per addon.
+func projectListItems(sh *core.Shared) []list.Item {
+	statuses := inspect(sh)
 	items := make([]list.Item, 0, len(statuses))
 	for _, s := range statuses {
 		items = append(items, addonItem(s))

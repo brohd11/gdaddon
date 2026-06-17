@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/newplugin"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -10,9 +11,19 @@ import (
 
 // actionItems builds the Actions menu rows. Each row is a self-dispatching
 // components.Item carrying its own Pick, so the tab root just runs the selected
-// row's closure — no kind enum, no switch.
-func actionItems() []list.Item {
-	return []list.Item{
+// row's closure — no kind enum, no switch. The Create-manifest row is prepended only
+// while no manifest is loaded (the bootstrap case); the row is rebuilt on a
+// PathRefresh broadcast, so it disappears once a manifest exists.
+func actionItems(sh *core.Shared) []list.Item {
+	var items []list.Item
+	if appctx.Of(sh).ManifestPath == "" {
+		items = append(items, components.Item{
+			Name: "✎ Create manifest",
+			Desc: "create an addon_manifest.yml to track this project's plugins",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newCreateManifestForm(sh)) },
+		})
+	}
+	return append(items,
 		components.Item{
 			Name: "↧ Install / update all",
 			Desc: "download everything per the manifest",
@@ -28,5 +39,5 @@ func actionItems() []list.Item {
 			Desc: "change the color theme",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newThemePicker()) },
 		},
-	}
+	)
 }

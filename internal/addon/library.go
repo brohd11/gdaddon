@@ -83,6 +83,22 @@ func NormalizeRepoURL(rawURL string) string {
 	return trimmed + ".git"
 }
 
+// CreateManifest creates an empty manifest file at path (and its parent dirs),
+// establishing a project's addon_manifest.yml before any entries exist. It refuses to
+// overwrite an existing file. Parse/Inspect read the empty file as an empty addon
+// list, and AddEntry appends to it later.
+func CreateManifest(path string) error {
+	if _, err := os.Stat(path); err == nil {
+		return fmt.Errorf("%s already exists", filepath.Base(path))
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte{}, 0o644)
+}
+
 // AddEntry appends a new top-level entry to a manifest-shaped YAML file, creating
 // the file (and its parent dir) if absent. The block uses the flat 4-space shape:
 //

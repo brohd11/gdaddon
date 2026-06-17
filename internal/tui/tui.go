@@ -27,7 +27,7 @@ func Run(manifestPath, projectRoot string) error {
 			{Title: appctx.TitleProject, New: func(sh *bubblestack.Shared) bubblestack.Screen { return project.NewProjectScreen(sh) }},
 			{Title: appctx.TitleGlobal, New: func(sh *bubblestack.Shared) bubblestack.Screen { return global.NewGlobalScreen() }},
 			{Title: appctx.TitleArchive, New: func(sh *bubblestack.Shared) bubblestack.Screen { return archive.NewArchiveScreen() }},
-			{Title: appctx.TitleActions, New: func(sh *bubblestack.Shared) bubblestack.Screen { return actions.NewActionsScreen() }},
+			{Title: appctx.TitleActions, New: func(sh *bubblestack.Shared) bubblestack.Screen { return actions.NewActionsScreen(sh) }},
 			{Title: appctx.TitleSearch, New: func(sh *bubblestack.Shared) bubblestack.Screen { return search.NewSearchScreen() }},
 		},
 	})

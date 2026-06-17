@@ -3,6 +3,7 @@ package project
 import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -21,7 +22,7 @@ var _ core.Filterer = (*ProjectScreen)(nil)
 var _ core.Receiver = (*ProjectScreen)(nil)
 
 func NewProjectScreen(sh *core.Shared) *ProjectScreen {
-	l := list.New(addonListItems(inspect(sh)), core.NewDelegate(), 0, 0)
+	l := list.New(projectListItems(sh), core.NewDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	core.StyleList(&l)
 	// The browse short help is decluttered (see HelpView / ShortHelp); these extras
@@ -58,16 +59,24 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 }
 
 // Receive rebuilds the browse list by re-inspecting the manifest on a ProjectDirty
-// broadcast, keeping the browse-specific list logic out of the router. When the event
-// is focused it returns ShowTab so the router makes this tab active at its root.
+// (manifest contents changed) or PathRefresh (the manifest path itself changed, e.g.
+// just created) broadcast, keeping the browse-specific list logic out of the router.
+// When the event is focused it returns ShowTab so the router makes this tab active at
+// its root.
 func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
-	d, ok := payload.(appctx.ProjectDirty)
-	if !ok {
+	var status string
+	var focus bool
+	switch d := payload.(type) {
+	case appctx.ProjectDirty:
+		status, focus = d.Status, d.Focus
+	case appctx.PathRefresh:
+		status, focus = d.Status, d.Focus
+	default:
 		return core.Action{}
 	}
-	sh.SetStatus(d.Status)
-	s.list.SetItems(addonListItems(inspect(sh)))
-	if d.Focus {
+	sh.SetStatus(status)
+	s.list.SetItems(projectListItems(sh))
+	if focus {
 		return core.ShowTab(appctx.TitleProject)
 	}
 	return core.Action{}

@@ -24,21 +24,30 @@ type Ctx struct {
 }
 
 // New builds the context from the resolved manifest + project paths, deriving the
-// display-relative manifest path and the project name (the work core.NewShared used
-// to do before the framework was made domain-agnostic).
+// display fields via RefreshPaths.
 func New(manifestPath, projectRoot string) *Ctx {
-	rel, err := filepath.Rel(projectRoot, manifestPath)
-	if err != nil {
-		rel = manifestPath
+	c := &Ctx{ManifestPath: manifestPath, ProjectRoot: projectRoot}
+	c.recompute()
+	return c
+}
+
+// recompute re-derives the display fields (ManifestRel, ProjectName, HasProject) from
+// ManifestPath/ProjectRoot. It's the single source of path-derived state, reused at
+// construction (New) and after a path change (RefreshPaths). An empty ManifestPath —
+// the no-manifest launch — leaves ManifestRel empty (the header shows a bootstrap
+// hint).
+func (c *Ctx) recompute() {
+	switch {
+	case c.ManifestPath == "":
+		c.ManifestRel = ""
+	default:
+		rel, err := filepath.Rel(c.ProjectRoot, c.ManifestPath)
+		if err != nil {
+			rel = c.ManifestPath
+		}
+		c.ManifestRel = rel
 	}
-	name, exists := addon.ProjectName(projectRoot)
-	return &Ctx{
-		ManifestPath: manifestPath,
-		ProjectRoot:  projectRoot,
-		ManifestRel:  rel,
-		ProjectName:  name,
-		HasProject:   exists,
-	}
+	c.ProjectName, c.HasProject = addon.ProjectName(c.ProjectRoot)
 }
 
 // Of recovers the gdaddon context from a Shared. Tabs call c := appctx.Of(sh) to
@@ -74,7 +83,26 @@ type (
 		Status string
 		Focus  bool
 	}
+	// PathRefresh is broadcast after the manifest/project paths themselves change (e.g.
+	// a manifest was just created). Path-dependent roots — the Project list and the
+	// Actions menu — reload from the updated context; the header needs no notification
+	// (it reads straight from App each render).
+	PathRefresh struct {
+		Status string
+		Focus  bool
+	}
 )
+
+// RefreshPaths recomputes the path-derived context fields after a path change, then
+// returns the PathRefresh broadcast that tells path-dependent screens to reload.
+// Because the recompute runs here — before the broadcast is emitted — every Receiver
+// (and the live-reading header) already sees the updated paths, so no router ordering
+// or chrome plumbing is needed. Call it inline on the update loop (it's local, no IO
+// worth deferring); wrap the result in core.Async only if a caller needs it off-loop.
+func RefreshPaths(sh *core.Shared, status string, focus bool) core.Action {
+	Of(sh).recompute()
+	return core.PropagateAll(PathRefresh{Status: status, Focus: focus})
+}
 
 // Header renders gdaddon's persistent context box (Project / Root / Manifest). It is
 // wired onto core.Chrome.Header in Run, so the agnostic router draws it on every
@@ -93,10 +121,14 @@ func Header(sh *core.Shared) string {
 	line := func(label, value string) string {
 		return core.Label(label) + core.TruncLeft(value, valWidth)
 	}
+	manifest := c.ManifestRel
+	if manifest == "" {
+		manifest = "(none — Actions ▸ Create manifest)"
+	}
 	body := strings.Join([]string{
 		core.Label("Project:  ") + name,
 		line("Root:     ", c.ProjectRoot),
-		line("Manifest: ", c.ManifestRel),
+		line("Manifest: ", manifest),
 	}, "\n")
 	return core.HeaderBox(sh.Width(), body)
 }

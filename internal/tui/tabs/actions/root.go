@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"gdaddon/internal/tui/appctx"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -8,19 +9,31 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// actionsScreen is the Actions tab (reached with [ / ]): install all, new plugin,
-// import plugin. As a tab root it quits on q rather than popping.
+// actionsScreen is the Actions tab (reached with [ / ]): create manifest (when none
+// is loaded), install all, new plugin, theme. As a tab root it quits on q rather than
+// popping.
 type ActionsScreen struct {
 	list list.Model
 }
 
 var _ core.Filterer = (*ActionsScreen)(nil)
+var _ core.Receiver = (*ActionsScreen)(nil)
 
-func NewActionsScreen() *ActionsScreen {
-	return &ActionsScreen{list: core.NewSelectList(actionItems(), "Actions")}
+func NewActionsScreen(sh *core.Shared) *ActionsScreen {
+	return &ActionsScreen{list: core.NewSelectList(actionItems(sh), "Actions")}
 }
 
 func (s *ActionsScreen) Init(*core.Shared) tea.Cmd { return nil }
+
+// Receive rebuilds the menu on a PathRefresh so the Create-manifest row appears or
+// disappears with the manifest's presence. It never grabs focus (PathRefresh's focus
+// belongs to the Project tab).
+func (s *ActionsScreen) Receive(sh *core.Shared, payload any) core.Action {
+	if _, ok := payload.(appctx.PathRefresh); ok {
+		s.list.SetItems(actionItems(sh))
+	}
+	return core.Action{}
+}
 
 func (s *ActionsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 

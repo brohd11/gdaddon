@@ -21,7 +21,7 @@ func newTestRouter() core.Router {
 	sh.Chrome = &core.Chrome{Header: core.NewHeaderPane(appctx.Header), Output: components.NewLogPane()}
 	return core.NewRouter(sh, []core.TabEntry{
 		{Title: "Browse", New: func(sh *core.Shared) core.Screen { return project.NewProjectScreen(sh) }},
-		{Title: "Actions", New: func(sh *core.Shared) core.Screen { return actions.NewActionsScreen() }},
+		{Title: "Actions", New: func(sh *core.Shared) core.Screen { return actions.NewActionsScreen(sh) }},
 	})
 }
 
