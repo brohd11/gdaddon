@@ -34,14 +34,14 @@ func newArchiveSubmenu(st addon.Status) *components.PickerScreen {
 // resolution, already-archived check, and task wiring stay in one place.
 func archiveCurrentVersion(sh *core.Shared, st addon.Status) tea.Cmd {
 	if st.LocalVersion == "" {
-		sh.StatusMsg = "cannot archive: installed version unknown"
+		sh.SetStatus("cannot archive: installed version unknown")
 		return nil
 	}
 	asset := source.Asset{Name: archiveAssetName(st.Addon.URL), URL: st.Addon.URL}
 	sel := versionItem{tag: st.LocalVersion, asset: asset}
 	cs, status, ok := buildArchiveConfirm(st.Addon, st.LocalVersion, sel)
 	if status != "" {
-		sh.StatusMsg = status
+		sh.SetStatus(status)
 	}
 	if !ok {
 		return nil

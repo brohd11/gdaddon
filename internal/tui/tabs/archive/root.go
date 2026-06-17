@@ -67,7 +67,7 @@ func (s *ArchiveScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 	if !ok || m.Target != appctx.Archive {
 		return false
 	}
-	sh.StatusMsg = m.Status
+	sh.SetStatus(m.Status)
 	s.list.SetItems(repoItems())
 	return true
 }

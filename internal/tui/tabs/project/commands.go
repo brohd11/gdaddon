@@ -72,12 +72,12 @@ func commitRemove(sh *core.Shared, st addon.Status, mode int) tea.Cmd {
 	c := appctx.Of(sh)
 	if mode == removeProjectLocal {
 		if err := addon.Uninstall(st.Addon, c.ProjectRoot); err != nil {
-			sh.StatusMsg = "error: " + err.Error()
+			sh.SetStatus("error: " + err.Error())
 			return core.ResetToRoot()
 		}
 	}
 	if err := addon.RemoveEntry(c.ManifestPath, st.Addon.Name); err != nil {
-		sh.StatusMsg = "error: " + err.Error()
+		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
 	return core.Refresh(appctx.Project, true, "removed "+st.Addon.Name)

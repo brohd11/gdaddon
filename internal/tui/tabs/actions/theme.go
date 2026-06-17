@@ -1,0 +1,31 @@
+package actions
+
+import (
+	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
+
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+// newThemePicker lists the registered themes; selecting one applies it live via
+// core.ApplyTheme, which repaints the chrome immediately and rebuilds every tab
+// root. The picker stays open (its own list recolors when reopened). Scaffolding:
+// this lives under Actions for now and can move to a config submenu later.
+func newThemePicker() core.Screen {
+	active := core.CurrentTheme()
+	var items []list.Item
+	for _, name := range core.ThemeNames() {
+		name := name // capture per row
+		desc := ""
+		if name == active {
+			desc = "active"
+		}
+		items = append(items, components.Item{
+			Name: name,
+			Desc: desc,
+			Pick: func(sh *core.Shared) tea.Cmd { return core.ApplyTheme(name) },
+		})
+	}
+	return components.NewPicker(items, components.PickerOpts{Title: "Theme"})
+}

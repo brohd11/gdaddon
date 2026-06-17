@@ -32,7 +32,7 @@ func newSubmenuScreen(g globalItem) *components.PickerScreen {
 // the Project tab, which reloads the new row from the manifest.
 func importToProject(sh *core.Shared, g globalItem) tea.Cmd {
 	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, g.name, g.url, g.path); err != nil {
-		sh.StatusMsg = "error: " + err.Error()
+		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
 	return core.Refresh(appctx.Project, true, "imported "+g.name)

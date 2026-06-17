@@ -100,11 +100,11 @@ func newSearchLoading(src searchpkg.Source, query, godotVer string, page int) *c
 			return nil
 		}
 		if m.err != nil {
-			sh.StatusMsg = "error: " + m.err.Error()
+			sh.SetStatus("error: " + m.err.Error())
 			return core.Pop()
 		}
 		if len(m.res.Results) == 0 {
-			sh.StatusMsg = fmt.Sprintf("no results for %q", query)
+			sh.SetStatus(fmt.Sprintf("no results for %q", query))
 			return core.Pop()
 		}
 		return core.Replace(newResultsPicker(src, query, godotVer, m.res))
@@ -178,11 +178,11 @@ func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen
 			return nil
 		}
 		if m.err != nil {
-			sh.StatusMsg = "error: " + m.err.Error()
+			sh.SetStatus("error: " + m.err.Error())
 			return core.Pop()
 		}
 		if m.detail.BrowseURL == "" {
-			sh.StatusMsg = "asset has no repository url"
+			sh.SetStatus("asset has no repository url")
 			return core.Pop()
 		}
 		return core.Replace(newplugin.NewWithURL(m.detail.BrowseURL))

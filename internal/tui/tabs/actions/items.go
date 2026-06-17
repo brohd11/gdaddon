@@ -24,5 +24,10 @@ func actionItems() []list.Item {
 			Desc: "add a plugin to the project or your global list",
 			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newplugin.NewNewPluginForm()) },
 		},
+		components.Item{
+			Name: "◑ Theme",
+			Desc: "change the color theme",
+			Pick: func(sh *core.Shared) tea.Cmd { return core.Push(newThemePicker()) },
+		},
 	}
 }

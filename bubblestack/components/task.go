@@ -45,7 +45,7 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cmd)
 	switch msg := msg.(type) {
 	case core.TaskEvent:
 		if !msg.Done {
-			sh.AppendLog(msg.Line)
+			sh.Log(msg.Line)
 			return s, waitForEvent(sh.Events)
 		}
 		s.done = true

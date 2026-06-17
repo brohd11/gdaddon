@@ -15,13 +15,13 @@ import (
 )
 
 // newTestRouter builds a router with the Browse + Actions tabs and no real project
-// on disk (statuses nil → an empty browse list).
+// on disk (the manifest path doesn't exist → an empty browse list).
 func newTestRouter() core.Router {
 	sh := core.NewShared(appctx.New("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test"))
-	sh.Header = appctx.Header
+	sh.Chrome = &core.Chrome{Header: core.NewHeaderPane(appctx.Header), Output: components.NewLogPane()}
 	return core.NewRouter(sh, []core.TabEntry{
-		{Title: "Browse", Root: project.NewProjectScreen(nil)},
-		{Title: "Actions", Root: actions.NewActionsScreen()},
+		{Title: "Browse", New: func(sh *core.Shared) core.Screen { return project.NewProjectScreen(sh) }},
+		{Title: "Actions", New: func(sh *core.Shared) core.Screen { return actions.NewActionsScreen() }},
 	})
 }
 

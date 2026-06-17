@@ -72,7 +72,7 @@ func (s *GlobalScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 	if !ok || m.Target != appctx.Global {
 		return false
 	}
-	sh.StatusMsg = m.Status
+	sh.SetStatus(m.Status)
 	s.list.SetItems(globalItems())
 	return true
 }

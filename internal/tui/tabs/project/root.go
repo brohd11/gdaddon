@@ -20,8 +20,8 @@ type ProjectScreen struct {
 var _ core.Filterer = (*ProjectScreen)(nil)
 var _ core.RootHandler = (*ProjectScreen)(nil)
 
-func NewProjectScreen(statuses []addon.Status) *ProjectScreen {
-	l := list.New(addonListItems(statuses), core.NewDelegate(), 0, 0)
+func NewProjectScreen(sh *core.Shared) *ProjectScreen {
+	l := list.New(addonListItems(inspect(sh)), core.NewDelegate(), 0, 0)
 	l.Title = "Godot Addons"
 	core.StyleList(&l)
 	// The browse short help is decluttered (see HelpView / ShortHelp); these extras
@@ -65,10 +65,16 @@ func (s *ProjectScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
 	if !ok || m.Target != appctx.Project {
 		return false
 	}
-	sh.StatusMsg = m.Status
-	c := appctx.Of(sh)
-	if statuses, err := addon.Inspect(c.ManifestPath, c.ProjectRoot); err == nil {
-		s.list.SetItems(addonListItems(statuses))
-	}
+	sh.SetStatus(m.Status)
+	s.list.SetItems(addonListItems(inspect(sh)))
 	return true
+}
+
+// inspect reads the manifest's current state from the context paths, so the root
+// builds (and refreshes) itself from disk rather than being handed statuses. A
+// parse/read error yields no rows (an empty list), matching the global/archive tabs.
+func inspect(sh *core.Shared) []addon.Status {
+	c := appctx.Of(sh)
+	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
+	return statuses
 }

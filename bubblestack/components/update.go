@@ -71,7 +71,7 @@ func RootUpdate(sh *core.Shared, l *list.Model, msg tea.Msg) tea.Cmd {
 			return tea.Quit
 		case core.MatchKey(k, core.Keys.Select):
 			if it, ok := l.SelectedItem().(Item); ok && it.Pick != nil {
-				sh.StatusMsg = ""
+				sh.SetStatus("")
 				return it.Pick(sh)
 			}
 			return nil

@@ -8,12 +8,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// tabEntry is one top-level tab: a title for the strip and its cached root screen.
-// The root instance is kept alive across tab switches so each tab preserves its
-// list scroll/filter state.
+// tabEntry is one top-level tab: a title for the strip and a constructor for its
+// root screen. The router builds the root lazily (NewRouter) and caches it, so the
+// theme is already applied before the root bakes its styles; the same constructor
+// is re-invoked to rebuild every root on a theme change. Roots reflect on-disk /
+// manifest data, so reconstruction loses no per-tab state.
 type TabEntry struct {
 	Title string
-	Root  Screen
+	New   func(*Shared) Screen
 }
 
 // router is the top-level tea.Model. It owns the shared chrome state, the set of
@@ -27,12 +29,17 @@ type TabEntry struct {
 type Router struct {
 	sh     *Shared
 	tabs   []TabEntry
+	roots  []Screen // cached root per tab, built from tabs[i].New(sh)
 	active int      // index into tabs of the visible tab
-	stack  []Screen // live nav stack for the active tab; stack[0] == tabs[active].root
+	stack  []Screen // live nav stack for the active tab; stack[0] == roots[active]
 }
 
 func NewRouter(sh *Shared, tabs []TabEntry) Router {
-	return Router{sh: sh, tabs: tabs, stack: []Screen{tabs[0].Root}}
+	roots := make([]Screen, len(tabs))
+	for i := range tabs {
+		roots[i] = tabs[i].New(sh)
+	}
+	return Router{sh: sh, tabs: tabs, roots: roots, stack: []Screen{roots[0]}}
 }
 
 func (r Router) Top() Screen { return r.stack[len(r.stack)-1] }
@@ -103,17 +110,30 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// hand it the message to rebuild itself, and — when Switch is set — make that
 		// tab active and unwind it to its root. The router stays tab-agnostic: it asks
 		// each root rather than mapping Target → index itself.
-		for i := range r.tabs {
-			h, ok := r.tabs[i].Root.(RootHandler)
+		for i := range r.roots {
+			h, ok := r.roots[i].(RootHandler)
 			if !ok || !h.HandleRoot(r.sh, msg) {
 				continue
 			}
 			if msg.Switch {
 				r.active = i
-				r.stack = []Screen{r.tabs[i].Root}
+				r.stack = []Screen{r.roots[i]}
 			}
 			break
 		}
+		r.resize()
+		return r, nil
+
+	case MsgThemeChanged:
+		// A theme switch repaints the package-level styles (SetTheme), but the
+		// cached tab roots baked their delegate/list styles at construction. Rebuild
+		// each root from its constructor so the new palette takes; deeper live
+		// screens are transient (rebuilt on reopen) and the router-drawn chrome
+		// already repaints from the refreshed style vars.
+		for i := range r.roots {
+			r.roots[i] = r.tabs[i].New(r.sh)
+		}
+		r.stack[0] = r.roots[r.active]
 		r.resize()
 		return r, nil
 	}
@@ -135,48 +155,59 @@ func (r *Router) globalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return tea.Quit, true
 	}
 
+	ch := r.sh.Chrome
+	outputOn := ch != nil && ch.Output != nil
+
 	// When the output pane holds focus, navigation keys scroll it; everything
 	// else either toggles back or clears.
-	if r.sh.focus == focusOutput {
+	if outputOn && ch.outputFocused {
 		switch {
 		case MatchKey(k, Keys.ToggleOutput), MatchKey(k, Keys.Back):
-			r.sh.focus = focusList
+			ch.outputFocused = false
 			return nil, true
 		case MatchKey(k, Keys.Output):
-			r.sh.OutputShown = false
-			r.sh.focus = focusList
+			ch.Output.Hide()
+			ch.outputFocused = false
 			return nil, true
 		case MatchKey(k, Keys.Clear):
-			r.sh.clearLogs()
+			r.clearOutput()
 			return nil, true
 		case MatchKey(k, Keys.Quit):
 			return tea.Quit, true
 		}
-		var cmd tea.Cmd
-		r.sh.output, cmd = r.sh.output.Update(msg)
-		return cmd, true
+		return ch.Output.Update(msg), true
 	}
 
 	// tab jumps into the output pane, c clears the log, [ / ] switch top-level tabs
 	// (only at the root, so the live stack always belongs to the active tab), and `
 	// unwinds a deep stack back to the root for a quick exit — unless the active
-	// screen is capturing filter text.
+	// screen is capturing filter text. The output keys pass through (no consume) when
+	// there is no output pane, so a chromeless app can bind tab/o itself.
 	if f, ok := r.Top().(Filterer); !ok || !f.Filtering() {
 		switch {
 		case MatchKey(k, Keys.ToggleOutput):
-			if r.sh.OutputShown {
-				r.sh.focus = focusOutput
-				r.sh.output.GotoBottom()
+			if !outputOn {
+				break
+			}
+			if ch.Output.Shown() {
+				ch.outputFocused = true
+				ch.Output.GotoBottom()
 			}
 			return nil, true
 		case MatchKey(k, Keys.Output):
-			r.sh.OutputShown = !r.sh.OutputShown
-			if !r.sh.OutputShown {
-				r.sh.focus = focusList
+			if !outputOn {
+				break
+			}
+			ch.Output.Toggle()
+			if !ch.Output.Shown() {
+				ch.outputFocused = false
 			}
 			return nil, true
 		case MatchKey(k, Keys.Clear):
-			r.sh.clearLogs()
+			if ch == nil {
+				break
+			}
+			r.clearOutput()
 			return nil, true
 		case MatchKey(k, Keys.NextTab):
 			return nil, r.switchTab(1)
@@ -204,11 +235,49 @@ func (r *Router) switchTab(delta int) bool {
 		return false
 	}
 	r.active = (r.active + delta + len(r.tabs)) % len(r.tabs)
-	r.stack = []Screen{r.tabs[r.active].Root}
+	r.stack = []Screen{r.roots[r.active]}
 	return true
 }
 
-func (r Router) helpHeight() int { return lipgloss.Height(r.Top().HelpView(r.sh)) }
+// currentMask is the chrome suppression requested by the active (top) screen, or
+// the zero mask (hide nothing) when it doesn't implement ChromeMasker.
+func (r Router) currentMask() ChromeMask {
+	if m, ok := r.Top().(ChromeMasker); ok {
+		return m.ChromeMask()
+	}
+	return ChromeMask{}
+}
+
+// outputVisible reports whether an output pane currently occupies layout space
+// (present and shown). It does not account for the per-screen mask.
+func (r Router) outputVisible() bool {
+	return r.sh.Chrome != nil && r.sh.Chrome.Output != nil && r.sh.Chrome.Output.Shown()
+}
+
+// clearOutput empties the output pane and the status line and returns focus to the
+// body (the Clear key). No-op without chrome.
+func (r *Router) clearOutput() {
+	ch := r.sh.Chrome
+	if ch == nil {
+		return
+	}
+	if ch.Output != nil {
+		ch.Output.Clear()
+	}
+	ch.Status = ""
+	ch.outputFocused = false
+}
+
+// helpView is the active screen's help bar, suppressed (empty) when the screen masks
+// it. helpHeight measures it the same way so the body sizing stays in sync.
+func (r Router) helpView(mask ChromeMask) string {
+	if mask.Help {
+		return ""
+	}
+	return r.Top().HelpView(r.sh)
+}
+
+func (r Router) helpHeight(mask ChromeMask) int { return vheight(r.helpView(mask)) }
 
 // tabStripView renders the top-level tab strip (omitted when there's only one
 // tab): the tab titles followed by a full-width rule that delimits it from the
@@ -234,27 +303,42 @@ func (r Router) tabStripView() string {
 }
 
 // topChrome is the persistent chrome above the body: the header box plus the tab
-// strip (if any) below it. Its height is measured (not a constant) so adding the
-// strip automatically shrinks the body.
-func (r Router) topChrome() string {
-	strip := r.tabStripView()
-	if strip == "" {
-		return r.sh.headerView()
+// strip (if any) below it, each gated by the active screen's mask. Its height is
+// measured (not a constant) so adding the strip automatically shrinks the body.
+func (r Router) topChrome(mask ChromeMask) string {
+	var header string
+	if !mask.Header && r.sh.Chrome != nil {
+		header = r.sh.Chrome.Header.view(r.sh) // nil-receiver safe
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, r.sh.headerView(), strip)
+	var strip string
+	if !mask.TabStrip {
+		strip = r.tabStripView()
+	}
+	switch {
+	case header != "" && strip != "":
+		return lipgloss.JoinVertical(lipgloss.Left, header, strip)
+	case header != "":
+		return header
+	default:
+		return strip
+	}
 }
 
-// belowChrome is the shared chrome rendered between the active screen's body and
-// the help bar: the status line (if any) then the output box (when shown). It is
-// drawn by the router around every screen, so output/status persist across tab
-// switches and screen pushes. Empty when there's neither.
-func (r Router) belowChrome() string {
-	var parts []string
-	if r.sh.StatusMsg != "" {
-		parts = append(parts, StatusStyle.Render(r.sh.StatusMsg))
+// belowChrome is the chrome rendered between the active screen's body and the help
+// bar: the status line (if any) then the output box (when shown), each gated by the
+// screen's mask. Drawn by the router around every screen, so output/status persist
+// across tab switches and screen pushes. Empty when there's neither.
+func (r Router) belowChrome(mask ChromeMask) string {
+	ch := r.sh.Chrome
+	if ch == nil {
+		return ""
 	}
-	if r.sh.OutputBoxHeight() > 0 {
-		parts = append(parts, r.sh.OutputView())
+	var parts []string
+	if !mask.Status && ch.Status != "" {
+		parts = append(parts, StatusStyle.Render(ch.Status))
+	}
+	if !mask.Output && r.outputVisible() {
+		parts = append(parts, ch.Output.View(ch.outputFocused))
 	}
 	if len(parts) == 0 {
 		return ""
@@ -274,7 +358,8 @@ func vheight(s string) int {
 // bodyHeight is the rows available to the active screen's body: the space between
 // the top chrome and the help bar, minus the status/output chrome below the body.
 func (r Router) bodyHeight() int {
-	h := r.sh.height - lipgloss.Height(r.topChrome()) - vheight(r.belowChrome()) - r.helpHeight()
+	mask := r.currentMask()
+	h := r.sh.height - vheight(r.topChrome(mask)) - vheight(r.belowChrome(mask)) - r.helpHeight(mask)
 	if h < 1 {
 		h = 1
 	}
@@ -285,32 +370,39 @@ func (r Router) resize() {
 	if r.sh.width == 0 {
 		return
 	}
-	// The output viewport is shared chrome, so the router owns its sizing and
-	// keeps it pinned to the newest line unless the user is scrolling it.
-	r.sh.output.Width = r.sh.outputInnerWidth()
-	r.sh.output.Height = r.sh.outputContentHeight()
-	r.sh.output.SetContent(r.sh.logContent())
-	if r.sh.focus != focusOutput {
-		r.sh.output.GotoBottom()
+	// The output pane is router-owned chrome, so the router sizes it and keeps it
+	// pinned to the newest line unless the user is scrolling it.
+	if r.outputVisible() {
+		r.sh.Chrome.Output.SetSize(r.sh.width, r.sh.height)
+		if !r.sh.Chrome.outputFocused {
+			r.sh.Chrome.Output.GotoBottom()
+		}
 	}
 	r.Top().SetSize(r.sh, r.sh.width, r.bodyHeight())
 }
 
 func (r Router) View() string {
 	sh := r.sh
-	chrome := r.topChrome()
+	mask := r.currentMask()
+	chrome := r.topChrome(mask)
 	body := r.Top().View(sh)
-	below := r.belowChrome()
-	help := r.Top().HelpView(sh)
+	below := r.belowChrome(mask)
+	help := r.helpView(mask)
 	// Pad the body so the status/output chrome and the always-visible help bar sit
 	// at the very bottom.
-	if pad := (sh.height - lipgloss.Height(chrome) - vheight(below) - lipgloss.Height(help)) - lipgloss.Height(body); pad > 0 {
+	if pad := (sh.height - vheight(chrome) - vheight(below) - vheight(help)) - lipgloss.Height(body); pad > 0 {
 		body = lipgloss.JoinVertical(lipgloss.Left, body, Blanks(pad))
 	}
-	parts := []string{chrome, body}
+	var parts []string
+	if chrome != "" {
+		parts = append(parts, chrome)
+	}
+	parts = append(parts, body)
 	if below != "" {
 		parts = append(parts, below)
 	}
-	parts = append(parts, help)
+	if help != "" {
+		parts = append(parts, help)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }

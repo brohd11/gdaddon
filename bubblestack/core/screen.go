@@ -2,10 +2,10 @@ package core
 
 import tea "github.com/charmbracelet/bubbletea"
 
-// screen is one navigable view. The router owns the shared chrome (header, help
-// bar, output pane) and the navigation stack; a screen renders only its own body
-// and handles its own keys. Implementations are pointer types so Update and
-// SetSize can mutate in place.
+// screen is one navigable view. The router owns the optional chrome (header, status,
+// output pane — see chrome.go), the help bar, and the navigation stack; a screen
+// renders only its own body and handles its own keys. Implementations are pointer
+// types so Update and SetSize can mutate in place.
 type Screen interface {
 	Init(*Shared) tea.Cmd
 	Update(*Shared, tea.Msg) (Screen, tea.Cmd)
@@ -32,3 +32,26 @@ type RootHandler interface {
 // can pop back to its command hub (the nearest stopper) without knowing the stack
 // depth. Returns false to act as a normal screen.
 type PopStopper interface{ PopStop() bool }
+
+// ChromeMask marks which chrome elements a screen suppresses while it is on top
+// (true ⇒ hidden). The zero value hides nothing; FullscreenMask hides everything,
+// giving a screen the whole canvas.
+type ChromeMask struct {
+	Header   bool
+	TabStrip bool
+	Status   bool
+	Output   bool
+	Help     bool
+}
+
+// FullscreenMask suppresses every chrome element — the mask a fullscreen screen
+// returns from ChromeMask.
+func FullscreenMask() ChromeMask {
+	return ChromeMask{Header: true, TabStrip: true, Status: true, Output: true, Help: true}
+}
+
+// chromeMasker is the optional interface a screen implements to suppress chrome
+// elements while it is the active (top) screen. The router queries the top screen
+// each render and resize, so popping back to a screen that doesn't implement it
+// restores the chrome automatically — no shared state to reset.
+type ChromeMasker interface{ ChromeMask() ChromeMask }

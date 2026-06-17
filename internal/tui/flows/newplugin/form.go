@@ -122,7 +122,7 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) tea
 			err = addon.AddEntry(globalPath, name, url, path)
 		}
 		if err != nil {
-			sh.StatusMsg = "error: " + err.Error()
+			sh.SetStatus("error: " + err.Error())
 			return core.ResetToRoot()
 		}
 		// Show the Global tab rebuilt with the new entry (parallel to a project add
@@ -131,7 +131,7 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) tea
 	}
 
 	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, name, url, path); err != nil {
-		sh.StatusMsg = "error: " + err.Error()
+		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
 	return tea.Batch(core.ResetToRoot(), core.Refresh(appctx.Project, true, "added "+name))

@@ -17,11 +17,31 @@ func (stubScreen) HelpView(*Shared) string                   { return "" }
 func (stubScreen) SetSize(*Shared, int, int)                 {}
 func (stubScreen) Filtering() bool                           { return false }
 
+// fakeOutput is a minimal core.Output (plus the Log capability) for exercising the
+// router's output key/layout plumbing without importing components (core ←
+// components forbids it).
+type fakeOutput struct {
+	logs  []string
+	shown bool
+}
+
+func (f *fakeOutput) Log(s string)           { f.logs = append(f.logs, s); f.shown = true }
+func (f *fakeOutput) Shown() bool            { return f.shown }
+func (f *fakeOutput) Toggle()                { f.shown = !f.shown }
+func (f *fakeOutput) Hide()                  { f.shown = false }
+func (f *fakeOutput) Clear()                 { f.logs = nil; f.shown = false }
+func (f *fakeOutput) SetSize(_, _ int)       {}
+func (f *fakeOutput) Height() int            { return 0 }
+func (f *fakeOutput) View(bool) string       { return "OUT" }
+func (f *fakeOutput) Update(tea.Msg) tea.Cmd { return nil }
+func (f *fakeOutput) GotoBottom()            {}
+
 func newCoreTestRouter() Router {
-	// nil App: stubScreen reads no context and Header is nil, so the router renders
-	// no context box — exercises pure framework plumbing with no domain dependency.
+	// nil App: stubScreen reads no context, so the router needs no domain dependency.
+	// Chrome carries only a fake output pane (no header) to exercise the output keys.
 	sh := NewShared(nil)
-	return NewRouter(sh, []TabEntry{{Title: "Stub", Root: stubScreen{}}})
+	sh.Chrome = &Chrome{Output: &fakeOutput{}}
+	return NewRouter(sh, []TabEntry{{Title: "Stub", New: func(*Shared) Screen { return stubScreen{} }}})
 }
 
 func sized(tm tea.Model) tea.Model {
@@ -74,19 +94,20 @@ func TestRouterStackPushPop(t *testing.T) {
 func TestOutputFocusAndClear(t *testing.T) {
 	tm := sized(newCoreTestRouter())
 	sh := tm.(Router).sh
-	sh.AppendLog("hello")
+	out := sh.Chrome.Output.(*fakeOutput)
+	sh.Log("hello")
 	tm = sized(tm) // re-lay-out with the log present
 
 	tm = pump(tm, keyMsg(Keys.ToggleOutput.Keys()[0]))
-	if sh.focus != focusOutput {
-		t.Fatalf("ToggleOutput should focus the output pane, got %v", sh.focus)
+	if !sh.Chrome.outputFocused {
+		t.Fatal("ToggleOutput should focus the output pane")
 	}
 
 	tm = pump(tm, keyMsg(Keys.Clear.Keys()[0]))
-	if len(sh.Logs) != 0 {
-		t.Fatalf("Clear should clear the logs, got %d", len(sh.Logs))
+	if len(out.logs) != 0 {
+		t.Fatalf("Clear should clear the logs, got %d", len(out.logs))
 	}
-	if sh.focus != focusList {
+	if sh.Chrome.outputFocused {
 		t.Fatal("clearing should return focus to the list")
 	}
 }
@@ -96,23 +117,57 @@ func TestOutputFocusAndClear(t *testing.T) {
 func TestOutputToggle(t *testing.T) {
 	tm := sized(newCoreTestRouter())
 	sh := tm.(Router).sh
-	sh.AppendLog("hello") // AppendLog reveals the box
-	if !sh.OutputShown {
+	out := sh.Chrome.Output.(*fakeOutput)
+	sh.Log("hello") // logging reveals the box
+	if !out.Shown() {
 		t.Fatal("appending a log should show the output box")
 	}
 
 	tm = pump(tm, keyMsg(Keys.ToggleOutput.Keys()[0])) // focus the pane
 	tm = pump(tm, keyMsg(Keys.Output.Keys()[0]))       // o hides it
-	if sh.OutputShown {
+	if out.Shown() {
 		t.Fatal("o should hide the output box")
 	}
-	if sh.focus != focusList {
+	if sh.Chrome.outputFocused {
 		t.Fatal("hiding the output while focused should return focus to the list")
 	}
 
 	pump(tm, keyMsg(Keys.Output.Keys()[0])) // o shows it again
-	if !sh.OutputShown {
+	if !out.Shown() {
 		t.Fatal("o should show the output box again")
+	}
+}
+
+// maskScreen is a stub screen that claims the whole canvas via ChromeMasker.
+type maskScreen struct{ stubScreen }
+
+func (maskScreen) ChromeMask() ChromeMask { return FullscreenMask() }
+
+// TestChromeMaskSuppressesChrome checks a screen returning FullscreenMask hides the
+// chrome the router would otherwise draw (here the output pane), and that popping
+// back to an unmasked screen restores it — the per-screen suppression lever.
+func TestChromeMaskSuppressesChrome(t *testing.T) {
+	tm := sized(newCoreTestRouter())
+	r := tm.(Router)
+	r.sh.Log("hello") // reveal the output pane
+	r.sh.Chrome.Status = "working"
+	if r.belowChrome(r.currentMask()) == "" {
+		t.Fatal("output/status should render under an unmasked screen")
+	}
+
+	tm = pump(tm, Push(maskScreen{})())
+	r = tm.(Router)
+	if got := r.belowChrome(r.currentMask()); got != "" {
+		t.Fatalf("FullscreenMask should suppress the below chrome, got %q", got)
+	}
+	if got := r.topChrome(r.currentMask()); got != "" {
+		t.Fatalf("FullscreenMask should suppress the top chrome, got %q", got)
+	}
+
+	tm = pump(tm, Pop()())
+	r = tm.(Router)
+	if r.belowChrome(r.currentMask()) == "" {
+		t.Fatal("popping back to the unmasked screen should restore the chrome")
 	}
 }
 

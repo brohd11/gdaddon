@@ -56,7 +56,7 @@ const (
 )
 
 // Header renders gdaddon's persistent context box (Project / Root / Manifest). It is
-// wired onto core.Shared.Header in Run, so the agnostic router draws it on every
+// wired onto core.Chrome.Header in Run, so the agnostic router draws it on every
 // screen without naming any domain type.
 func Header(sh *core.Shared) string {
 	c := Of(sh)

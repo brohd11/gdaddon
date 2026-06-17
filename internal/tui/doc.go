@@ -1,7 +1,8 @@
 // Package tui is the thin top-level wiring for the interactive bubbletea
-// front-end: Run builds the shared chrome state (with gdaddon's context + header
-// from appctx) and the top-level tab set, then hands them to the router. The real
-// code lives in sub-packages, plus the bubblestack framework module.
+// front-end: Run hands bubblestack.Run gdaddon's context, the header + output chrome
+// (from appctx / components), and the top-level tab set — each tab a constructor the
+// router calls lazily. The real code lives in sub-packages, plus the bubblestack
+// framework module.
 //
 // # Package layout
 //
@@ -9,21 +10,28 @@
 // in-tree under ./bubblestack via a replace directive), so it can be reused by
 // another tool — it imports no gdaddon package:
 //
-//	bubblestack/core/        domain-agnostic: the *Shared chrome state (carrying the
-//	             consumer's own context in App, recovered typed via App[T], and a
-//	             consumer-supplied Header closure for the context box), the Router
-//	             (tea.Model) over a screen stack, navigation commands (Push/Pop/
-//	             Replace/ResetToRoot/Refresh), the Screen interface plus the optional
-//	             interfaces the router type-asserts (Filterer, RootHandler,
-//	             PopStopper), router-handled messages (MsgRefresh — one message whose
-//	             opaque Target the router only routes, never interprets — and the
-//	             streaming TaskEvent with an opaque Payload), and generic list/help/
-//	             style helpers (NewSelectList, ShortHelp, RenderTitleBar, HeaderBox,
-//	             TruncLeft, …).
+//	bubblestack/core/        domain-agnostic: the *Shared state (carrying the
+//	             consumer's own context in App, recovered typed via App[T], the
+//	             spinner/help/task channel, and the optional *Chrome — header closure,
+//	             status line, and pluggable Output pane, each independently toggleable
+//	             and gateable per-screen), the Router (tea.Model) over a screen stack,
+//	             navigation commands (Push/Pop/Replace/ResetToRoot/Refresh), the Screen
+//	             interface plus the optional interfaces the router type-asserts
+//	             (Filterer, RootHandler, PopStopper, ChromeMasker — a screen suppresses
+//	             chrome elements while on top, e.g. FullscreenMask), router-handled
+//	             messages (MsgRefresh — one message whose
+//	             opaque Target the router only routes, never interprets —, MsgThemeChanged,
+//	             and the streaming TaskEvent with an opaque Payload), themes (SetTheme/
+//	             ApplyTheme/ThemeNames/CurrentTheme), and generic list/help/style
+//	             helpers (NewSelectList, ShortHelp, RenderTitleBar, HeaderBox,
+//	             TruncLeft, …). A TabEntry is {Title, New func(*Shared) Screen}: the
+//	             router builds each root via New after the theme is applied (so it bakes
+//	             the right palette) and re-invokes New on MsgThemeChanged to repaint.
 //	bubblestack/components/  reusable, context-agnostic pieces configured by closures
 //	             — they name no domain type: the Item list row (carries its own Pick
-//	             closure) and the screens PickerScreen, ConfirmScreen, LoadingScreen,
-//	             and the generic streaming TaskScreen. A tab supplies the closures.
+//	             closure), the screens PickerScreen, ConfirmScreen, LoadingScreen, and
+//	             the generic streaming TaskScreen, and LogPane (the default core.Output
+//	             chrome). A tab supplies the closures.
 //
 // The rest is gdaddon's domain front-end, under internal/tui:
 //
@@ -71,9 +79,12 @@
 //
 // Add a package under tabs/ whose root implements core.Screen (and RootHandler if
 // it reloads on a refresh message), build its rows as components.Item values and
-// its sub-flows from the components, and register it in the tab set in Run. A root
-// that must rebuild after an out-of-band change (like Global/Archive after a
-// remove) handles its own refresh message via RootHandler, raised with a
-// core.Refresh(target, …) command (target being an appctx identifier) — the router
-// routes it to whichever root claims that target.
+// its sub-flows from the components, and register a {Title, New} TabEntry in the tab
+// set in Run — New is a func(*core.Shared) core.Screen that builds the root from its
+// own state (read context via appctx.Of(sh)). The router calls New lazily and rebuilds
+// it on a theme change, so a root must construct cleanly from sh alone and hold no
+// state it can't reproduce. A root that must rebuild after an out-of-band change
+// (like Global/Archive after a remove) handles its own refresh message via
+// RootHandler, raised with a core.Refresh(target, …) command (target being an appctx
+// identifier) — the router routes it to whichever root claims that target.
 package tui

@@ -30,11 +30,11 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) tea.Cmd {
 		if ev.Err != nil {
-			sh.AppendLog(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err))
-			sh.StatusMsg = "install failed"
+			sh.Log(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err))
+			sh.SetStatus("install failed")
 			return core.ResetToRoot()
 		}
-		sh.AppendLog(fmt.Sprintf("[%s] installed", selected.Name))
+		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
 		res, _ := ev.Payload.(installResult)
 		return finishInstallCmd(sh, selected, pick, res.Path, res.Version)
 	}
@@ -55,14 +55,14 @@ func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.As
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) tea.Cmd {
 		if ev.Err != nil {
-			sh.AppendLog("archive failed: " + ev.Err.Error())
+			sh.Log("archive failed: " + ev.Err.Error())
 		} else {
-			sh.AppendLog("archived " + tag)
+			sh.Log("archived " + tag)
 		}
 		return nil
 	}
 	onDismiss := func(sh *core.Shared) tea.Cmd {
-		sh.StatusMsg = ""
+		sh.SetStatus("")
 		return core.PopTo() // back to the addon submenu (its command hub)
 	}
 	return components.NewStayTask("archiving "+tag+"…", "done — esc to go back", run, onDone, onDismiss)

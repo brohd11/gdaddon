@@ -17,7 +17,7 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
 	if mode == removeGlobalArchive {
 		if repoID, err := source.RepoID(g.url); err == nil {
 			if err := archive.RemoveRepo(repoID); err != nil {
-				sh.StatusMsg = "error: " + err.Error()
+				sh.SetStatus("error: " + err.Error())
 				return core.ResetToRoot()
 			}
 		}
@@ -29,7 +29,7 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
 		err = addon.RemoveEntry(globalPath, g.name)
 	}
 	if err != nil {
-		sh.StatusMsg = "error: " + err.Error()
+		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
 	return core.Refresh(appctx.Global, true, "removed "+g.name)

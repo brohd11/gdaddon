@@ -25,3 +25,8 @@ type MsgRefresh struct {
 	Switch bool   // true ⇒ switch to + unwind that tab; false ⇒ refresh in place
 	Status string // sender-provided display text
 }
+
+// MsgThemeChanged tells the router the active theme changed (after SetTheme), so it
+// rebuilds every cached tab root from its constructor to pick up the new palette.
+// Raised by ApplyTheme; the router handles it centrally, so no screen interprets it.
+type MsgThemeChanged struct{}

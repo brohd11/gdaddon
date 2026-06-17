@@ -99,7 +99,7 @@ func newReleasesLoading(a addon.Addon, local string) *components.LoadingScreen {
 			archived, _ = archive.List(repoID)
 		}
 		if m.err != nil && len(archived) == 0 {
-			sh.StatusMsg = "error: " + m.err.Error()
+			sh.SetStatus("error: " + m.err.Error())
 			return core.Pop()
 		}
 		listing := archive.Merge(cloneListing(m.listing), archived)
@@ -117,11 +117,11 @@ func newBranchesLoading(a addon.Addon, local string) *components.LoadingScreen {
 			return nil
 		}
 		if m.err != nil {
-			sh.StatusMsg = "error: " + m.err.Error()
+			sh.SetStatus("error: " + m.err.Error())
 			return core.ResetToRoot()
 		}
 		if len(m.branches) == 0 {
-			sh.StatusMsg = "no branches found"
+			sh.SetStatus("no branches found")
 			return core.Pop()
 		}
 		return core.Replace(newBranchPicker(a, local, m.branches))

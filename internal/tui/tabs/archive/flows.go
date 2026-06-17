@@ -76,7 +76,7 @@ func newRemoveConfirm(repoID string, asset source.Asset) *components.ConfirmScre
 		},
 		OnYes: func(sh *core.Shared) tea.Cmd {
 			if err := arch.Remove(asset.URL); err != nil {
-				sh.StatusMsg = "error: " + err.Error()
+				sh.SetStatus("error: " + err.Error())
 				return core.ResetToRoot()
 			}
 			return core.Refresh(appctx.Archive, true, "removed "+asset.Name)
