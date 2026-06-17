@@ -79,7 +79,7 @@ func newRemoveConfirm(repoID string, asset source.Asset) *components.ConfirmScre
 				sh.SetStatus("error: " + err.Error())
 				return core.ResetToRoot()
 			}
-			return core.Refresh(appctx.Archive, true, "removed "+asset.Name)
+			return core.PropagateAll(appctx.ArchiveDirty{Status: "removed " + asset.Name, Focus: true})
 		},
 		Help: removeConfirmHelp,
 	}

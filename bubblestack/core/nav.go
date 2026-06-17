@@ -7,11 +7,12 @@ import tea "github.com/charmbracelet/bubbletea"
 // screens decoupled and lets async handlers (a fetch result, a task event)
 // navigate the same way.
 type (
-	pushMsg        struct{ s Screen } // push a new screen on top
-	popMsg         struct{ n int }    // pop n screens (back / cancel)
-	popToMsg       struct{}           // pop to the nearest PopStopper, or the root
-	replaceMsg     struct{ s Screen } // pop current + push (e.g. fetching -> versions)
-	resetToRootMsg struct{}           // unwind to the root (browse) screen
+	pushMsg        struct{ s Screen }     // push a new screen on top
+	popMsg         struct{ n int }        // pop n screens (back / cancel)
+	popToMsg       struct{}               // pop to the nearest PopStopper, or the root
+	replaceMsg     struct{ s Screen }     // pop current + push (e.g. fetching -> versions)
+	resetToRootMsg struct{}               // unwind to the root (browse) screen
+	showTabMsg     struct{ title string } // make the tab with this title active, at its root
 )
 
 func Push(s Screen) tea.Cmd { return func() tea.Msg { return pushMsg{s} } }
@@ -35,10 +36,18 @@ func PopTo() tea.Cmd { return func() tea.Msg { return popToMsg{} } }
 func Replace(s Screen) tea.Cmd { return func() tea.Msg { return replaceMsg{s} } }
 func ResetToRoot() tea.Cmd     { return func() tea.Msg { return resetToRootMsg{} } }
 
-// Refresh asks the router to rebuild the tab root that claims target, with the given
-// status text. When switchTo is set the router also makes that tab active and unwinds
-// it to its root; otherwise the root refreshes in place. target is a consumer-defined
-// identifier the framework only routes (see MsgRefresh) — works from any tab.
-func Refresh(target any, switchTo bool, status string) tea.Cmd {
-	return func() tea.Msg { return MsgRefresh{Target: target, Switch: switchTo, Status: status} }
+// PropagateAll broadcasts payload to every tab root and the active stack's screens.
+// Each Receiver reacts to payloads it recognizes; the framework never interprets the
+// payload (it's opaque any), so no router case is added per notification kind. Works
+// from any tab — e.g. a refresh after an out-of-band change, where each root reloads
+// itself and (optionally) returns a ShowTab command to grab focus.
+func PropagateAll(payload any) tea.Cmd {
+	return func() tea.Msg { return propagateMsg{payload} }
+}
+
+// ShowTab makes the tab whose Title == title active and unwinds its stack to its root.
+// A no-op when no tab matches. Lets a reacting screen (or a menu) jump to a tab by name
+// without the router knowing any tab identity beyond the title it already renders.
+func ShowTab(title string) tea.Cmd {
+	return func() tea.Msg { return showTabMsg{title} }
 }

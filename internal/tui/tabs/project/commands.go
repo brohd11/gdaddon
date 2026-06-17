@@ -44,7 +44,7 @@ func cloneListing(l *source.Listing) *source.Listing {
 }
 
 // finishInstallCmd pins the freshly installed url, resolved path, and version into
-// the manifest, then returns a project MsgRefresh so the browse list reloads from it.
+// the manifest, then broadcasts ProjectDirty so the browse list reloads and focuses.
 func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
 	manifestPath := appctx.Of(sh).ManifestPath
 	name, url := selected.Name, pick.asset.URL
@@ -61,13 +61,13 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 	status := "updated " + name + " → " + version
 	return func() tea.Msg {
 		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version)
-		return core.Refresh(appctx.Project, true, status)()
+		return core.PropagateAll(appctx.ProjectDirty{Status: status, Focus: true})()
 	}
 }
 
 // commitRemove removes the addon from the project: the installed files too when
 // the chosen mode is "project + local", then the manifest entry. On success it
-// refreshes the browse list (a Project refresh), which reloads from the manifest.
+// broadcasts ProjectDirty, which reloads the browse list from the manifest and focuses it.
 func commitRemove(sh *core.Shared, st addon.Status, mode int) tea.Cmd {
 	c := appctx.Of(sh)
 	if mode == removeProjectLocal {
@@ -80,5 +80,5 @@ func commitRemove(sh *core.Shared, st addon.Status, mode int) tea.Cmd {
 		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
-	return core.Refresh(appctx.Project, true, "removed "+st.Addon.Name)
+	return core.PropagateAll(appctx.ProjectDirty{Status: "removed " + st.Addon.Name, Focus: true})
 }

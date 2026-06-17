@@ -21,7 +21,7 @@ import (
 type ArchiveScreen struct{ list list.Model }
 
 var _ core.Filterer = (*ArchiveScreen)(nil)
-var _ core.RootHandler = (*ArchiveScreen)(nil)
+var _ core.Receiver = (*ArchiveScreen)(nil)
 
 func NewArchiveScreen() *ArchiveScreen {
 	return &ArchiveScreen{list: core.NewSelectList(repoItems(), "Archived Packages")}
@@ -60,16 +60,21 @@ func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.C
 func (s *ArchiveScreen) View(*core.Shared) string     { return s.list.View() }
 func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
-// HandleRoot rebuilds the list from disk on a MsgRefresh targeting the archive
-// (after a package removal), so the tab reflects the change. Routed here by the router.
-func (s *ArchiveScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
-	m, ok := msg.(core.MsgRefresh)
-	if !ok || m.Target != appctx.Archive {
-		return false
+// Receive rebuilds the list from disk on an ArchiveDirty broadcast (after a package
+// removal), so the tab reflects the change. A removal in this tab is focused; a removal
+// triggered as a side effect of a global remove is not (Focus false), so the Archive
+// tab reloads silently while focus stays on the Global tab.
+func (s *ArchiveScreen) Receive(sh *core.Shared, payload any) tea.Cmd {
+	d, ok := payload.(appctx.ArchiveDirty)
+	if !ok {
+		return nil
 	}
-	sh.SetStatus(m.Status)
+	sh.SetStatus(d.Status)
 	s.list.SetItems(repoItems())
-	return true
+	if d.Focus {
+		return core.ShowTab(appctx.TitleArchive)
+	}
+	return nil
 }
 
 func (s *ArchiveScreen) SetSize(sh *core.Shared, width, bodyHeight int) {

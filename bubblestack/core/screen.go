@@ -21,11 +21,12 @@ type Screen interface {
 // shortcuts (tab/c) don't steal keystrokes meant for the filter input.
 type Filterer interface{ Filtering() bool }
 
-// rootHandler lets a tab's root screen handle app-level result messages itself,
-// so the router stays tab-agnostic (it only owns the stack). browse uses this to
-// refresh its addon list. Returns whether the message was consumed.
-type RootHandler interface {
-	HandleRoot(sh *Shared, msg tea.Msg) (handled bool)
+// receiver lets a screen react to a broadcast notification (PropagateAll). The
+// framework only routes the payload (opaque, consumer-defined); a screen type-
+// switches on payloads it recognizes and ignores the rest. It may return a command
+// (e.g. ShowTab to grab focus) or nil. Optional — screens opt in by implementing it.
+type Receiver interface {
+	Receive(sh *Shared, payload any) tea.Cmd
 }
 
 // popStopper marks a screen the router stops at when handling PopTo: a sub-flow

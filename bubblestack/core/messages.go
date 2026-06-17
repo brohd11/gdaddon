@@ -14,17 +14,10 @@ type TaskEvent struct {
 	Payload any // consumer-defined result for the terminating (Done) event
 }
 
-// MsgRefresh asks the router to refresh a tab's root after an out-of-band change.
-// The router finds the root that claims Target, hands it the message to rebuild
-// itself, and — when Switch is set — makes that tab active and unwinds it to its
-// root. One message serves every tab; it carries no list state, since each root
-// reloads itself. The router never interprets Target (it's opaque any): each root
-// compares it against its own consumer-defined identifier in HandleRoot.
-type MsgRefresh struct {
-	Target any    // which tab root handles this (consumer-defined identifier)
-	Switch bool   // true ⇒ switch to + unwind that tab; false ⇒ refresh in place
-	Status string // sender-provided display text
-}
+// propagateMsg carries an opaque payload the router broadcasts to every Receiver
+// (PropagateAll). The router never interprets the payload — each screen type-switches
+// on payloads it recognizes — so no new router case is needed per notification kind.
+type propagateMsg struct{ payload any }
 
 // MsgThemeChanged tells the router the active theme changed (after SetTheme), so it
 // rebuilds every cached tab root from its constructor to pick up the new palette.

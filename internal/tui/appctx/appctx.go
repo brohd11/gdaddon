@@ -1,6 +1,6 @@
 // Package appctx holds gdaddon's domain-specific TUI context: the manifest/project
-// paths the tabs operate on, the persistent header that renders them, and the
-// refresh-target identifiers the tab roots claim. It is the one place that wires
+// paths the tabs operate on, the persistent header that renders them, the tab titles,
+// and the Dirty notification payloads the tab roots react to. It is the one place that wires
 // the domain to the otherwise agnostic core/components framework — it lives in its
 // own leaf package so both the tui package (which imports the tabs) and the tabs
 // can read the context without an import cycle.
@@ -45,14 +45,35 @@ func New(manifestPath, projectRoot string) *Ctx {
 // reach ManifestPath/ProjectRoot.
 func Of(sh *core.Shared) *Ctx { return core.App[Ctx](sh) }
 
-// RefreshTarget names which tab root a core.MsgRefresh is meant for. The framework
-// treats it as an opaque identifier; each root compares against these in HandleRoot.
-type RefreshTarget int
-
+// Tab titles, shared between the TabEntry wiring (in Run) and the ShowTab callers,
+// so the focus-grab in a Receive never duplicates a raw title literal that a rename
+// could silently desync.
 const (
-	Project RefreshTarget = iota // the browse/project addon list
-	Global                       // the global plugin list
-	Archive                      // the local package archive
+	TitleProject = "Project"
+	TitleGlobal  = "Global"
+	TitleArchive = "Archive"
+	TitleActions = "Actions"
+	TitleSearch  = "Search"
+)
+
+// Dirty payloads are broadcast via core.PropagateAll after an out-of-band change. The
+// matching tab root recognizes its own payload in Receive, reloads from disk, sets
+// Status, and — when Focus is set — returns core.ShowTab to make itself active. Focus
+// is per-event so the same payload can both grab focus (acted on in that tab) or
+// reload silently (a side effect of an action in another tab).
+type (
+	ProjectDirty struct {
+		Status string
+		Focus  bool
+	}
+	GlobalDirty struct {
+		Status string
+		Focus  bool
+	}
+	ArchiveDirty struct {
+		Status string
+		Focus  bool
+	}
 )
 
 // Header renders gdaddon's persistent context box (Project / Root / Manifest). It is

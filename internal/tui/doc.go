@@ -15,13 +15,13 @@
 //	             spinner/help/task channel, and the optional *Chrome — header closure,
 //	             status line, and pluggable Output pane, each independently toggleable
 //	             and gateable per-screen), the Router (tea.Model) over a screen stack,
-//	             navigation commands (Push/Pop/Replace/ResetToRoot/Refresh), the Screen
+//	             navigation commands (Push/Pop/Replace/ResetToRoot/ShowTab), the Screen
 //	             interface plus the optional interfaces the router type-asserts
-//	             (Filterer, RootHandler, PopStopper, ChromeMasker — a screen suppresses
+//	             (Filterer, Receiver, PopStopper, ChromeMasker — a screen suppresses
 //	             chrome elements while on top, e.g. FullscreenMask), router-handled
-//	             messages (MsgRefresh — one message whose
-//	             opaque Target the router only routes, never interprets —, MsgThemeChanged,
-//	             and the streaming TaskEvent with an opaque Payload), themes (SetTheme/
+//	             messages (the PropagateAll broadcast — one message whose
+//	             opaque payload the router only routes to every Receiver, never interprets —,
+//	             MsgThemeChanged, and the streaming TaskEvent with an opaque Payload), themes (SetTheme/
 //	             ApplyTheme/ThemeNames/CurrentTheme), and generic list/help/style
 //	             helpers (NewSelectList, ShortHelp, RenderTitleBar, HeaderBox,
 //	             TruncLeft, …). A TabEntry is {Title, New func(*Shared) Screen}: the
@@ -37,9 +37,10 @@
 //
 //	appctx/      the one domain↔framework seam: gdaddon's Ctx (ManifestPath/
 //	             ProjectRoot/…) stored on Shared.App (read with appctx.Of), the
-//	             Header that renders it, and the RefreshTarget identifiers
-//	             (Project/Global/Archive) the tab roots claim. A leaf package so the
-//	             tui package and the tabs both read the context without a cycle.
+//	             Header that renders it, the tab titles, and the Dirty notification
+//	             payloads (ProjectDirty/GlobalDirty/ArchiveDirty) the tab roots react
+//	             to. A leaf package so the tui package and the tabs both read the
+//	             context without a cycle.
 //	flows/…      shared, domain-aware flow screens composed by more than one tab
 //	             (so they can't live in any single tab without a cross-tab import):
 //	             e.g. flows/newplugin, the Add Plugin form+confirm used by both the
@@ -77,14 +78,15 @@
 //
 // # Adding a tab
 //
-// Add a package under tabs/ whose root implements core.Screen (and RootHandler if
-// it reloads on a refresh message), build its rows as components.Item values and
+// Add a package under tabs/ whose root implements core.Screen (and Receiver if
+// it reloads on a notification), build its rows as components.Item values and
 // its sub-flows from the components, and register a {Title, New} TabEntry in the tab
 // set in Run — New is a func(*core.Shared) core.Screen that builds the root from its
 // own state (read context via appctx.Of(sh)). The router calls New lazily and rebuilds
 // it on a theme change, so a root must construct cleanly from sh alone and hold no
 // state it can't reproduce. A root that must rebuild after an out-of-band change
-// (like Global/Archive after a remove) handles its own refresh message via
-// RootHandler, raised with a core.Refresh(target, …) command (target being an appctx
-// identifier) — the router routes it to whichever root claims that target.
+// (like Global/Archive after a remove) implements core.Receiver: a core.PropagateAll(payload)
+// command broadcasts an appctx Dirty payload to every root, and the root that recognizes
+// it reloads itself and (when the payload's Focus is set) returns core.ShowTab(title) to
+// make itself active — the router interprets neither the payload nor the focus.
 package tui

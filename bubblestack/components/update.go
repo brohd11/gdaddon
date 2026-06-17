@@ -56,7 +56,7 @@ func QueryUpdate(s Typable, msg tea.Msg) (tea.Cmd, bool) {
 // the highlighted Item's Pick closure (clearing the status line first). Any other
 // key or message falls through to the list. A tab root's Update is then just
 // `return s, components.RootUpdate(sh, &s.list, msg)`; roots that also react to
-// refresh messages keep doing so via RootHandler.HandleRoot, which the router
+// broadcast notifications keep doing so via core.Receiver.Receive, which the router
 // routes separately from Update.
 func RootUpdate(sh *core.Shared, l *list.Model, msg tea.Msg) tea.Cmd {
 	if l.FilterState() == list.Filtering {

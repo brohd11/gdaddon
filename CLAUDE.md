@@ -65,7 +65,7 @@ internal/
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin)
 bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd11/bubblestack, replace => ./bubblestack); imports no gdaddon package
-  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask), Router over a screen stack, nav commands (Push/Pop/Replace/ResetToRoot/Refresh), Screen + optional interfaces, router messages (MsgRefresh with opaque Target, streaming TaskEvent with opaque Payload), list/help/style helpers
+  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask), Router over a screen stack, nav commands (Push/Pop/Replace/ResetToRoot/ShowTab), Screen + optional interfaces, router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
   components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen, FormScreen; LogPane = default core.Output) — they name no domain type
 ```
 
@@ -97,7 +97,7 @@ The TUI was restructured for scalability around three ideas:
 
 Dependency direction is strictly `core ← components ← appctx ← flows/* ← tabs/* ←
 tui`: `core` names no concrete screen (reaches them via optional interfaces like
-`RootHandler`/`PopStopper`), `core` and `components` name no domain type (closures
+`Receiver`/`PopStopper`), `core` and `components` name no domain type (closures
 only; context behind `Shared.App`), `appctx` is the single leaf binding the domain
 to the framework, and tabs never import each other. That acyclic layering — across
 the `bubblestack` module boundary for `core`/`components` — is what lets the screens

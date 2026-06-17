@@ -18,7 +18,7 @@ type ProjectScreen struct {
 }
 
 var _ core.Filterer = (*ProjectScreen)(nil)
-var _ core.RootHandler = (*ProjectScreen)(nil)
+var _ core.Receiver = (*ProjectScreen)(nil)
 
 func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 	l := list.New(addonListItems(inspect(sh)), core.NewDelegate(), 0, 0)
@@ -57,17 +57,20 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	s.list.SetSize(width, bodyHeight)
 }
 
-// HandleRoot rebuilds the browse list by re-inspecting the manifest (rootHandler):
-// the router unwinds to the root and hands the refresh here, keeping the
-// browse-specific list logic out of the router.
-func (s *ProjectScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
-	m, ok := msg.(core.MsgRefresh)
-	if !ok || m.Target != appctx.Project {
-		return false
+// Receive rebuilds the browse list by re-inspecting the manifest on a ProjectDirty
+// broadcast, keeping the browse-specific list logic out of the router. When the event
+// is focused it returns ShowTab so the router makes this tab active at its root.
+func (s *ProjectScreen) Receive(sh *core.Shared, payload any) tea.Cmd {
+	d, ok := payload.(appctx.ProjectDirty)
+	if !ok {
+		return nil
 	}
-	sh.SetStatus(m.Status)
+	sh.SetStatus(d.Status)
 	s.list.SetItems(addonListItems(inspect(sh)))
-	return true
+	if d.Focus {
+		return core.ShowTab(appctx.TitleProject)
+	}
+	return nil
 }
 
 // inspect reads the manifest's current state from the context paths, so the root

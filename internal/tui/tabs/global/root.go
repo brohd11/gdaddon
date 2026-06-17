@@ -22,7 +22,7 @@ type globalItem struct{ name, url, path string }
 type GlobalScreen struct{ list list.Model }
 
 var _ core.Filterer = (*GlobalScreen)(nil)
-var _ core.RootHandler = (*GlobalScreen)(nil)
+var _ core.Receiver = (*GlobalScreen)(nil)
 
 func NewGlobalScreen() *GlobalScreen {
 	return &GlobalScreen{list: core.NewSelectList(globalItems(), "Global Plugins")}
@@ -64,17 +64,20 @@ func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, tea.Cm
 func (s *GlobalScreen) View(*core.Shared) string     { return s.list.View() }
 func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
-// HandleRoot rebuilds the global list from disk on a MsgRefresh targeting the global
-// list (after an add/remove), so the Global tab reflects the change. The router routes
-// the message here by finding the root that claims it.
-func (s *GlobalScreen) HandleRoot(sh *core.Shared, msg tea.Msg) bool {
-	m, ok := msg.(core.MsgRefresh)
-	if !ok || m.Target != appctx.Global {
-		return false
+// Receive rebuilds the global list from disk on a GlobalDirty broadcast (after an
+// add/remove), so the Global tab reflects the change. When the event is focused it
+// returns ShowTab so the router makes this tab active at its root.
+func (s *GlobalScreen) Receive(sh *core.Shared, payload any) tea.Cmd {
+	d, ok := payload.(appctx.GlobalDirty)
+	if !ok {
+		return nil
 	}
-	sh.SetStatus(m.Status)
+	sh.SetStatus(d.Status)
 	s.list.SetItems(globalItems())
-	return true
+	if d.Focus {
+		return core.ShowTab(appctx.TitleGlobal)
+	}
+	return nil
 }
 
 func (s *GlobalScreen) SetSize(sh *core.Shared, width, bodyHeight int) {

@@ -11,15 +11,19 @@ import (
 )
 
 // commitRemove removes the plugin from the global list, plus its archived packages
-// when the chosen mode is "global + archive". On success it refreshes the Global
-// tab so the removed row disappears.
+// when the chosen mode is "global + archive". On success it broadcasts GlobalDirty so
+// the removed row disappears (and focuses Global); when it also deleted archive files
+// it broadcasts ArchiveDirty so the Archive tab reloads too — silently, since focus
+// stays on Global.
 func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
+	archiveRemoved := false
 	if mode == removeGlobalArchive {
 		if repoID, err := source.RepoID(g.url); err == nil {
 			if err := archive.RemoveRepo(repoID); err != nil {
 				sh.SetStatus("error: " + err.Error())
 				return core.ResetToRoot()
 			}
+			archiveRemoved = true
 		}
 		// A non-github url has no archive to remove; fall through to the entry removal.
 	}
@@ -32,5 +36,9 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) tea.Cmd {
 		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
-	return core.Refresh(appctx.Global, true, "removed "+g.name)
+	cmd := core.PropagateAll(appctx.GlobalDirty{Status: "removed " + g.name, Focus: true})
+	if archiveRemoved {
+		return tea.Batch(cmd, core.PropagateAll(appctx.ArchiveDirty{}))
+	}
+	return cmd
 }

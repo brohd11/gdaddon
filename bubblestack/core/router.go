@@ -104,22 +104,37 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.resize()
 		return r, nil
 
-	case MsgRefresh:
-		// A refresh can originate from any tab (Install All from Actions, global
-		// Remove, an archive removal, …). Find the tab whose root claims this Target,
-		// hand it the message to rebuild itself, and — when Switch is set — make that
-		// tab active and unwind it to its root. The router stays tab-agnostic: it asks
-		// each root rather than mapping Target → index itself.
-		for i := range r.roots {
-			h, ok := r.roots[i].(RootHandler)
-			if !ok || !h.HandleRoot(r.sh, msg) {
-				continue
+	case propagateMsg:
+		// Broadcast the opaque payload to every tab root plus the active tab's deeper
+		// screens; each Receiver claims what it recognizes. The router never interprets
+		// the payload (no per-notification case). Batch any commands they return — e.g.
+		// a tab requesting focus via ShowTab after it reloads itself.
+		var cmds []tea.Cmd
+		notify := func(s Screen) {
+			if rc, ok := s.(Receiver); ok {
+				if c := rc.Receive(r.sh, msg.payload); c != nil {
+					cmds = append(cmds, c)
+				}
 			}
-			if msg.Switch {
+		}
+		for i := range r.roots {
+			notify(r.roots[i])
+		}
+		for _, s := range r.stack[1:] { // the active root is already covered via r.roots[active]
+			notify(s)
+		}
+		r.resize()
+		return r, tea.Batch(cmds...)
+
+	case showTabMsg:
+		// Switch to the tab whose title matches and unwind it to its root. The router
+		// addresses tabs only by the title it already renders — no separate identity.
+		for i := range r.tabs {
+			if r.tabs[i].Title == msg.title {
 				r.active = i
 				r.stack = []Screen{r.roots[i]}
+				break
 			}
-			break
 		}
 		r.resize()
 		return r, nil
