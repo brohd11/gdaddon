@@ -8,8 +8,8 @@ import (
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
-	"github.com/brohd/bubblestack/components"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

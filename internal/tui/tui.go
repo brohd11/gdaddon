@@ -9,7 +9,8 @@ import (
 	"gdaddon/internal/tui/tabs/global"
 	"gdaddon/internal/tui/tabs/project"
 	"gdaddon/internal/tui/tabs/search"
-	"github.com/brohd/bubblestack/core"
+
+	"github.com/brohd11/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -23,6 +24,7 @@ func Run(manifestPath, projectRoot string) error {
 
 	sh := core.NewShared(appctx.New(manifestPath, projectRoot))
 	sh.Header = appctx.Header
+	core.SetTheme("mono")
 	tabs := []core.TabEntry{
 		{Title: "Project", Root: project.NewProjectScreen(statuses)},
 		{Title: "Global", Root: global.NewGlobalScreen()},

@@ -1,7 +1,7 @@
 package components
 
 import (
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

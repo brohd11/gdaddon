@@ -8,8 +8,8 @@ package search
 import (
 	searchpkg "gdaddon/internal/search"
 	"gdaddon/internal/tui/appctx"
-	"github.com/brohd/bubblestack/components"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"

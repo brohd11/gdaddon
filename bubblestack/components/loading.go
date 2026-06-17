@@ -2,7 +2,7 @@ package components
 
 import (
 	"fmt"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

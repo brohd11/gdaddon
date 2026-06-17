@@ -3,8 +3,8 @@ package actions
 import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
-	"github.com/brohd/bubblestack/components"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

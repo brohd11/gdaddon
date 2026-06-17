@@ -6,8 +6,8 @@ import (
 	arch "gdaddon/internal/archive"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
-	"github.com/brohd/bubblestack/components"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"

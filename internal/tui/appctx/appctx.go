@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"gdaddon/internal/addon"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/core"
 )
 
 // Ctx is the consumer context stored on core.Shared.App. Tabs recover it with Of.

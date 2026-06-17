@@ -3,7 +3,7 @@ package project
 import (
 	"context"
 	"gdaddon/internal/tui/appctx"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/core"
 	"strings"
 
 	"gdaddon/internal/addon"

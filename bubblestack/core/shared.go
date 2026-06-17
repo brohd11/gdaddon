@@ -63,32 +63,61 @@ func App[T any](s *Shared) *T { return s.App.(*T) }
 // its content to fit (see HeaderInnerWidth).
 func (s *Shared) Width() int { return s.width }
 
+// The palette and its derived styles are owned by the theme (see theme.go). The
+// four colors are the secondary/muted gray (borders, labels, help, list
+// descriptions), the brighter near-white log text, the border gray, and the
+// selection accent. applyTheme reassigns the colors and rebuildStyles rebuilds
+// everything below from them; init applies the default theme at startup.
 var (
-	// mutedColor is the secondary/muted gray (borders, labels, help, list
-	// descriptions); logColor is brighter, near-white, for the output log text.
-	MutedColor   = lipgloss.Color("247")
-	logColor     = lipgloss.Color("252")
-	BorderColor  = lipgloss.Color("245")
-	FocusedColor = lipgloss.Color("212")
+	MutedColor     lipgloss.Color
+	logColor       lipgloss.Color
+	BorderColor    lipgloss.Color
+	FocusedColor   lipgloss.Color
+	OnFocusedColor lipgloss.Color // text drawn on the accent (title bar)
 
-	StatusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
-	logStyle    = lipgloss.NewStyle().Foreground(logColor)
+	StatusStyle lipgloss.Style
+	logStyle    lipgloss.Style
 
 	// tab strip: sits under the header, active tab highlighted, inactive muted,
 	// closed off from the content below by a full-width rule. The switch keys are
 	// shown in the help bar (ShortHelp), not here.
-	tabStripStyle  = lipgloss.NewStyle().Padding(0, 1)
-	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
-	tabStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(MutedColor)
-	tabRuleStyle   = lipgloss.NewStyle().Foreground(BorderColor)
-	boxStyle       = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
-	headerStyle    = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(BorderColor)
-	labelStyle     = lipgloss.NewStyle().Foreground(MutedColor)
+	tabStripStyle  lipgloss.Style
+	activeTabStyle lipgloss.Style
+	tabStyle       lipgloss.Style
+	tabRuleStyle   lipgloss.Style
+	boxStyle       lipgloss.Style
+	headerStyle    lipgloss.Style
+	labelStyle     lipgloss.Style
 
-	// listStyles are the default bubbles list styles, reused to render
-	// breadcrumb/title bars and static help so they align with the real lists.
-	listStyles = list.DefaultStyles()
+	// listStyles are the bubbles list styles, reused to render breadcrumb/title
+	// bars and static help so they align with the real lists. rebuildStyles resets
+	// them from the defaults and themes the title bar each apply.
+	listStyles list.Styles
 )
+
+func init() { applyTheme(current) }
+
+// rebuildStyles rebuilds the derived styles from the current palette. applyTheme
+// calls it after swapping colors so a theme switch repaints every chrome element.
+func rebuildStyles() {
+	StatusStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
+	logStyle = lipgloss.NewStyle().Foreground(logColor)
+
+	tabStripStyle = lipgloss.NewStyle().Padding(0, 1)
+	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
+	tabStyle = lipgloss.NewStyle().Padding(0, 1).Foreground(MutedColor)
+	tabRuleStyle = lipgloss.NewStyle().Foreground(BorderColor)
+	boxStyle = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
+	headerStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(BorderColor)
+	labelStyle = lipgloss.NewStyle().Foreground(MutedColor)
+
+	// Reset the list styles from the defaults, then theme the title bar so
+	// breadcrumbs (RenderTitleBar) and list titles (StyleList) follow the accent
+	// instead of bubbles' built-in purple. OnFocusedColor is the theme's text-on-
+	// accent color, so a dark accent can still read.
+	listStyles = list.DefaultStyles()
+	listStyles.Title = listStyles.Title.Background(FocusedColor).Foreground(OnFocusedColor)
+}
 
 // focusArea tracks which pane receives navigation keys.
 type focusArea int
@@ -207,11 +236,16 @@ func NewSelectList(items []list.Item, title string, extra ...key.Binding) list.M
 	return l
 }
 
-// newDelegate is the shared list delegate with brightened description text.
+// newDelegate is the shared list delegate with brightened description text and the
+// selected row recolored to the theme accent (bubbles' default selected styles are
+// a hardcoded pink). The left-border layout from the default delegate is kept; only
+// the colors change.
 func NewDelegate() list.DefaultDelegate {
 	d := list.NewDefaultDelegate()
 	d.Styles.NormalDesc = d.Styles.NormalDesc.Foreground(MutedColor)
 	d.Styles.DimmedDesc = d.Styles.DimmedDesc.Foreground(MutedColor)
+	d.Styles.SelectedTitle = d.Styles.SelectedTitle.Foreground(FocusedColor).BorderForeground(FocusedColor)
+	d.Styles.SelectedDesc = d.Styles.SelectedDesc.Foreground(FocusedColor).BorderForeground(FocusedColor)
 	return d
 }
 
@@ -220,6 +254,9 @@ func NewDelegate() list.DefaultDelegate {
 func StyleList(l *list.Model) {
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
+	// Theme the list's own title bar to match the breadcrumb (RenderTitleBar)
+	// instead of bubbles' default purple.
+	l.Styles.Title = listStyles.Title
 	// Drive list scrolling from the central keymap so an added scheme (e.g. wasd)
 	// reaches lists too; FullHint keeps the list's own full (?) help reading well.
 	l.KeyMap.CursorUp = FullHint("up", Keys.Up)

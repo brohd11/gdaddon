@@ -5,7 +5,7 @@ import (
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

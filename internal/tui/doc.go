@@ -5,7 +5,7 @@
 //
 // # Package layout
 //
-// The framework lives in its own module, github.com/brohd/bubblestack (developed
+// The framework lives in its own module, github.com/brohd11/bubblestack (developed
 // in-tree under ./bubblestack via a replace directive), so it can be reused by
 // another tool — it imports no gdaddon package:
 //

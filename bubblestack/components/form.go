@@ -3,7 +3,7 @@ package components
 import (
 	"strings"
 
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/core"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -59,7 +59,9 @@ type fieldBase struct {
 
 func (b fieldBase) Key() string { return b.key }
 
-var fieldLabel = lipgloss.NewStyle().Foreground(core.MutedColor)
+// fieldLabel is the muted style for a field's label. Built per call (not cached in
+// a package var) so it tracks the active theme after a core.SetTheme switch.
+func fieldLabel() lipgloss.Style { return lipgloss.NewStyle().Foreground(core.MutedColor) }
 
 // fieldMarker is the focus arrow rendered to the left of a focusable row.
 func fieldMarker(focused bool) string {
@@ -93,7 +95,7 @@ func (t *TextField) Input() *textinput.Model { return &t.input }
 func (t *TextField) Value() string           { return t.input.Value() }
 func (t *TextField) SetValue(v string)       { t.input.SetValue(v) }
 func (t *TextField) View(focused bool) string {
-	return fieldMarker(focused) + fieldLabel.Render(t.label) + t.input.View()
+	return fieldMarker(focused) + fieldLabel().Render(t.label) + t.input.View()
 }
 
 // ---------- ToggleField ----------
@@ -135,7 +137,7 @@ func (t *ToggleField) OnToggle(forward bool) {
 }
 
 func (t *ToggleField) View(focused bool) string {
-	return fieldMarker(focused) + fieldLabel.Render(t.label) + RenderToggle(t.options, t.index, t.delim)
+	return fieldMarker(focused) + fieldLabel().Render(t.label) + RenderToggle(t.options, t.index, t.delim)
 }
 
 // RenderToggle renders a multi-option switch with the active option highlighted,
@@ -181,7 +183,7 @@ func (p *PickField) Blur()                                    {}
 func (p *PickField) SetWidth(int)                             {}
 func (p *PickField) OnSelect(sh *core.Shared) (tea.Cmd, bool) { return p.onSel(sh) }
 func (p *PickField) View(focused bool) string {
-	return fieldMarker(focused) + fieldLabel.Render(p.label) + p.value()
+	return fieldMarker(focused) + fieldLabel().Render(p.label) + p.value()
 }
 
 // ---------- StaticField ----------
@@ -194,7 +196,7 @@ type StaticField struct {
 }
 
 func NewHeading(text string) *StaticField { return &StaticField{text: text} }
-func NewNote(text string) *StaticField    { return &StaticField{text: text, style: fieldLabel} }
+func NewNote(text string) *StaticField    { return &StaticField{text: text, style: fieldLabel()} }
 func NewSpacer() *StaticField             { return &StaticField{} }
 
 func (s *StaticField) Key() string      { return "" }

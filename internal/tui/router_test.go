@@ -8,8 +8,8 @@ import (
 	"gdaddon/internal/tui/flows/newplugin"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/project"
-	"github.com/brohd/bubblestack/components"
-	"github.com/brohd/bubblestack/core"
+	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
