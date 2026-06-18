@@ -61,7 +61,7 @@ func (s *PickerScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.A
 	if key, ok := msg.(tea.KeyMsg); ok {
 		k := key.String()
 		switch {
-		case core.MatchKey(k, core.Keys.Back), core.MatchKey(k, core.Keys.Quit):
+		case core.MatchKey(k, core.Keys.Back):
 			return s, core.Pop()
 		case core.MatchKey(k, core.Keys.Select):
 			if s.OnSelect != nil {

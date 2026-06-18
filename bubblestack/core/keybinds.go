@@ -65,7 +65,7 @@ var Keys = KeyMap{
 	Right: key.NewBinding(key.WithKeys("right", "l", "d")),
 
 	Select: key.NewBinding(key.WithKeys("enter", "e")),
-	Back:   key.NewBinding(key.WithKeys("esc", "c")),
+	Back:   key.NewBinding(key.WithKeys("esc", "backspace", "c")),
 	Quit:   key.NewBinding(key.WithKeys("q")),
 
 	Yes: key.NewBinding(key.WithKeys("enter", "y", "Y", "e")),

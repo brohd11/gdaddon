@@ -5,7 +5,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // ConfirmScreen is the shared y/n confirm/summary box, reused by the install
@@ -15,11 +14,20 @@ import (
 // type. OnYes runs on confirm (y/enter); any non-reserved key is handed to OnKey
 // (when set), so a caller can add custom interactions like a Project/Global toggle.
 type ConfirmScreen struct {
-	Crumb  string
+	Crumb  string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
 	Render func(*core.Shared) string
 	OnYes  func(*core.Shared) core.Action
 	OnKey  func(*core.Shared, string) core.Action // handles keys other than the reserved confirm/cancel keys
 	Help   []key.Binding
+}
+
+type ConfirmSimple struct {
+	Crumb string
+	Text  string
+	OnYes core.Action
+	// optional
+	OnKey func(*core.Shared, string) core.Action
+	Help  []key.Binding
 }
 
 func (s *ConfirmScreen) Init(*core.Shared) tea.Cmd { return nil }
@@ -43,8 +51,26 @@ func (s *ConfirmScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 }
 
 func (s *ConfirmScreen) View(sh *core.Shared) string {
-	return lipgloss.JoinVertical(lipgloss.Left, s.Crumb, s.Render(sh))
+	return core.WithCrumb(s.Crumb, s.Render(sh))
 }
 
 func (s *ConfirmScreen) HelpView(sh *core.Shared) string { return sh.BindingHelp(s.Help) }
 func (s *ConfirmScreen) SetSize(*core.Shared, int, int)  {}
+
+var DefaultHelpKeys = []key.Binding{
+	core.Hint("confirm", core.Keys.Yes),
+	core.Hint("cancel", core.Keys.No),
+}
+
+func CreateConfirmScreen(sh *core.Shared, cs ConfirmSimple) *ConfirmScreen {
+	if cs.Help == nil {
+		cs.Help = DefaultHelpKeys
+	}
+	return &ConfirmScreen{
+		Crumb:  cs.Crumb,
+		Render: func(*core.Shared) string { return sh.Box(cs.Text) },
+		OnYes:  func(s *core.Shared) core.Action { return cs.OnYes },
+		OnKey:  cs.OnKey,
+		Help:   cs.Help,
+	}
+}

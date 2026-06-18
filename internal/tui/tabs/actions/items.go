@@ -3,6 +3,7 @@ package actions
 import (
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/newplugin"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -27,7 +28,7 @@ func actionItems(sh *core.Shared) []list.Item {
 		components.Item{
 			Name: "↧ Install / update all",
 			Desc: "download everything per the manifest",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newInstallAllTask()) },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newInstallAllConfirm(sh)) },
 		},
 		components.Item{
 			Name: "+ New Plugin",

@@ -33,7 +33,7 @@ func NewTask(label string, run RunFunc, onDone func(*core.Shared, core.TaskEvent
 }
 
 // NewStayTask builds a task that stays on the log after finishing (archive) until
-// the user dismisses it: onDone records the result, onDismiss runs on esc/enter/q.
+// the user dismisses it: onDone records the result, onDismiss runs on esc/enter.
 func NewStayTask(label, doneLabel string, run RunFunc,
 	onDone func(*core.Shared, core.TaskEvent) core.Action, onDismiss func(*core.Shared) core.Action) *TaskScreen {
 	return &TaskScreen{label: label, doneLabel: doneLabel, stay: true, run: run, onDone: onDone, onDismiss: onDismiss}
@@ -51,7 +51,7 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 		s.done = true
 		act := s.onDone(sh, msg)
 		// A non-stay task navigates away via act (e.g. a ShowTab). A stay-task remains
-		// on its log until the user dismisses it (esc/enter/q), but act is still applied
+		// on its log until the user dismisses it (esc/enter), but act is still applied
 		// — it's expected to be non-navigational for a stay-task (e.g. a broadcast that
 		// reloads another tab), so returning s keeps the screen on top.
 		return s, act
@@ -59,7 +59,7 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 	case tea.KeyMsg:
 		if s.stay && s.done {
 			k := msg.String()
-			if core.MatchKey(k, core.Keys.Back) || core.MatchKey(k, core.Keys.Select) || core.MatchKey(k, core.Keys.Quit) {
+			if core.MatchKey(k, core.Keys.Back) || core.MatchKey(k, core.Keys.Select) {
 				return s, s.onDismiss(sh)
 			}
 		}

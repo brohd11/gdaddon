@@ -330,6 +330,10 @@ func (r *Router) globalKey(msg tea.KeyMsg) (Action, bool) {
 			}
 			r.clearOutput()
 			return Action{}, true
+		case MatchKey(k, Keys.Quit):
+			// q is the global quit, handled once here for every screen (the filter
+			// gate above keeps it from firing while a list/form is capturing text).
+			return Async(tea.Quit), true
 		case MatchKey(k, Keys.NextTab):
 			return Action{}, r.switchTab(1)
 		case MatchKey(k, Keys.PrevTab):

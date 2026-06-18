@@ -29,9 +29,11 @@ type Typable interface {
 // input and reports handled=true so the caller skips its keybind switch. Otherwise
 // it reports handled=false and the caller runs its normal core.Keys dispatch. Call
 // it at the top of Update before the keybind switch. Reused by the Search query
-// screen and the New Plugin form so the rule lives in one place. Control keys
-// (esc/enter/tab/arrows/backspace) are never diverted, so field navigation and
-// cursor editing reach the caller / the input's own fall-through unchanged.
+// screen and the New Plugin form so the rule lives in one place. Backspace is
+// diverted to the input too (it aliases Back/Keys.Back, so without this it would
+// pop the screen instead of deleting a character while typing). The other control
+// keys (esc/enter/tab/arrows) are never diverted, so field navigation and cancel
+// reach the caller unchanged.
 func QueryUpdate(s Typable, msg tea.Msg) (tea.Cmd, bool) {
 	if !s.Typing() {
 		return nil, false
@@ -41,7 +43,7 @@ func QueryUpdate(s Typable, msg tea.Msg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	switch km.Type {
-	case tea.KeyRunes, tea.KeySpace:
+	case tea.KeyRunes, tea.KeySpace, tea.KeyBackspace:
 		in := s.Input()
 		var cmd tea.Cmd
 		*in, cmd = in.Update(msg)
@@ -52,8 +54,9 @@ func QueryUpdate(s Typable, msg tea.Msg) (tea.Cmd, bool) {
 
 // RootUpdate is the shared tab-root key handling, factored out of every tab root's
 // Update (project/global/archive/actions/search) since each was identical. While
-// the list is filtering, keys go to the list; otherwise Quit quits and Select runs
-// the highlighted Item's Pick closure (clearing the status line first). Any other
+// the list is filtering, keys go to the list; otherwise Select runs the highlighted
+// Item's Pick closure (clearing the status line first); quit is the router's global
+// q handler, not handled here. Any other
 // key or message falls through to the list. A tab root's Update is then just
 // `return s, components.RootUpdate(sh, &s.list, msg)`; roots that also react to
 // broadcast notifications keep doing so via core.Receiver.Receive, which the router
@@ -67,8 +70,6 @@ func RootUpdate(sh *core.Shared, l *list.Model, msg tea.Msg) core.Action {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		k := key.String()
 		switch {
-		case core.MatchKey(k, core.Keys.Quit):
-			return core.Async(tea.Quit)
 		case core.MatchKey(k, core.Keys.Select):
 			if it, ok := l.SelectedItem().(Item); ok && it.Pick != nil {
 				sh.ClearStatus()

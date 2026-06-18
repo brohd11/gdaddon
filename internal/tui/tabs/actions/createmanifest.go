@@ -24,7 +24,7 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 	dirF := components.NewTextField("dir", "Dir:  ", "(optional — defaults to the project root)")
 
 	return components.NewForm(components.FormOpts{
-		Crumb: core.RenderTitleBar("Create manifest"),
+		Crumb: "Create manifest",
 		Fields: []components.FormField{
 			components.NewHeading("Create manifest"),
 			components.NewNote("addon_manifest.yml is created in this directory (blank ⇒ project root)."),

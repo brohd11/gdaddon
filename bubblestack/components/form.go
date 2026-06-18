@@ -208,7 +208,7 @@ func (s *StaticField) View(bool) string { return s.style.Render(s.text) }
 // ---------- FormScreen ----------
 
 type FormOpts struct {
-	Crumb    string // e.g. core.RenderTitleBar("New Plugin")
+	Crumb    string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
 	Fields   []FormField
 	Help     []key.Binding
 	Focus    string // initial focused field key; default first focusable
@@ -381,7 +381,7 @@ func (f *FormScreen) View(sh *core.Shared) string {
 	for i, fld := range f.fields {
 		rows[i] = fld.View(i == f.focus)
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, f.crumb, sh.Box(strings.Join(rows, "\n")))
+	return core.WithCrumb(f.crumb, sh.Box(strings.Join(rows, "\n")))
 }
 
 func (f *FormScreen) HelpView(sh *core.Shared) string { return sh.BindingHelp(f.help) }

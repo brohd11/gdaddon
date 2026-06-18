@@ -33,7 +33,7 @@ type Shared struct {
 
 func NewShared(app any) *Shared {
 	sp := spinner.New()
-	sp.Spinner = spinner.Dot
+	sp.Spinner = spinner.Points
 
 	h := help.New()
 	h.Styles.ShortKey = h.Styles.ShortKey.Foreground(MutedColor)
@@ -141,7 +141,9 @@ func rebuildStyles() {
 	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
 	tabStyle = lipgloss.NewStyle().Padding(0, 1).Foreground(MutedColor)
 	tabRuleStyle = lipgloss.NewStyle().Foreground(BorderColor)
-	boxStyle = lipgloss.NewStyle().Margin(1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
+	// No top margin: the gap above the box is owned by WithCrumb so the body can
+	// hug the top when no breadcrumb is rendered. Margin order is top,right,bottom,left.
+	boxStyle = lipgloss.NewStyle().Margin(0, 2, 1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
 	headerStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(BorderColor)
 	labelStyle = lipgloss.NewStyle().Foreground(MutedColor)
 
@@ -190,9 +192,21 @@ func TruncLeft(s string, max int) string {
 // ---------- breadcrumb / title bars ----------
 
 // renderTitleBar renders text as a list-title-styled bar, so screens without
-// their own list title keep a consistent header.
+// their own list title keep a consistent header. The bubbles default TitleBar
+// carries a bottom padding of 1; we drop it (keeping the left pad) so the
+// breadcrumb sits flush against the body below it.
 func RenderTitleBar(text string) string {
 	return listStyles.TitleBar.Render(listStyles.Title.Render(text))
+}
+
+// WithCrumb prepends a styled breadcrumb bar to body, or returns body unchanged
+// when crumb is empty — so any screen can make its breadcrumb optional by
+// passing the raw (unrendered) crumb text straight through.
+func WithCrumb(crumb, body string) string {
+	if crumb == "" {
+		return body
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, RenderTitleBar(crumb), body)
 }
 
 // headerTitle is the shared header for a selected addon's screens, e.g.
@@ -273,12 +287,16 @@ func StyleList(l *list.Model) {
 	// Theme the list's own title bar to match the breadcrumb (RenderTitleBar)
 	// instead of bubbles' default purple.
 	l.Styles.Title = listStyles.Title
+	// l.Styles.TitleBar = l.Styles.TitleBar.Margin(0) // how to set themes
 	// Drive list scrolling from the central keymap so an added scheme (e.g. wasd)
 	// reaches lists too; FullHint keeps the list's own full (?) help reading well.
 	l.KeyMap.CursorUp = FullHint("up", Keys.Up)
 	l.KeyMap.CursorDown = FullHint("down", Keys.Down)
 	l.KeyMap.PrevPage = FullHint("prev page", Keys.Left)
 	l.KeyMap.NextPage = FullHint("next page", Keys.Right)
+	// Quitting is owned by the router's global q handler; drop the list's built-in
+	// q/esc quit so esc at a tab root is a no-op (back is spam-safe to the root).
+	l.KeyMap.Quit = key.NewBinding()
 	l.Help.Styles.ShortKey = l.Help.Styles.ShortKey.Foreground(MutedColor)
 	l.Help.Styles.ShortDesc = l.Help.Styles.ShortDesc.Foreground(MutedColor)
 	l.Help.Styles.ShortSeparator = l.Help.Styles.ShortSeparator.Foreground(MutedColor)

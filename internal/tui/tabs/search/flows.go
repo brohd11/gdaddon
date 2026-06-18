@@ -45,7 +45,7 @@ func newQueryScreen(src searchpkg.Source, godotVer string) *components.FormScree
 	query := components.NewTextField("query", "Query:   ", "search terms (e.g. dialogue)")
 
 	return components.NewForm(components.FormOpts{
-		Crumb: core.RenderTitleBar("Search"),
+		Crumb: "Search",
 		Fields: []components.FormField{
 			components.NewHeading("Search assets"),
 			components.NewSpacer(),

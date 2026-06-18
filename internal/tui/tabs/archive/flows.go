@@ -70,7 +70,7 @@ func newPackageSubmenu(repoID string, asset source.Asset) *components.PickerScre
 // newRemoveConfirm confirms deleting one archived package, then refreshes the tab.
 func newRemoveConfirm(repoID string, asset source.Asset) *components.ConfirmScreen {
 	return &components.ConfirmScreen{
-		Crumb: core.RenderTitleBar(repoID + " — Remove"),
+		Crumb: repoID + " — Remove",
 		Render: func(sh *core.Shared) string {
 			return sh.Box(fmt.Sprintf("Remove from archive\n\n  %s\n\n  %s", asset.Name, asset.URL))
 		},

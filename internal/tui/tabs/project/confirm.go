@@ -27,7 +27,7 @@ var confirmHelp = []key.Binding{
 
 func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *components.ConfirmScreen {
 	return &components.ConfirmScreen{
-		Crumb:  core.RenderTitleBar(core.HeaderTitle(selected.Name, local, pickSection(pick))),
+		Crumb:  core.HeaderTitle(selected.Name, local, pickSection(pick)),
 		Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
 		OnYes: func(sh *core.Shared) core.Action {
 			return core.Replace(newInstallTask(selected, local, pick))
@@ -64,7 +64,7 @@ var removeConfirmHelp = []key.Binding{
 func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
 	mode := removeProject // local copy the selector mutates; default = non-destructive
 	return &components.ConfirmScreen{
-		Crumb:  core.RenderTitleBar(core.HeaderTitle(st.Addon.Name, st.LocalVersion, "Remove")),
+		Crumb:  core.HeaderTitle(st.Addon.Name, st.LocalVersion, "Remove"),
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
 		OnKey: func(sh *core.Shared, k string) core.Action {
 			switch {
@@ -139,7 +139,7 @@ func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (
 	}
 
 	cs := &components.ConfirmScreen{
-		Crumb:  core.RenderTitleBar(core.HeaderTitle(selected.Name, local, "Archive "+tag)),
+		Crumb:  core.HeaderTitle(selected.Name, local, "Archive "+tag),
 		Render: func(sh *core.Shared) string { return sh.Box(archiveConfirmBody(selected, tag, remote)) },
 		OnYes: func(sh *core.Shared) core.Action {
 			return core.Replace(newArchiveTask(selected, tag, repoID, remote))

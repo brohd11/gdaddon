@@ -29,7 +29,7 @@ var removeConfirmHelp = []key.Binding{
 func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
 	mode := removeGlobal // local copy the selector mutates; default = non-destructive
 	return &components.ConfirmScreen{
-		Crumb:  core.RenderTitleBar(g.name + " — Remove"),
+		Crumb:  g.name + " — Remove",
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, g, mode)) },
 		OnKey: func(sh *core.Shared, k string) core.Action {
 			switch {
