@@ -19,44 +19,10 @@ var removeConfirmHelp = []key.Binding{
 	core.Hint("cancel", core.Keys.No),
 }
 
-// newVersionsPicker lists a repo's archived versions (newest first). A version
-// with a single asset drops straight to its package submenu; multiple assets open
-// an asset picker first (mirrors the project versions.go release rule).
-func newVersionsPicker(repo arch.RepoArchive) *components.PickerScreen {
-	items := make([]list.Item, 0, len(repo.Releases))
-	for _, rel := range repo.Releases {
-		rel := rel
-		items = append(items, components.Item{
-			Name: rel.Tag,
-			Desc: fmt.Sprintf("%d asset(s)", len(rel.Assets)),
-			Pick: func(sh *core.Shared) core.Action {
-				if len(rel.Assets) == 1 {
-					return core.Push(newPackageSubmenu(repo.ID, rel.Assets[0]))
-				}
-				return core.Push(newAssetPicker(repo.ID, rel))
-			},
-		})
-	}
-	return components.NewPicker(items, components.PickerOpts{Title: repo.ID})
-}
-
-// newAssetPicker lists the assets of a multi-asset archived release; selecting one
-// opens its package submenu.
-func newAssetPicker(repoID string, rel source.Release) *components.PickerScreen {
-	items := make([]list.Item, 0, len(rel.Assets))
-	for _, a := range rel.Assets {
-		a := a
-		items = append(items, components.Item{
-			Name: a.Name,
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newPackageSubmenu(repoID, a)) },
-		})
-	}
-	return components.NewPicker(items, components.PickerOpts{Title: repoID + " — " + rel.Tag})
-}
-
-// newPackageSubmenu is the per-package command menu. Today it offers only Remove;
-// it stays a submenu so future archive actions slot in as more rows.
-func newPackageSubmenu(repoID string, asset source.Asset) *components.PickerScreen {
+// newPackageSubmenu is the per-package command menu (a packages.Endpoint). Today it
+// offers only Remove (keyed off the asset's local path), so tag is unused; it stays a
+// submenu so future archive actions slot in as more rows.
+func newPackageSubmenu(repoID, tag string, asset source.Asset) *components.PickerScreen {
 	items := []list.Item{
 		components.Item{
 			Name: "✗ Remove from archive",
@@ -64,7 +30,7 @@ func newPackageSubmenu(repoID string, asset source.Asset) *components.PickerScre
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(repoID, asset)) },
 		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: repoID})
+	return components.NewPicker(items, components.PickerOpts{Title: repoID + " - " + asset.Name})
 }
 
 // newRemoveConfirm confirms deleting one archived package, then refreshes the tab.

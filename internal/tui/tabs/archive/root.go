@@ -4,10 +4,8 @@
 package archive
 
 import (
-	"fmt"
-
-	arch "gdaddon/internal/archive"
 	"gdaddon/internal/tui/appctx"
+	pck "gdaddon/internal/tui/flows/packages"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -24,30 +22,12 @@ var _ core.Filterer = (*ArchiveScreen)(nil)
 var _ core.Receiver = (*ArchiveScreen)(nil)
 
 func NewArchiveScreen() *ArchiveScreen {
-	return &ArchiveScreen{list: core.NewSelectList(repoItems(), "Archived Packages")}
+	return &ArchiveScreen{list: core.NewSelectList(pck.RepoItems(archiveOpts), "Archived Packages")}
 }
 
-// repoItems reads every archived repo; an empty/missing archive shows a hint row.
-// Each repo's Pick opens its versions picker.
-func repoItems() []list.Item {
-	repos, _ := arch.Repos()
-	var items []list.Item
-	for _, repo := range repos {
-		repo := repo // capture per row
-		items = append(items, components.Item{
-			Name: repo.ID,
-			Desc: fmt.Sprintf("%d version(s)", len(repo.Releases)),
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newVersionsPicker(repo)) },
-		})
-	}
-	if len(items) == 0 {
-		items = append(items, components.Item{
-			Name: "(nothing archived yet)",
-			Desc: "archive a package via Project → an addon → Archive",
-		})
-	}
-	return items
-}
+// archiveOpts is the Archive tab's browse config: the local archive, no HEAD, with the
+// per-package Remove menu as its endpoint.
+var archiveOpts = pck.BrowseOpts{Source: pck.SourceArchive, Endpoint: newPackageSubmenu}
 
 func (s *ArchiveScreen) Init(*core.Shared) tea.Cmd { return nil }
 
@@ -66,7 +46,7 @@ func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.
 // removal triggered as a side effect of a global remove reloads silently.
 func (s *ArchiveScreen) Receive(sh *core.Shared, payload any) core.Action {
 	if _, ok := payload.(appctx.ArchiveDirty); ok {
-		s.list.SetItems(repoItems())
+		s.list.SetItems(pck.RepoItems(archiveOpts))
 	}
 	return core.Action{}
 }

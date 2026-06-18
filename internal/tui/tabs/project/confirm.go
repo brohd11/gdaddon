@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"gdaddon/internal/addon"
-	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
+	"gdaddon/internal/tui/flows/packages"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/lipgloss"
@@ -115,47 +115,14 @@ func removeOptions(mode int) string {
 
 // ---------- archive confirm ----------
 
-// buildArchiveConfirm derives the package to archive for the chosen version and
-// returns a confirm screen. It returns ok=false (with an optional status line)
-// when there is nothing to archive: an error or an already-archived selection.
+// buildArchiveConfirm resolves the repo id and hands the chosen version's asset to
+// the shared packages.NewArchiveConfirm (which owns the confirm body, already-archived
+// check, and download task). It returns ok=false (with a status line) when there is
+// nothing to archive: an error or an already-archived selection.
 func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (*components.ConfirmScreen, string, bool) {
 	repoID, err := source.RepoID(selected.URL)
 	if err != nil {
 		return nil, "cannot archive: " + err.Error(), false
 	}
-
-	tag := pick.tag
-	assets := []source.Asset{pick.asset}
-
-	// Drop already-archived (local) assets; nothing to fetch for those.
-	var remote []source.Asset
-	for _, a := range assets {
-		if !isArchived(a) {
-			remote = append(remote, a)
-		}
-	}
-	if len(remote) == 0 {
-		return nil, tag + " already archived", false
-	}
-
-	cs := &components.ConfirmScreen{
-		Crumb:  core.HeaderTitle(selected.Name, local, "Archive "+tag),
-		Render: func(sh *core.Shared) string { return sh.Box(archiveConfirmBody(selected, tag, remote)) },
-		OnYes: func(sh *core.Shared) core.Action {
-			return core.Replace(newArchiveTask(selected, tag, repoID, remote))
-		},
-		Help: confirmHelp,
-	}
-	return cs, "", true
-}
-
-func archiveConfirmBody(selected addon.Addon, tag string, assets []source.Asset) string {
-	root, _ := archive.Dir()
-	lines := make([]string, len(assets))
-	for i, a := range assets {
-		lines[i] = "    • " + strings.TrimSuffix(a.Name, " - archived")
-	}
-	return fmt.Sprintf(
-		"Archive %s\n\n  version:   %s\n  packages:\n%s\n\n  into:      %s",
-		selected.Name, tag, strings.Join(lines, "\n"), root)
+	return packages.NewArchiveConfirm(selected.Name, repoID, pick.tag, []source.Asset{pick.asset})
 }

@@ -2,11 +2,8 @@ package project
 
 import (
 	"fmt"
-	"strings"
 
 	"gdaddon/internal/addon"
-	"gdaddon/internal/archive"
-	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
@@ -42,31 +39,3 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 	return components.NewTask("installing "+selected.Name+"…", run, onDone)
 }
 
-func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.Asset) *components.TaskScreen {
-	_ = selected
-	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
-		for _, a := range assets {
-			report("downloading %s …", strings.TrimSuffix(a.Name, " - archived"))
-			if err := archive.Archive(repoID, tag, a); err != nil {
-				done <- core.TaskEvent{Done: true, Err: err}
-				return
-			}
-		}
-		done <- core.TaskEvent{Done: true}
-	}
-	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		if ev.Err != nil {
-			sh.Log("archive failed: " + ev.Err.Error())
-			return core.Action{}
-		}
-		sh.Log("archived " + tag)
-		// Reload the Archive tab so the freshly stored package shows up. Focus stays
-		// on this Project stay-task (no ShowTab) — the broadcast is a silent reload.
-		return core.PropagateAll(appctx.ArchiveDirty{})
-	}
-	onDismiss := func(sh *core.Shared) core.Action {
-		sh.Chrome.Status.Clear()
-		return core.PopTo() // back to the addon submenu (its command hub)
-	}
-	return components.NewStayTask("archiving "+tag+"…", "done — esc to go back", run, onDone, onDismiss)
-}

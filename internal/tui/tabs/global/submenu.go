@@ -3,6 +3,7 @@ package global
 import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+	pck "gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -24,8 +25,22 @@ func newSubmenuScreen(g globalItem) *components.PickerScreen {
 			Desc: "remove from the global list (and optionally its archive)",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(g)) },
 		},
+		components.Item{
+			Name: "Add to Archive",
+			Desc: "browse the repo's versions and save a local copy",
+			Pick: func(sh *core.Shared) core.Action {
+				return core.Push(pck.BrowseRepo(g.url, pck.BrowseOpts{
+					Source:       pck.SourceAll,
+					IncludeHEAD:  true,
+					Endpoint:     pck.ArchiveEndpoint,
+					MarkArchived: true,
+				}))
+			},
+		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: g.name})
+	// PopStop: this submenu is the per-plugin command hub, so the archive sub-flow
+	// returns here (PopTo) after it finishes.
+	return components.NewPicker(items, components.PickerOpts{Title: g.name, PopStop: true})
 }
 
 // importToProject copies the global entry into the project manifest, then broadcasts
