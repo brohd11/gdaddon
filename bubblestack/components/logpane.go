@@ -27,9 +27,11 @@ func NewLogPane() *LogPane { return &LogPane{vp: viewport.New(0, 0)} }
 
 // Log appends a line and reveals the pane. This is the logging capability beyond
 // core.Output that Shared.Log reaches by type assertion; the router never calls it.
-func (p *LogPane) Log(line string) {
+func (p *LogPane) Log(line string, forceShow bool) {
 	p.logs = append(p.logs, line)
-	p.shown = true
+	if forceShow {
+		p.shown = forceShow
+	}
 }
 
 func (p *LogPane) Shown() bool { return p.shown }

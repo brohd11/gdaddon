@@ -51,44 +51,52 @@ func NewShared(app any) *Shared {
 // (the default LogPane does), and is a no-op for a chromeless app or a non-logging
 // Output — so context-agnostic callers (e.g. the task screen) needn't know the pane
 // type or whether chrome exists.
-func (s *Shared) Log(line string) {
+func (s *Shared) Log(line string, forceShow ...bool) {
 	if s.Chrome == nil || s.Chrome.Output == nil {
 		return
 	}
-	if l, ok := s.Chrome.Output.(interface{ Log(string) }); ok {
-		l.Log(line)
+	if l, ok := s.Chrome.Output.(interface{ Log(string, bool) }); ok {
+		force := GetOptional(true, forceShow...)
+		l.Log(line, force)
 	}
 }
 
-// WriteStatus sets the transient status line and, when log is true, also appends the
-// line to the output log (one call, both effects). The status auto-clears ~5s after
+// WriteStatus sets the transient status line. The status auto-clears ~5s after
 // the most recent write (the router schedules the timer); the log keeps it as the
-// durable record. No-op without chrome.
-func (s *Shared) WriteStatus(line string, log ...bool) {
-	var wr_log = true
-	if len(log) > 0 {
-		wr_log = log[0]
-	}
+// durable record. No-op without chrome. also see: WriteStatusAndLog
+func (s *Shared) WriteStatus(line string) {
+	s.writeStatus(line)
+}
+
+func (s *Shared) WriteStatusAndLog(line string, forceShow ...bool) {
+	show_log := GetOptional(false, forceShow...)
+	s.writeStatus(line, true, show_log)
+}
+
+// shared func for WriteStatus funcs, variadic params: log=false forceShow=false
+func (s *Shared) writeStatus(line string, logParams ...bool) {
 	if s.Chrome == nil {
 		return
 	}
 	if s.Chrome.Status != nil {
 		s.Chrome.Status.Set(line) // Set("") clears (Shown() == false)
 	}
-	if wr_log && line != "" {
-		s.Log(line)
+	var log = GetOptionalIdx(false, 0, logParams...)
+	if log && line != "" {
+		var forceShow = GetOptionalIdx(false, 1, logParams...)
+		s.Log(line, forceShow)
 	}
 }
 
 func (s *Shared) ClearStatus() {
-	if s.Chrome == nil && s.Chrome.Status != nil {
+	if s.Chrome != nil && s.Chrome.Status != nil {
 		s.Chrome.Status.Clear()
 	}
 }
 
 // SetStatus sets the status line only (no log) — the thin wrapper the existing call
 // sites use. Migrate selected sites to WriteStatus(line, true) to also log the line.
-func (s *Shared) SetStatus(msg string) { s.WriteStatus(msg, false) }
+func (s *Shared) SetStatus(msg string) { s.WriteStatus(msg) }
 
 // App recovers the consumer's context from a Shared, type-asserted to *T. The
 // consumer stores a *T in NewShared and reads it back here, so the framework stays

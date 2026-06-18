@@ -65,17 +65,11 @@ func (s *GlobalScreen) View(*core.Shared) string     { return s.list.View() }
 func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 // Receive rebuilds the global list from disk on a GlobalDirty broadcast (after an
-// add/remove), so the Global tab reflects the change. When the event is focused it
-// returns ShowTab so the router makes this tab active at its root.
+// add/remove), so the Global tab reflects the change. The status line and any focus
+// switch are composed at the call site (core.Seq).
 func (s *GlobalScreen) Receive(sh *core.Shared, payload any) core.Action {
-	d, ok := payload.(appctx.GlobalDirty)
-	if !ok {
-		return core.Action{}
-	}
-	sh.SetStatus(d.Status)
-	s.list.SetItems(globalItems())
-	if d.Focus {
-		return core.ShowTab(appctx.TitleGlobal)
+	if _, ok := payload.(appctx.GlobalDirty); ok {
+		s.list.SetItems(globalItems())
 	}
 	return core.Action{}
 }

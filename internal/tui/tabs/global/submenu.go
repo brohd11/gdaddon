@@ -37,7 +37,8 @@ func importToProject(sh *core.Shared, g globalItem) core.Action {
 		return core.ResetToRoot()
 	}
 	return core.Seq(
-		core.PropagateAll(appctx.ProjectDirty{Status: "imported " + g.name, Focus: false}),
+		core.SetStatus("imported "+g.name),
+		core.PropagateAll(appctx.ProjectDirty{}),
 		core.Pop(),
 	)
 }

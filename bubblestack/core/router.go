@@ -66,7 +66,7 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		if act, handled := r.globalKey(key); handled {
 			r.apply(act, &cmds)
-			r.scheduleStatusClear(&cmds)
+			// r.scheduleStatusClear(&cmds)
 			r.resize()
 			return r, tea.Batch(cmds...)
 		}
@@ -89,7 +89,7 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// path as an Action a screen returns from Update.
 	if act, ok := msg.(Action); ok {
 		r.apply(act, &cmds)
-		r.scheduleStatusClear(&cmds)
+		// r.scheduleStatusClear(&cmds)
 		r.resize()
 		return r, tea.Batch(cmds...)
 	}
@@ -97,7 +97,7 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// auto-clear tick) is resolved the same way.
 	if _, ok := msg.(ctrlMsg); ok {
 		r.resolveCtrl(msg, &cmds)
-		r.scheduleStatusClear(&cmds)
+		// r.scheduleStatusClear(&cmds)
 		r.resize()
 		return r, tea.Batch(cmds...)
 	}
@@ -108,7 +108,8 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	s, act := r.Top().Update(r.sh, msg)
 	r.stack[len(r.stack)-1] = s
 	r.apply(act, &cmds)
-	r.scheduleStatusClear(&cmds)
+
+	// r.scheduleStatusClear(&cmds)
 	// Re-lay-out after every message: cheap, and avoids chasing every spot that
 	// changes content height (help expansion, log growth, screen switches).
 	r.resize()
@@ -229,6 +230,12 @@ func (r *Router) applyCtrl(m tea.Msg, cmds *[]tea.Cmd) (follows []tea.Msg) {
 		}
 		r.stack[0] = r.roots[r.active]
 
+	case statusSetMsg:
+		r.sh.WriteStatus(m.s)
+		statCmd := r.getStatusClear()
+		if statCmd != nil {
+			push(statCmd)
+		}
 	case statusClearMsg:
 		// The auto-clear timer fired: clear the status only if its generation hasn't
 		// advanced since this tick was armed. A newer write bumped Gen past m.gen, so
@@ -239,6 +246,24 @@ func (r *Router) applyCtrl(m tea.Msg, cmds *[]tea.Cmd) (follows []tea.Msg) {
 		}
 	}
 	return follows
+}
+
+func (r *Router) getStatusClear() tea.Cmd {
+	ch := r.sh.Chrome
+	if ch == nil || ch.Status == nil {
+		return nil
+	}
+	g := ch.Status.Gen()
+	if g == r.statusGen {
+		return nil
+	}
+	r.statusGen = g
+	if !ch.Status.Shown() {
+		return nil
+	}
+	return tea.Tick(statusClearDelay, func(time.Time) tea.Msg {
+		return statusClearMsg{gen: g}
+	})
 }
 
 // scheduleStatusClear arms the status auto-clear timer when a write has advanced the

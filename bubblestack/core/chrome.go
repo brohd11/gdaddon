@@ -65,6 +65,7 @@ type Output interface {
 	View(focused bool) string          // render (focused ⇒ scroll affordance)
 	Update(msg tea.Msg) tea.Cmd        // handle a key while focused (scrolling)
 	GotoBottom()                       // pin to the newest content
+	Log(line string, forceShow bool)
 }
 
 // Status is the pluggable transient one-liner the router draws below the body

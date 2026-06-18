@@ -21,7 +21,11 @@ func newInstallAllTask() *components.TaskScreen {
 		done <- core.TaskEvent{Done: true}
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		return core.PropagateAll(appctx.ProjectDirty{Status: "install complete", Focus: true})
+		return core.Seq(
+			core.SetStatus("install complete"),
+			core.PropagateAll(appctx.ProjectDirty{}),
+			core.ShowTab(appctx.TitleProject),
+		)
 	}
 	return components.NewTask("installing all addons…", run, onDone)
 }

@@ -61,23 +61,11 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 // Receive rebuilds the browse list by re-inspecting the manifest on a ProjectDirty
 // (manifest contents changed) or PathRefresh (the manifest path itself changed, e.g.
 // just created) broadcast, keeping the browse-specific list logic out of the router.
-// When the event is focused it returns ShowTab so the router makes this tab active at
-// its root.
+// The status line and any focus switch are composed at the call site (core.Seq).
 func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
-	var status string
-	var focus bool
-	switch d := payload.(type) {
-	case appctx.ProjectDirty:
-		status, focus = d.Status, d.Focus
-	case appctx.PathRefresh:
-		status, focus = d.Status, d.Focus
-	default:
-		return core.Action{}
-	}
-	sh.WriteStatus(status)
-	s.list.SetItems(projectListItems(sh))
-	if focus {
-		return core.ShowTab(appctx.TitleProject)
+	switch payload.(type) {
+	case appctx.ProjectDirty, appctx.PathRefresh:
+		s.list.SetItems(projectListItems(sh))
 	}
 	return core.Action{}
 }

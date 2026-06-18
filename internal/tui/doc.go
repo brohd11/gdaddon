@@ -93,8 +93,10 @@
 // it on a theme change, so a root must construct cleanly from sh alone and hold no
 // state it can't reproduce. A root that must rebuild after an out-of-band change
 // (like Global/Archive after a remove) implements core.Receiver: core.PropagateAll(payload)
-// broadcasts an appctx Dirty payload to every root, and the root that recognizes it reloads
-// itself and (when the payload's Focus is set) returns core.ShowTab(title) to make itself
-// active — the router interprets neither the payload nor the focus. To issue several control
-// messages from one handler (e.g. reload a tab and pop the submenu), wrap them in core.Seq.
+// broadcasts an appctx Dirty payload (a bare reload marker) to every root, and the root
+// that recognizes it reloads itself. The visible outcome — the status line and any focus
+// switch — is composed at the call site instead of riding the payload: wrap core.SetStatus,
+// the core.PropagateAll, core.ShowTab(title), and any async cmd in one core.Seq, which the
+// router applies in order (its seqMsg drains both the control and async lanes of every
+// child Action). The router interprets neither the payload nor the composed outcome.
 package tui

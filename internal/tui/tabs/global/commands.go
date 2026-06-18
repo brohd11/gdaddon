@@ -34,7 +34,11 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) core.Action {
 		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
-	global := core.PropagateAll(appctx.GlobalDirty{Status: "removed " + g.name, Focus: true})
+	global := core.Seq(
+		core.SetStatus("removed "+g.name),
+		core.PropagateAll(appctx.GlobalDirty{}),
+		core.ShowTab(appctx.TitleGlobal),
+	)
 	if archiveRemoved {
 		return core.Seq(global, core.PropagateAll(appctx.ArchiveDirty{}))
 	}

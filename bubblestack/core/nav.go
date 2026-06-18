@@ -34,10 +34,7 @@ func Push(s Screen) Action { return Action{Msg: pushMsg{s}} }
 // callers are unchanged; Pop(2) pops two levels (a sub-flow returning past its
 // own intermediate screens). The router clamps so the root is never popped.
 func Pop(n ...int) Action {
-	count := 1
-	if len(n) > 0 {
-		count = n[0]
-	}
+	count := GetOptional(1, n...)
 	return Action{Msg: popMsg{count}}
 }
 

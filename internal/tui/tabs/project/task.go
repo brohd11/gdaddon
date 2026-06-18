@@ -55,10 +55,12 @@ func newArchiveTask(selected addon.Addon, tag, repoID string, assets []source.As
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
 		if ev.Err != nil {
 			sh.Log("archive failed: " + ev.Err.Error())
-		} else {
-			sh.Log("archived " + tag)
+			return core.Action{}
 		}
-		return core.Action{}
+		sh.Log("archived " + tag)
+		// Reload the Archive tab so the freshly stored package shows up. Focus stays
+		// on this Project stay-task (no ShowTab) — the broadcast is a silent reload.
+		return core.PropagateAll(appctx.ArchiveDirty{})
 	}
 	onDismiss := func(sh *core.Shared) core.Action {
 		sh.Chrome.Status.Clear()

@@ -62,7 +62,11 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 	status := "updated " + name + " → " + version
 	return func() tea.Msg {
 		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version)
-		return core.PropagateAll(appctx.ProjectDirty{Status: status, Focus: true})
+		return core.Seq(
+			core.SetStatus(status),
+			core.PropagateAll(appctx.ProjectDirty{}),
+			core.ShowTab(appctx.TitleProject),
+		)
 	}
 }
 
@@ -81,5 +85,9 @@ func commitRemove(sh *core.Shared, st addon.Status, mode int) core.Action {
 		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
-	return core.PropagateAll(appctx.ProjectDirty{Status: "removed " + st.Addon.Name, Focus: true})
+	return core.Seq(
+		core.SetStatus("removed "+st.Addon.Name),
+		core.PropagateAll(appctx.ProjectDirty{}),
+		core.ShowTab(appctx.TitleProject),
+	)
 }

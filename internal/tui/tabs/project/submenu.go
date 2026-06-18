@@ -71,7 +71,8 @@ func exportToGlobal(sh *core.Shared, a addon.Addon) core.Action {
 		return core.ResetToRoot()
 	}
 	return core.Seq(
-		core.PropagateAll(appctx.GlobalDirty{Status: "added " + a.Name + " to global list", Focus: false}),
+		core.SetStatus("added "+a.Name+" to global list"),
+		core.PropagateAll(appctx.GlobalDirty{}),
 		core.Pop(),
 	)
 }

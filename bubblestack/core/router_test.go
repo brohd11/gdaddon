@@ -27,16 +27,16 @@ type fakeOutput struct {
 	shown bool
 }
 
-func (f *fakeOutput) Log(s string)           { f.logs = append(f.logs, s); f.shown = true }
-func (f *fakeOutput) Shown() bool            { return f.shown }
-func (f *fakeOutput) Toggle()                { f.shown = !f.shown }
-func (f *fakeOutput) Hide()                  { f.shown = false }
-func (f *fakeOutput) Clear()                 { f.logs = nil; f.shown = false }
-func (f *fakeOutput) SetSize(_, _ int)       {}
-func (f *fakeOutput) Height() int            { return 0 }
-func (f *fakeOutput) View(bool) string       { return "OUT" }
-func (f *fakeOutput) Update(tea.Msg) tea.Cmd { return nil }
-func (f *fakeOutput) GotoBottom()            {}
+func (f *fakeOutput) Log(s string, show bool) { f.logs = append(f.logs, s); f.shown = show }
+func (f *fakeOutput) Shown() bool             { return f.shown }
+func (f *fakeOutput) Toggle()                 { f.shown = !f.shown }
+func (f *fakeOutput) Hide()                   { f.shown = false }
+func (f *fakeOutput) Clear()                  { f.logs = nil; f.shown = false }
+func (f *fakeOutput) SetSize(_, _ int)        {}
+func (f *fakeOutput) Height() int             { return 0 }
+func (f *fakeOutput) View(bool) string        { return "OUT" }
+func (f *fakeOutput) Update(tea.Msg) tea.Cmd  { return nil }
+func (f *fakeOutput) GotoBottom()             {}
 
 // fakeStatus is a minimal core.Status for exercising the router's status rendering and
 // auto-clear plumbing without importing components.

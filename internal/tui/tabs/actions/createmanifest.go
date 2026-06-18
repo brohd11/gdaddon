@@ -7,6 +7,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -52,9 +53,16 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 				sh.SetStatus("error: " + err.Error())
 				return core.Async(f.Focus("dir"))
 			}
-			// The async refresh re-scans under the root and rediscovers the file we just
-			// wrote (validated above to be within the walk depth), then broadcasts.
-			return core.Seq(core.ResetToRoot(), appctx.RefreshPaths(sh, true, "created manifest", true))
+			// Compose the outcome at the call site: set the status, show the Project tab
+			// (ShowTab discards this form's stack), and async-refresh the paths — the
+			// refresh re-scans under the root, rediscovers the file we just wrote
+			// (validated above to be within the walk depth), then broadcasts PathRefresh
+			// so the Project list and Actions menu reload.
+			return core.Seq(
+				core.SetStatus("Created Manifest: "+target),
+				core.ShowTab(appctx.TitleProject),
+				core.Async(appctx.RefreshPaths(sh, true)),
+			)
 		},
 	})
 }

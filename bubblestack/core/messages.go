@@ -10,7 +10,15 @@ type ctrlMsg interface{ isCtrl() }
 
 func (propagateMsg) isCtrl()    {}
 func (MsgThemeChanged) isCtrl() {}
+func (statusSetMsg) isCtrl()    {}
 func (statusClearMsg) isCtrl()  {}
+
+// statusSetMsg used to set the status, will automatically append a timer to the outgoing cmds
+type statusSetMsg struct{ s string }
+
+func SetStatus(line string) Action {
+	return Action{Msg: statusSetMsg{line}}
+}
 
 // statusClearMsg is the router's auto-clear timer firing for the status line: a tick
 // scheduled when the status's generation advances (a fresh write). It clears the

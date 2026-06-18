@@ -126,14 +126,23 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) cor
 		}
 		// Show the Global tab rebuilt with the new entry (parallel to a project add
 		// switching to Browse).
-		return core.PropagateAll(appctx.GlobalDirty{Status: fmt.Sprintf("added %s to global list", name), Focus: true})
+		return core.Seq(
+			core.SetStatus(fmt.Sprintf("added %s to global list", name)),
+			core.PropagateAll(appctx.GlobalDirty{}),
+			core.ShowTab(appctx.TitleGlobal),
+		)
 	}
 
 	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, name, url, path); err != nil {
 		sh.SetStatus("error: " + err.Error())
 		return core.ResetToRoot()
 	}
-	return core.Seq(core.ResetToRoot(), core.PropagateAll(appctx.ProjectDirty{Status: "added " + name, Focus: true}))
+	return core.Seq(
+		core.ResetToRoot(),
+		core.SetStatus("added "+name),
+		core.PropagateAll(appctx.ProjectDirty{}),
+		core.ShowTab(appctx.TitleProject),
+	)
 }
 
 func otherTarget(t int) int {

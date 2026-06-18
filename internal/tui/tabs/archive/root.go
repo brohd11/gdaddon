@@ -61,18 +61,12 @@ func (s *ArchiveScreen) View(*core.Shared) string     { return s.list.View() }
 func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 // Receive rebuilds the list from disk on an ArchiveDirty broadcast (after a package
-// removal), so the tab reflects the change. A removal in this tab is focused; a removal
-// triggered as a side effect of a global remove is not (Focus false), so the Archive
-// tab reloads silently while focus stays on the Global tab.
+// removal), so the tab reflects the change. The status line and any focus switch are
+// composed at the call site (core.Seq): a removal in this tab focuses Archive, while a
+// removal triggered as a side effect of a global remove reloads silently.
 func (s *ArchiveScreen) Receive(sh *core.Shared, payload any) core.Action {
-	d, ok := payload.(appctx.ArchiveDirty)
-	if !ok {
-		return core.Action{}
-	}
-	sh.SetStatus(d.Status)
-	s.list.SetItems(repoItems())
-	if d.Focus {
-		return core.ShowTab(appctx.TitleArchive)
+	if _, ok := payload.(appctx.ArchiveDirty); ok {
+		s.list.SetItems(repoItems())
 	}
 	return core.Action{}
 }

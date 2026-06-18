@@ -67,32 +67,20 @@ const (
 	TitleSearch  = "Search"
 )
 
-// Dirty payloads are broadcast via core.PropagateAll after an out-of-band change. The
-// matching tab root recognizes its own payload in Receive, reloads from disk, sets
-// Status, and — when Focus is set — returns core.ShowTab to make itself active. Focus
-// is per-event so the same payload can both grab focus (acted on in that tab) or
-// reload silently (a side effect of an action in another tab).
+// Dirty payloads are broadcast via core.PropagateAll after an out-of-band change.
+// They are pure "reload yourself" markers: the matching tab root recognizes its own
+// payload in Receive and reloads from disk. The visible outcome — the status line and
+// any focus switch — is composed at the call site with core.Seq (SetStatus / ShowTab
+// alongside the PropagateAll), so the payload carries no state.
 type (
-	ProjectDirty struct {
-		Status string
-		Focus  bool
-	}
-	GlobalDirty struct {
-		Status string
-		Focus  bool
-	}
-	ArchiveDirty struct {
-		Status string
-		Focus  bool
-	}
+	ProjectDirty struct{}
+	GlobalDirty  struct{}
+	ArchiveDirty struct{}
 	// PathRefresh is broadcast after the manifest/project paths themselves change (e.g.
 	// a manifest was just created). Path-dependent roots — the Project list and the
 	// Actions menu — reload from the updated context; the header needs no notification
 	// (it reads straight from App each render).
-	PathRefresh struct {
-		Status string
-		Focus  bool
-	}
+	PathRefresh struct{}
 )
 
 // RefreshPaths re-runs Scan after the paths may have changed (e.g. a manifest was just
@@ -100,16 +88,17 @@ type (
 // PathRefresh broadcast — so the scan completes before any Receiver (or the
 // live-reading header) reacts, with no router ordering or chrome plumbing. When sync it
 // just re-scans inline and returns no broadcast, for callers that run before anything
-// needs to reload.
-func RefreshPaths(sh *core.Shared, async bool, status string, focus bool) core.Action {
+// needs to reload. The status/focus that used to ride the broadcast are now composed
+// at the call site (core.Seq), so RefreshPaths only carries the reload.
+func RefreshPaths(sh *core.Shared, async bool) tea.Cmd {
 	if async {
-		return core.Async(func() tea.Msg {
+		return func() tea.Msg {
 			Of(sh).Scan()
-			return core.PropagateAll(PathRefresh{Status: status, Focus: focus})
-		})
+			return core.PropagateAll(PathRefresh{})
+		}
 	}
 	Of(sh).Scan()
-	return core.Action{}
+	return nil
 }
 
 // Header renders gdaddon's persistent context box (Project / Root / Manifest). It is

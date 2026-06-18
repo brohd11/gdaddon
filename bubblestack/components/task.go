@@ -50,9 +50,10 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 		}
 		s.done = true
 		act := s.onDone(sh, msg)
-		if s.stay {
-			return s, core.Action{} // wait for the user to dismiss (esc/enter/q)
-		}
+		// A non-stay task navigates away via act (e.g. a ShowTab). A stay-task remains
+		// on its log until the user dismisses it (esc/enter/q), but act is still applied
+		// — it's expected to be non-navigational for a stay-task (e.g. a broadcast that
+		// reloads another tab), so returning s keeps the screen on top.
 		return s, act
 
 	case tea.KeyMsg:
