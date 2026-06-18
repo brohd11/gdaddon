@@ -16,26 +16,29 @@ import (
 // newArchiveSubmenu builds the Archive command submenu for an installed addon: archive
 // the currently installed version, or browse the repo (all releases + archived, plus
 // HEAD) and archive any version via the shared packages flow.
-func newArchiveSubmenu(st addon.Status) *components.PickerScreen {
-	items := []list.Item{
-		components.Item{
+func newArchiveSubmenu(st addon.Status, sh *core.Shared) *components.PickerScreen {
+	items := []list.Item{}
+	if st.Present() {
+		items = append(items, components.Item{
 			Name: "Current Version - " + st.LocalVersion,
 			Desc: "save a local copy of the installed version",
 			Pick: func(sh *core.Shared) core.Action { return archiveCurrentVersion(sh, st) },
 		},
-		components.Item{
-			Name: "Browse repo",
-			Desc: "pick any version or branch to archive",
-			Pick: func(sh *core.Shared) core.Action {
-				return core.Push(packages.BrowseRepo(st.Addon.URL, packages.BrowseOpts{
-					Source:       packages.SourceAll,
-					IncludeHEAD:  true,
-					Endpoint:     packages.ArchiveEndpoint,
-					MarkArchived: true,
-				}))
-			},
-		},
+		)
 	}
+	items = append(items, components.Item{
+		Name: "Browse repo",
+		Desc: "pick any version or branch to archive",
+		Pick: func(sh *core.Shared) core.Action {
+			return core.Push(packages.BrowseRepo(st.Addon.URL, packages.BrowseOpts{
+				Source:       packages.SourceAll,
+				IncludeHEAD:  true,
+				Endpoint:     packages.ArchiveEndpoint,
+				MarkArchived: true,
+			}))
+		},
+	})
+
 	return components.NewPicker(items, components.PickerOpts{
 		Title:   core.HeaderTitle(st.Addon.Name, st.LocalVersion, "Archive"),
 		PopStop: true, // command hub: the browse/archive sub-flow returns here (PopTo)

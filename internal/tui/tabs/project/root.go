@@ -65,6 +65,7 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 	switch payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
+		appctx.Of(sh).RefreshProject()
 		s.list.SetItems(projectListItems(sh))
 	}
 	return core.Action{}

@@ -27,23 +27,28 @@ type PickerScreen struct {
 // handled=true the key is consumed (and its command, if any, run), otherwise the
 // key falls through to the list.
 type PickerOpts struct {
-	Title    string
-	Help     []key.Binding // extra help/hint bindings shown in the list help
-	OnSelect func(*core.Shared, list.Item) core.Action
-	OnKey    func(*core.Shared, string, list.Item) (core.Action, bool)
-	PopStop  bool // mark this picker as a PopTo boundary (a command hub)
+	Title        string
+	Help         []key.Binding // extra help/hint bindings shown in the list help
+	OnSelect     func(*core.Shared, list.Item) core.Action
+	OnKey        func(*core.Shared, string, list.Item) (core.Action, bool)
+	PopStop      bool // mark this picker as a PopTo boundary (a command hub)
+	InitialIndex int  // cursor starts here; 0 = first item (default)
 }
 
 var _ core.Filterer = (*PickerScreen)(nil)
 var _ core.PopStopper = (*PickerScreen)(nil)
 
 func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
-	return &PickerScreen{
+	s := &PickerScreen{
 		list:     core.NewSelectList(items, opts.Title, opts.Help...),
 		OnSelect: opts.OnSelect,
 		OnKey:    opts.OnKey,
 		popStop:  opts.PopStop,
 	}
+	if opts.InitialIndex > 0 {
+		s.list.Select(opts.InitialIndex)
+	}
+	return s
 }
 
 func (s *PickerScreen) PopStop() bool { return s.popStop }

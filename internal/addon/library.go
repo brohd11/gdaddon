@@ -22,6 +22,36 @@ func GlobalListPath() (string, error) {
 	return filepath.Join(home, ".gdaddon", "plugins.yml"), nil
 }
 
+// InGlobal reports whether this addon's repo is already present in a pre-loaded
+// global addon list (matched by source.RepoID so .git vs release-zip collapse).
+func (s Status) InGlobal(globals []Addon) bool {
+	id, err := source.RepoID(s.Addon.URL)
+	if err != nil {
+		return false
+	}
+	for _, g := range globals {
+		if gid, err := source.RepoID(g.URL); err == nil && gid == id {
+			return true
+		}
+	}
+	return false
+}
+
+// Archived reports whether this addon's repo has any locally archived packages,
+// given the pre-loaded list of archived repo IDs from archive.Repos().
+func (s Status) Archived(archivedIDs []string) bool {
+	id, err := source.RepoID(s.Addon.URL)
+	if err != nil {
+		return false
+	}
+	for _, aid := range archivedIDs {
+		if aid == id {
+			return true
+		}
+	}
+	return false
+}
+
 // InGlobalList reports whether the global plugin list already has an entry for
 // the same repo as url (matched by source.RepoID, so .git vs release-zip forms
 // collapse). A missing/unparseable list or url reads as "not present".

@@ -177,6 +177,9 @@ func HeaderBox(width int, body string) string {
 // Label renders a context-box/field label in the muted label style.
 func Label(s string) string { return labelStyle.Render(s) }
 
+// Value renders a context-box field value in the log (near-white) style.
+func Value(s string) string { return logStyle.Render(s) }
+
 // TruncLeft keeps the right (most informative) end of a path, prefixing "…".
 func TruncLeft(s string, max int) string {
 	if max < 4 {

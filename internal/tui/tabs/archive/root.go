@@ -6,6 +6,7 @@ package archive
 import (
 	"gdaddon/internal/tui/appctx"
 	pck "gdaddon/internal/tui/flows/packages"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -46,6 +47,7 @@ func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.
 // removal triggered as a side effect of a global remove reloads silently.
 func (s *ArchiveScreen) Receive(sh *core.Shared, payload any) core.Action {
 	if _, ok := payload.(appctx.ArchiveDirty); ok {
+		appctx.Of(sh).RefreshArchive()
 		s.list.SetItems(pck.RepoItems(archiveOpts))
 	}
 	return core.Action{}

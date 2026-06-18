@@ -2,6 +2,7 @@ package global
 
 import (
 	"gdaddon/internal/addon"
+	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
 	pck "gdaddon/internal/tui/flows/packages"
 
@@ -11,33 +12,52 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 )
 
+// InProject reports whether this global plugin's repo is already present in the
+// given project addon list (matched by source.RepoID).
+func (g globalItem) InProject(addons []addon.Addon) bool {
+	id, err := source.RepoID(g.url)
+	if err != nil {
+		return false
+	}
+	for _, a := range addons {
+		if aid, err := source.RepoID(a.URL); err == nil && aid == id {
+			return true
+		}
+	}
+	return false
+}
+
 // newSubmenuScreen builds the per-plugin command submenu as a reusable picker.
 // Each row carries its own Pick, so new global commands are added as rows here.
-func newSubmenuScreen(g globalItem) *components.PickerScreen {
-	items := []list.Item{
-		components.Item{
+func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
+	c := appctx.Of(sh)
+	items := []list.Item{}
+
+	if !g.InProject(c.ProjectAddons) {
+		items = append(items, components.Item{
 			Name: "⬇ Import to Project",
 			Desc: "add this plugin to the project manifest",
 			Pick: func(sh *core.Shared) core.Action { return importToProject(sh, g) },
-		},
-		components.Item{
-			Name: "✗ Remove",
-			Desc: "remove from the global list (and optionally its archive)",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(g)) },
-		},
-		components.Item{
-			Name: "Add to Archive",
-			Desc: "browse the repo's versions and save a local copy",
-			Pick: func(sh *core.Shared) core.Action {
-				return core.Push(pck.BrowseRepo(g.url, pck.BrowseOpts{
-					Source:       pck.SourceAll,
-					IncludeHEAD:  true,
-					Endpoint:     pck.ArchiveEndpoint,
-					MarkArchived: true,
-				}))
-			},
-		},
+		})
 	}
+	items = append(items, components.Item{
+		Name: "⛃ Archive",
+		Desc: "browse the repo's versions and save a local copy",
+		Pick: func(sh *core.Shared) core.Action {
+			return core.Push(pck.BrowseRepo(g.url, pck.BrowseOpts{
+				Source:       pck.SourceAll,
+				IncludeHEAD:  true,
+				Endpoint:     pck.ArchiveEndpoint,
+				MarkArchived: true,
+			}))
+		},
+	})
+	items = append(items, components.Item{
+		Name: "✗ Remove",
+		Desc: "remove from the global list (and optionally its archive)",
+		Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(g)) },
+	})
+
 	// PopStop: this submenu is the per-plugin command hub, so the archive sub-flow
 	// returns here (PopTo) after it finishes.
 	return components.NewPicker(items, components.PickerOpts{Title: g.name, PopStop: true})

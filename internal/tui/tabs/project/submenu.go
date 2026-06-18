@@ -16,8 +16,9 @@ import (
 // pressing enter on an addon row). Install opens the version-fetch flow; Archive
 // (offered only when the addon is installed) opens the archive submenu; Remove
 // opens the remove confirm. Each row carries its own Pick.
-func newSubmenuScreen(st addon.Status) *components.PickerScreen {
+func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen {
 	a, local := st.Addon, st.LocalVersion
+	c := appctx.Of(sh)
 
 	items := []list.Item{
 		components.Item{
@@ -32,26 +33,23 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 			},
 		},
 	}
-	if a.URL != "" && !addon.InGlobalList(a.URL) {
+	if a.URL != "" && !st.InGlobal(c.GlobalAddons) {
 		items = append(items, components.Item{
 			Name: "⬆ Export to Global",
 			Desc: "add this plugin to your global library (~/.gdaddon)",
 			Pick: func(sh *core.Shared) core.Action { return exportToGlobal(sh, a) },
 		})
 	}
-
-	if st.Present() {
-		items = append(items, components.Item{
-			Name: "📦 Archive",
-			Desc: "save a local copy of this addon",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st)) },
-		})
-		items = append(items, components.Item{
-			Name: "✗ Remove",
-			Desc: "remove from the project (and optionally delete files)",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(st)) },
-		})
-	}
+	items = append(items, components.Item{
+		Name: "⛃ Archive",
+		Desc: "browse the repo's versions and save a local copy",
+		Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st, sh)) },
+	})
+	items = append(items, components.Item{
+		Name: "✗ Remove",
+		Desc: "remove from the project (and optionally delete files)",
+		Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(st)) },
+	})
 
 	return components.NewPicker(items, components.PickerOpts{
 		Title:   core.HeaderTitle(a.Name, local, ""),

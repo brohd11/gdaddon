@@ -71,8 +71,8 @@ var Keys = KeyMap{
 	Yes: key.NewBinding(key.WithKeys("enter", "y", "Y", "e")),
 	No:  key.NewBinding(key.WithKeys("esc", "n", "N", "c")),
 
-	NextTab:      key.NewBinding(key.WithKeys("]", "x", "shift+right")),
-	PrevTab:      key.NewBinding(key.WithKeys("[", "z", "shift+left")),
+	NextTab:      key.NewBinding(key.WithKeys("]", "x", "shift+right", "D")),
+	PrevTab:      key.NewBinding(key.WithKeys("[", "z", "shift+left", "A")),
 	ToggleOutput: key.NewBinding(key.WithKeys("tab")),
 	Output:       key.NewBinding(key.WithKeys("o")),
 	Clear:        key.NewBinding(key.WithKeys("C")),

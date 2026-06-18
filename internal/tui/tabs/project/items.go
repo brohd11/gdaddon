@@ -43,7 +43,7 @@ func addonDesc(s addon.Status) string {
 func addonItem(s addon.Status) components.Item {
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
-		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s)) }
+		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
 	return components.Item{Name: s.Addon.Name, Desc: addonDesc(s), Pick: pick}
 }

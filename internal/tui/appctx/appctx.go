@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"gdaddon/internal/addon"
+	"gdaddon/internal/archive"
 
 	"github.com/brohd11/bubblestack/core"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,14 +24,55 @@ type Ctx struct {
 	ManifestRel  string // ManifestPath relative to ProjectRoot, for display
 	ProjectName  string
 	HasProject   bool
+	GlobalAddons  []addon.Addon // cached from ~/.gdaddon/plugins.yml
+	ArchivedIDs   []string      // cached repo IDs from archive.Repos()
+	ProjectAddons []addon.Addon // cached from the project manifest
 }
 
 // New builds the context for a project root and performs the initial path scan.
 func New(projectRoot string) *Ctx {
 	c := &Ctx{ProjectRoot: projectRoot}
 	c.Scan()
+	c.loadGlobal()
+	c.loadArchive()
+	c.loadProject()
 	return c
 }
+
+func (c *Ctx) loadGlobal() {
+	p, err := addon.GlobalListPath()
+	if err != nil {
+		c.GlobalAddons = nil
+		return
+	}
+	c.GlobalAddons, _ = addon.Parse(p)
+}
+
+func (c *Ctx) loadArchive() {
+	repos, _ := archive.Repos()
+	ids := make([]string, 0, len(repos))
+	for _, r := range repos {
+		ids = append(ids, r.ID)
+	}
+	c.ArchivedIDs = ids
+}
+
+func (c *Ctx) loadProject() {
+	if c.ManifestPath == "" {
+		c.ProjectAddons = nil
+		return
+	}
+	c.ProjectAddons, _ = addon.Parse(c.ManifestPath)
+}
+
+// RefreshGlobal reloads the cached global addon list from disk.
+func (c *Ctx) RefreshGlobal() { c.loadGlobal() }
+
+// RefreshArchive reloads the cached archived repo IDs from disk.
+func (c *Ctx) RefreshArchive() { c.loadArchive() }
+
+// RefreshProject reloads the cached project addon list from disk.
+func (c *Ctx) RefreshProject() { c.loadProject() }
 
 // Scan resolves the project's paths from the project root: it walks for the addon
 // manifest and derives the display fields (ManifestRel, ProjectName, HasProject). It's
@@ -116,14 +158,14 @@ func Header(sh *core.Shared) string {
 	inner := core.HeaderInnerWidth(sh.Width())
 	valWidth := inner - 10 // minus the "Manifest: " label
 	line := func(label, value string) string {
-		return core.Label(label) + core.TruncLeft(value, valWidth)
+		return core.Label(label) + core.Value(core.TruncLeft(value, valWidth))
 	}
 	manifest := c.ManifestRel
 	if manifest == "" {
 		manifest = "(none — Actions ▸ Create manifest)"
 	}
 	body := strings.Join([]string{
-		core.Label("Project:  ") + name,
+		core.Label("Project:  ") + core.Value(name),
 		line("Root:     ", c.ProjectRoot),
 		line("Manifest: ", manifest),
 	}, "\n")

@@ -6,6 +6,7 @@ package global
 import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -24,13 +25,13 @@ type GlobalScreen struct{ list list.Model }
 var _ core.Filterer = (*GlobalScreen)(nil)
 var _ core.Receiver = (*GlobalScreen)(nil)
 
-func NewGlobalScreen() *GlobalScreen {
-	return &GlobalScreen{list: core.NewSelectList(globalItems(), "Global Plugins")}
+func NewGlobalScreen(sh *core.Shared) *GlobalScreen {
+	return &GlobalScreen{list: core.NewSelectList(globalItems(sh), "Global Plugins")}
 }
 
 // globalItems reads ~/.gdaddon/plugins.yml as self-dispatching rows: each Pick
 // opens that plugin's submenu. An empty/missing list shows an inert hint row.
-func globalItems() []list.Item {
+func globalItems(sh *core.Shared) []list.Item {
 	var items []list.Item
 	if path, err := addon.GlobalListPath(); err == nil {
 		if addons, err := addon.Parse(path); err == nil {
@@ -39,7 +40,7 @@ func globalItems() []list.Item {
 				items = append(items, components.Item{
 					Name: g.name,
 					Desc: g.url,
-					Pick: func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(g)) },
+					Pick: func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(g, sh)) },
 				})
 			}
 		}
@@ -69,7 +70,8 @@ func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.l
 // switch are composed at the call site (core.Seq).
 func (s *GlobalScreen) Receive(sh *core.Shared, payload any) core.Action {
 	if _, ok := payload.(appctx.GlobalDirty); ok {
-		s.list.SetItems(globalItems())
+		appctx.Of(sh).RefreshGlobal()
+		s.list.SetItems(globalItems(sh))
 	}
 	return core.Action{}
 }

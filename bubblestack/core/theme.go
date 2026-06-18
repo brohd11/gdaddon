@@ -31,7 +31,11 @@ var themes = map[string]Theme{
 	// mono is a monochrome black/white/grey palette: a bright-white accent in
 	// place of the default pink, greys for borders and secondary text, and the
 	// terminal's own background for black.
-	"mono": {Name: "mono", Muted: "245", Log: "252", Border: "243", Focused: "255", OnFocused: "232"},
+	"mono":  {Name: "mono",  Muted: "245", Log: "252", Border: "243", Focused: "255", OnFocused: "232"},
+	"godot": {Name: "godot", Muted: "247", Log: "252", Border: "245", Focused: "67",  OnFocused: "232"},
+	"red":   {Name: "red",   Muted: "247", Log: "252", Border: "245", Focused: "203", OnFocused: "232"},
+	"green": {Name: "green", Muted: "247", Log: "252", Border: "245", Focused: "114", OnFocused: "232"},
+	"amber": {Name: "amber", Muted: "247", Log: "252", Border: "245", Focused: "214", OnFocused: "232"},
 }
 
 // current is the active theme; applyTheme keeps it and the color vars in sync.

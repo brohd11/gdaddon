@@ -14,8 +14,12 @@ import (
 func newThemePicker() core.Screen {
 	active := core.CurrentTheme()
 	var items []list.Item
-	for _, name := range core.ThemeNames() {
+	initialIndex := 0
+	for i, name := range core.ThemeNames() {
 		name := name // capture per row
+		if name == active {
+			initialIndex = i
+		}
 		desc := ""
 		if name == active {
 			desc = "active"
@@ -23,8 +27,17 @@ func newThemePicker() core.Screen {
 		items = append(items, components.Item{
 			Name: name,
 			Desc: desc,
-			Pick: func(sh *core.Shared) core.Action { return core.ApplyTheme(name) },
+			Pick: func(sh *core.Shared) core.Action {
+				return core.Seq(
+					core.ApplyTheme(name),
+					core.Replace(newThemePicker()),
+				)
+			},
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: "Theme"})
+
+	return components.NewPicker(items, components.PickerOpts{
+		Title:        "Theme",
+		InitialIndex: initialIndex,
+	})
 }
