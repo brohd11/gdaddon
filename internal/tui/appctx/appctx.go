@@ -11,7 +11,9 @@ import (
 	"strings"
 
 	"gdaddon/internal/addon"
+
 	"github.com/brohd11/bubblestack/core"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Ctx is the consumer context stored on core.Shared.App. Tabs recover it with Of.
@@ -23,20 +25,20 @@ type Ctx struct {
 	HasProject   bool
 }
 
-// New builds the context from the resolved manifest + project paths, deriving the
-// display fields via RefreshPaths.
-func New(manifestPath, projectRoot string) *Ctx {
-	c := &Ctx{ManifestPath: manifestPath, ProjectRoot: projectRoot}
-	c.recompute()
+// New builds the context for a project root and performs the initial path scan.
+func New(projectRoot string) *Ctx {
+	c := &Ctx{ProjectRoot: projectRoot}
+	c.Scan()
 	return c
 }
 
-// recompute re-derives the display fields (ManifestRel, ProjectName, HasProject) from
-// ManifestPath/ProjectRoot. It's the single source of path-derived state, reused at
-// construction (New) and after a path change (RefreshPaths). An empty ManifestPath —
-// the no-manifest launch — leaves ManifestRel empty (the header shows a bootstrap
-// hint).
-func (c *Ctx) recompute() {
+// Scan resolves the project's paths from the project root: it walks for the addon
+// manifest and derives the display fields (ManifestRel, ProjectName, HasProject). It's
+// the single source of path state, run synchronously at construction (New) and — via
+// RefreshPaths — after the manifest is created or otherwise changes. A missing manifest
+// leaves ManifestPath/ManifestRel empty (the header shows a bootstrap hint).
+func (c *Ctx) Scan() {
+	c.ManifestPath, _ = addon.FindManifest(c.ProjectRoot)
 	switch {
 	case c.ManifestPath == "":
 		c.ManifestRel = ""
@@ -93,15 +95,21 @@ type (
 	}
 )
 
-// RefreshPaths recomputes the path-derived context fields after a path change, then
-// returns the PathRefresh broadcast that tells path-dependent screens to reload.
-// Because the recompute runs here — before the broadcast is emitted — every Receiver
-// (and the live-reading header) already sees the updated paths, so no router ordering
-// or chrome plumbing is needed. Call it inline on the update loop (it's local, no IO
-// worth deferring); wrap the result in core.Async only if a caller needs it off-loop.
-func RefreshPaths(sh *core.Shared, status string, focus bool) core.Action {
-	Of(sh).recompute()
-	return core.PropagateAll(PathRefresh{Status: status, Focus: focus})
+// RefreshPaths re-runs Scan after the paths may have changed (e.g. a manifest was just
+// created). When async it defers the scan into a tea.Cmd that, once it runs, emits the
+// PathRefresh broadcast — so the scan completes before any Receiver (or the
+// live-reading header) reacts, with no router ordering or chrome plumbing. When sync it
+// just re-scans inline and returns no broadcast, for callers that run before anything
+// needs to reload.
+func RefreshPaths(sh *core.Shared, async bool, status string, focus bool) core.Action {
+	if async {
+		return core.Async(func() tea.Msg {
+			Of(sh).Scan()
+			return core.PropagateAll(PathRefresh{Status: status, Focus: focus})
+		})
+	}
+	Of(sh).Scan()
+	return core.Action{}
 }
 
 // Header renders gdaddon's persistent context box (Project / Root / Manifest). It is

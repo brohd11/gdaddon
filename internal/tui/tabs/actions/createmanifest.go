@@ -52,8 +52,9 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 				sh.SetStatus("error: " + err.Error())
 				return core.Async(f.Focus("dir"))
 			}
-			appctx.Of(sh).ManifestPath = target
-			return core.Seq(core.ResetToRoot(), appctx.RefreshPaths(sh, "created manifest", true))
+			// The async refresh re-scans under the root and rediscovers the file we just
+			// wrote (validated above to be within the walk depth), then broadcasts.
+			return core.Seq(core.ResetToRoot(), appctx.RefreshPaths(sh, true, "created manifest", true))
 		},
 	})
 }

@@ -44,7 +44,7 @@ func pump(tm tea.Model, msg tea.Msg) tea.Model {
 }
 
 func newTestRouter() core.Router {
-	sh := core.NewShared(appctx.New("/tmp/gdaddon-test/addon_manifest.yml", "/tmp/gdaddon-test"))
+	sh := core.NewShared(appctx.New("/tmp/gdaddon-test"))
 	return core.NewRouter(sh, []core.TabEntry{{Title: "Test", New: func(*core.Shared) core.Screen { return stubRoot{} }}})
 }
 

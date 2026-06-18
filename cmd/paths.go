@@ -5,40 +5,22 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-
-	"gdaddon/internal/addon"
 )
 
-// resolvePaths turns the optional [yaml_path] [project_root] args into concrete
-// paths, auto-detecting the manifest and git root when omitted. It may prompt
-// on stdin if the git root cannot be found; this runs before any TUI starts. When no
-// manifest is auto-found, yamlFile is "" (not an error) so the TUI can still launch
-// and bootstrap one; an explicitly-named missing file still errors.
-func resolvePaths(args []string) (yamlFile, projectRoot string, err error) {
+// resolveRoot resolves the Godot project root from the optional [project_root] arg,
+// auto-detecting the git toplevel when omitted. It may prompt on stdin if the git root
+// cannot be found; this runs before any TUI starts. The manifest itself is no longer
+// resolved here — the TUI context scans for it under the root (see appctx.Ctx.Scan).
+func resolveRoot(args []string) (projectRoot string, err error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", "", fmt.Errorf("could not get current working directory: %w", err)
+		return "", fmt.Errorf("could not get current working directory: %w", err)
 	}
 
-	switch len(args) {
-	case 0:
-		yamlFile, err = addon.FindManifest(cwd)
-		if err != nil {
-			return "", "", err
-		}
+	if len(args) == 1 {
+		projectRoot = args[0]
+	} else {
 		projectRoot = getGitDirectory()
-	case 1:
-		yamlFile = args[0]
-		projectRoot = getGitDirectory()
-	case 2:
-		yamlFile = args[0]
-		projectRoot = args[1]
-	}
-
-	if yamlFile != "" {
-		if _, err := os.Stat(yamlFile); os.IsNotExist(err) {
-			return "", "", fmt.Errorf("YAML file not found at %s", yamlFile)
-		}
 	}
 
 	if projectRoot == "" {
@@ -53,7 +35,7 @@ func resolvePaths(args []string) (yamlFile, projectRoot string, err error) {
 		}
 	}
 
-	return yamlFile, projectRoot, nil
+	return projectRoot, nil
 }
 
 func getGitDirectory() string {

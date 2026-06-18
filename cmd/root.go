@@ -14,9 +14,9 @@ import (
 var installFlag bool
 
 var rootCmd = &cobra.Command{
-	Use:           "gdaddon [yaml_path] [project_root]",
+	Use:           "gdaddon [project_root]",
 	Short:         "Browse and install Godot addons (interactive TUI by default; --install for non-interactive)",
-	Args:          cobra.RangeArgs(0, 2),
+	Args:          cobra.MaximumNArgs(1),
 	SilenceUsage:  true, // don't dump usage on runtime (non-flag) errors
 	SilenceErrors: false,
 	RunE:          runRoot,
@@ -32,8 +32,9 @@ func Execute() {
 	}
 }
 
-// runRoot resolves the manifest/project paths and either runs the non-interactive
-// install (--install) or launches the TUI (default).
+// runRoot resolves the project root and either runs the non-interactive install
+// (--install) or launches the TUI (default). The manifest is discovered under the root
+// (by runInstall here, or the TUI context's scan).
 func runRoot(cmd *cobra.Command, args []string) error {
 	// Dump the default config.yml on first run so it's the editable source of
 	// truth (search sources, archive dir). A failure here is non-fatal.
@@ -41,23 +42,27 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "wrote default config to %s\n", path)
 	}
 
-	yamlFile, projectRoot, err := resolvePaths(args)
+	projectRoot, err := resolveRoot(args)
 	if err != nil {
 		return err
 	}
 	if installFlag {
-		if yamlFile == "" {
-			return fmt.Errorf("no addon_manifest.yml found; create one or pass a path")
-		}
-		return runInstall(yamlFile, projectRoot)
+		return runInstall(projectRoot)
 	}
-	return tui.Run(yamlFile, projectRoot)
+	return tui.Run(projectRoot)
 }
 
-// runInstall is the non-interactive path: inspect the manifest and install/update
-// everything, reporting progress to stdout.
-func runInstall(yamlFile, projectRoot string) error {
-	statuses, err := addon.Inspect(yamlFile, projectRoot)
+// runInstall is the non-interactive path: discover the manifest under the project root,
+// inspect it, and install/update everything, reporting progress to stdout.
+func runInstall(projectRoot string) error {
+	manifest, err := addon.FindManifest(projectRoot)
+	if err != nil {
+		return err
+	}
+	if manifest == "" {
+		return fmt.Errorf("no addon_manifest.yml found under %s; create one in the TUI or add it manually", projectRoot)
+	}
+	statuses, err := addon.Inspect(manifest, projectRoot)
 	if err != nil {
 		return err
 	}
@@ -66,5 +71,5 @@ func runInstall(yamlFile, projectRoot string) error {
 		return nil
 	}
 	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
-	return addon.InstallAll(yamlFile, statuses, projectRoot, report)
+	return addon.InstallAll(manifest, statuses, projectRoot, report)
 }

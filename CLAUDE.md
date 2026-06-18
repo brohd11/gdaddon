@@ -33,11 +33,14 @@ Build outputs go to `build/<platform>/gdaddon[.exe]`.
 ## Running
 
 ```bash
-gdaddon                                         # TUI; manifest found via filesystem walk + git root auto-detected
-gdaddon path/to/addon_manifest.yml              # TUI with explicit manifest
-gdaddon path/to/addon_manifest.yml /godot/proj  # TUI with explicit manifest + project root
-gdaddon --install                               # non-interactive install of everything in the manifest
+gdaddon                # TUI; git root auto-detected, manifest found by walking from it
+gdaddon /godot/proj    # TUI with an explicit project root (manifest still discovered by the scan)
+gdaddon --install      # non-interactive install of everything in the discovered manifest
 ```
+
+If no manifest is found, the TUI still launches with an empty Project list; use
+Actions → Create manifest to bootstrap one (it must land within the manifest-walk
+depth of the project root so the scan rediscovers it).
 
 ## Addon manifest format
 
@@ -54,7 +57,7 @@ my_addon:
 main.go              — calls cmd.Execute()
 cmd/
   root.go            — the single `gdaddon` cobra command: TUI by default, --install for non-interactive
-  paths.go           — resolvePaths (manifest filesystem-walk + git-root detection)
+  paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
 internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, ~/.gdaddon global list
   source/            — resolves remote versions from a URL (github.go: releases, branches, source archives; RepoID)

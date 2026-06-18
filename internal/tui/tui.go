@@ -16,9 +16,9 @@ import (
 // Run wires the tabs and blocks until the user quits. Tab roots are built lazily by
 // the router (after the theme is applied), so each tab reads its own state when
 // constructed; nothing is inspected here.
-func Run(manifestPath, projectRoot string) error {
+func Run(projectRoot string) error {
 	return bubblestack.Run(bubblestack.Config{
-		App:    appctx.New(manifestPath, projectRoot),
+		App:    appctx.New(projectRoot),
 		Header: appctx.Header,
 		Output: components.NewLogPane(),
 		Status: components.NewStatusLine(),

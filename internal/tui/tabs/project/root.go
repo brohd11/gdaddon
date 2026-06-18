@@ -74,7 +74,7 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 	default:
 		return core.Action{}
 	}
-	sh.SetStatus(status)
+	sh.WriteStatus(status)
 	s.list.SetItems(projectListItems(sh))
 	if focus {
 		return core.ShowTab(appctx.TitleProject)
