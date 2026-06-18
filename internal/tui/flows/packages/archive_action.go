@@ -19,13 +19,13 @@ import (
 // chosen version's asset (a no-op for an already-archived asset, in which case the
 // confirm builder reports it instead). Shared by every browse flow whose leaf action
 // is "save a local copy" (Global "Add to Archive", Project Archive → Browse repo).
-func ArchiveEndpoint(repoID, tag string, asset source.Asset) *components.PickerScreen {
+func ArchiveEndpoint(sel Selection) core.Screen {
 	items := []list.Item{
 		components.Item{
 			Name: "⬇ Add to archive",
 			Desc: "save a local copy of this package",
 			Pick: func(sh *core.Shared) core.Action {
-				cs, status, ok := NewArchiveConfirm(repoID, repoID, tag, []source.Asset{asset})
+				cs, status, ok := NewArchiveConfirm(sel.RepoID, sel.RepoID, sel.Tag, []source.Asset{sel.Asset})
 				if !ok {
 					return core.SetStatusAndLog(status)
 				}
@@ -33,7 +33,7 @@ func ArchiveEndpoint(repoID, tag string, asset source.Asset) *components.PickerS
 			},
 		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: repoID + " - " + stripSuffix(asset.Name)})
+	return components.NewPicker(items, components.PickerOpts{Title: sel.RepoID + " - " + stripSuffix(sel.Asset.Name)})
 }
 
 var archiveConfirmHelp = []key.Binding{

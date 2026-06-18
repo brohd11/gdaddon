@@ -25,6 +25,16 @@ var confirmHelp = []key.Binding{
 
 // ---------- install confirm ----------
 
+// installEndpoint adapts the install confirm into a packages.Endpoint: it captures the
+// selected addon and its installed version, and builds the confirm for whichever
+// release/branch/asset the shared browse flow hands back.
+func installEndpoint(selected addon.Addon, local string) packages.Endpoint {
+	return func(sel packages.Selection) core.Screen {
+		pick := versionItem{tag: sel.Tag, asset: sel.Asset, branch: sel.Branch, archived: sel.Archived}
+		return newInstallConfirm(selected, local, pick)
+	}
+}
+
 func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *components.ConfirmScreen {
 	return &components.ConfirmScreen{
 		Crumb:  core.HeaderTitle(selected.Name, local, pickSection(pick)),

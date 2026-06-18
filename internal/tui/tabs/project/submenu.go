@@ -4,6 +4,7 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -22,15 +23,14 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 		components.Item{
 			Name: "↧ Install / update",
 			Desc: "pick a version, branch, or asset to install",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newReleasesLoading(a, local)) },
+			Pick: func(sh *core.Shared) core.Action {
+				return core.Push(packages.BrowseRepo(a.URL, packages.BrowseOpts{
+					Source:      packages.SourceAll,
+					IncludeHEAD: true,
+					Endpoint:    installEndpoint(a, local),
+				}))
+			},
 		},
-	}
-	if st.Present() {
-		items = append(items, components.Item{
-			Name: "📦 Archive",
-			Desc: "save a local copy of this addon",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st)) },
-		})
 	}
 	if a.URL != "" && !addon.InGlobalList(a.URL) {
 		items = append(items, components.Item{
@@ -39,11 +39,19 @@ func newSubmenuScreen(st addon.Status) *components.PickerScreen {
 			Pick: func(sh *core.Shared) core.Action { return exportToGlobal(sh, a) },
 		})
 	}
-	items = append(items, components.Item{
-		Name: "✗ Remove",
-		Desc: "remove from the project (and optionally delete files)",
-		Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(st)) },
-	})
+
+	if st.Present() {
+		items = append(items, components.Item{
+			Name: "📦 Archive",
+			Desc: "save a local copy of this addon",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st)) },
+		})
+		items = append(items, components.Item{
+			Name: "✗ Remove",
+			Desc: "remove from the project (and optionally delete files)",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(st)) },
+		})
+	}
 
 	return components.NewPicker(items, components.PickerOpts{
 		Title:   core.HeaderTitle(a.Name, local, ""),

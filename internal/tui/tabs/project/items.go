@@ -2,7 +2,6 @@ package project
 
 import (
 	"fmt"
-	"strings"
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
@@ -62,19 +61,14 @@ func projectListItems(sh *core.Shared) []list.Item {
 // ---------- install payload ----------
 
 // versionItem is a leaf choice (a branch or a release asset) carried through
-// confirm/install. It is a payload, not a list row — the version/asset/branch
-// pickers are built from components.Item (see versions.go).
+// confirm/install. It is a payload built from a packages.Selection at the install
+// endpoint boundary (see installEndpoint).
 type versionItem struct {
-	tag        string
-	asset      source.Asset
-	prerelease bool
-	branch     bool
-	archived   bool // asset comes from the local archive (local-file URL)
+	tag      string
+	asset    source.Asset
+	branch   bool
+	archived bool // asset comes from the local archive (local-file URL)
 }
-
-// isArchived reports whether an asset is a local archive entry (local-file URL)
-// rather than a remote download.
-func isArchived(a source.Asset) bool { return !strings.HasPrefix(a.URL, "http") }
 
 // pickSection describes the chosen asset for the confirm breadcrumb, e.g.
 // "Assets v1.0.0 - addon.zip" or "Branches - main".

@@ -6,6 +6,7 @@ import (
 	arch "gdaddon/internal/archive"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+	pck "gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -20,17 +21,17 @@ var removeConfirmHelp = []key.Binding{
 }
 
 // newPackageSubmenu is the per-package command menu (a packages.Endpoint). Today it
-// offers only Remove (keyed off the asset's local path), so tag is unused; it stays a
-// submenu so future archive actions slot in as more rows.
-func newPackageSubmenu(repoID, tag string, asset source.Asset) *components.PickerScreen {
+// offers only Remove (keyed off the asset's local path); it stays a submenu so future
+// archive actions slot in as more rows.
+func newPackageSubmenu(sel pck.Selection) core.Screen {
 	items := []list.Item{
 		components.Item{
 			Name: "✗ Remove from archive",
 			Desc: "delete this archived package",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(repoID, asset)) },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(sel.RepoID, sel.Asset)) },
 		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: repoID + " - " + asset.Name})
+	return components.NewPicker(items, components.PickerOpts{Title: sel.RepoID + " - " + sel.Asset.Name})
 }
 
 // newRemoveConfirm confirms deleting one archived package, then refreshes the tab.

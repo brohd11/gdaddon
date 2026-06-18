@@ -36,10 +36,22 @@ const (
 	SourceAll                   // upstream releases + archived, merged
 )
 
-// Endpoint builds the per-package command menu for the chosen asset. tag is the
-// release tag (or branch name) the asset came from (the archive action needs it to
-// store under repo/tag; a remove can ignore it).
-type Endpoint func(repoID, tag string, asset source.Asset) *components.PickerScreen
+// Selection is the package the user chose, handed to an Endpoint. It carries the repo
+// id, the tag (release tag or branch name), the asset, and flags describing it — enough
+// for any leaf action (archive, install, remove) without the flow knowing which.
+type Selection struct {
+	RepoID     string
+	Tag        string
+	Asset      source.Asset
+	Branch     bool // chosen via the HEAD/branches path (vs a release)
+	Prerelease bool // the release was a prerelease (false for branches / archive)
+	Archived   bool // the asset is a local archived copy (local-file URL)
+}
+
+// Endpoint builds the screen the flow pushes for the chosen package — a command submenu
+// (Archive tab → Remove), a confirm (install), etc. Returning core.Screen lets an
+// endpoint drop straight to a confirm rather than always going through a picker.
+type Endpoint func(Selection) core.Screen
 
 // BrowseOpts configures a browse flow. It is threaded through the flow's screens
 // (rather than unpacked into positional args) so new knobs can be added without
@@ -283,6 +295,9 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 	for _, rel := range releases {
 		rel := rel
 		desc := fmt.Sprintf("%d asset(s)", len(rel.Assets))
+		if rel.Prerelease {
+			desc += " · prerelease"
+		}
 		if archived.releaseArchived(rel) {
 			desc += " · " + archivedMarker
 		}
@@ -291,7 +306,7 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 			Desc: desc,
 			Pick: func(sh *core.Shared) core.Action {
 				if len(rel.Assets) == 1 {
-					return core.Push(opts.Endpoint(repoID, rel.Tag, rel.Assets[0]))
+					return core.Push(opts.Endpoint(releaseSelection(repoID, rel, rel.Assets[0])))
 				}
 				return core.Push(newAssetPicker(repoID, rel, opts, archived))
 			},
@@ -321,10 +336,21 @@ func newAssetPicker(repoID string, rel source.Release, opts BrowseOpts, archived
 		}
 		items = append(items, components.Item{
 			Name: name,
-			Pick: func(sh *core.Shared) core.Action { return core.Push(opts.Endpoint(repoID, rel.Tag, a)) },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(opts.Endpoint(releaseSelection(repoID, rel, a))) },
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: repoID + " — " + rel.Tag})
+}
+
+// releaseSelection builds the Selection for a chosen release asset.
+func releaseSelection(repoID string, rel source.Release, a source.Asset) Selection {
+	return Selection{
+		RepoID:     repoID,
+		Tag:        rel.Tag,
+		Asset:      a,
+		Prerelease: rel.Prerelease,
+		Archived:   isArchived(a),
+	}
 }
 
 // newBranchesLoading fetches the repo's branches as HEAD-archive assets, then opens the
@@ -361,7 +387,9 @@ func newBranchPicker(repoID string, branches []source.Asset, opts BrowseOpts) *c
 		items = append(items, components.Item{
 			Name: "branch: " + b.Name,
 			Desc: "latest commit · " + b.Name,
-			Pick: func(sh *core.Shared) core.Action { return core.Push(opts.Endpoint(repoID, b.Name, b)) },
+			Pick: func(sh *core.Shared) core.Action {
+				return core.Push(opts.Endpoint(Selection{RepoID: repoID, Tag: b.Name, Asset: b, Branch: true}))
+			},
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: repoID + " — Branches"})
