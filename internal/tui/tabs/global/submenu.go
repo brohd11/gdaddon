@@ -33,8 +33,10 @@ func newSubmenuScreen(g globalItem) *components.PickerScreen {
 // Global tab) and pops the submenu back to the Global list — handy for importing several.
 func importToProject(sh *core.Shared, g globalItem) core.Action {
 	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, g.name, g.url, g.path); err != nil {
-		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.Seq(
+			core.SetStatusAndLog("error: "+err.Error()),
+			core.ResetToRoot(),
+		)
 	}
 	return core.Seq(
 		core.SetStatus("imported "+g.name),

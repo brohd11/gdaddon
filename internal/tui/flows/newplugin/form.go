@@ -13,6 +13,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -121,8 +122,10 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) cor
 			err = addon.AddEntry(globalPath, name, url, path)
 		}
 		if err != nil {
-			sh.SetStatus("error: " + err.Error())
-			return core.ResetToRoot()
+			return core.Seq(
+				core.SetStatusAndLog("error: "+err.Error()),
+				core.ResetToRoot(),
+			)
 		}
 		// Show the Global tab rebuilt with the new entry (parallel to a project add
 		// switching to Browse).
@@ -134,8 +137,10 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) cor
 	}
 
 	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, name, url, path); err != nil {
-		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.Seq(
+			core.SetStatus("error: "+err.Error()),
+			core.ResetToRoot(),
+		)
 	}
 	return core.Seq(
 		core.ResetToRoot(),

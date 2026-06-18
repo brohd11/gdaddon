@@ -6,6 +6,7 @@ import (
 	arch "gdaddon/internal/archive"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -75,8 +76,10 @@ func newRemoveConfirm(repoID string, asset source.Asset) *components.ConfirmScre
 		},
 		OnYes: func(sh *core.Shared) core.Action {
 			if err := arch.Remove(asset.URL); err != nil {
-				sh.SetStatus("error: " + err.Error())
-				return core.ResetToRoot()
+				return core.Seq(
+					core.SetStatusAndLog("error: "+err.Error()),
+					core.ResetToRoot(),
+				)
 			}
 			return core.Seq(
 				core.SetStatus("removed "+asset.Name),

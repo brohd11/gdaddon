@@ -14,10 +14,19 @@ func (statusSetMsg) isCtrl()    {}
 func (statusClearMsg) isCtrl()  {}
 
 // statusSetMsg used to set the status, will automatically append a timer to the outgoing cmds
-type statusSetMsg struct{ s string }
+type statusSetMsg struct {
+	str       string
+	wrLog     bool
+	forceShow bool
+}
 
 func SetStatus(line string) Action {
-	return Action{Msg: statusSetMsg{line}}
+	return Action{Msg: statusSetMsg{str: line}}
+}
+
+func SetStatusAndLog(line string, forceShow ...bool) Action {
+	shw := GetOptional(false, forceShow...)
+	return Action{Msg: statusSetMsg{str: line, wrLog: true, forceShow: shw}}
 }
 
 // statusClearMsg is the router's auto-clear timer firing for the status line: a tick

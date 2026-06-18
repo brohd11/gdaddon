@@ -66,7 +66,6 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		if act, handled := r.globalKey(key); handled {
 			r.apply(act, &cmds)
-			// r.scheduleStatusClear(&cmds)
 			r.resize()
 			return r, tea.Batch(cmds...)
 		}
@@ -89,7 +88,6 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// path as an Action a screen returns from Update.
 	if act, ok := msg.(Action); ok {
 		r.apply(act, &cmds)
-		// r.scheduleStatusClear(&cmds)
 		r.resize()
 		return r, tea.Batch(cmds...)
 	}
@@ -97,7 +95,6 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// auto-clear tick) is resolved the same way.
 	if _, ok := msg.(ctrlMsg); ok {
 		r.resolveCtrl(msg, &cmds)
-		// r.scheduleStatusClear(&cmds)
 		r.resize()
 		return r, tea.Batch(cmds...)
 	}
@@ -109,7 +106,6 @@ func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	r.stack[len(r.stack)-1] = s
 	r.apply(act, &cmds)
 
-	// r.scheduleStatusClear(&cmds)
 	// Re-lay-out after every message: cheap, and avoids chasing every spot that
 	// changes content height (help expansion, log growth, screen switches).
 	r.resize()
@@ -231,10 +227,12 @@ func (r *Router) applyCtrl(m tea.Msg, cmds *[]tea.Cmd) (follows []tea.Msg) {
 		r.stack[0] = r.roots[r.active]
 
 	case statusSetMsg:
-		r.sh.WriteStatus(m.s)
-		statCmd := r.getStatusClear()
-		if statCmd != nil {
-			push(statCmd)
+		if m.str != "" { // empty messages don't print, so don't start timer
+			r.sh.WriteStatus(m.str, m.wrLog, m.forceShow)
+			statCmd := r.getStatusClear()
+			if statCmd != nil {
+				push(statCmd)
+			}
 		}
 	case statusClearMsg:
 		// The auto-clear timer fired: clear the status only if its generation hasn't
@@ -248,6 +246,7 @@ func (r *Router) applyCtrl(m tea.Msg, cmds *[]tea.Cmd) (follows []tea.Msg) {
 	return follows
 }
 
+// Returns a timer command to reset the status line, called via setStatusMsg
 func (r *Router) getStatusClear() tea.Cmd {
 	ch := r.sh.Chrome
 	if ch == nil || ch.Status == nil {
@@ -264,29 +263,6 @@ func (r *Router) getStatusClear() tea.Cmd {
 	return tea.Tick(statusClearDelay, func(time.Time) tea.Msg {
 		return statusClearMsg{gen: g}
 	})
-}
-
-// scheduleStatusClear arms the status auto-clear timer when a write has advanced the
-// status element's generation since the last one scheduled. It emits the tick through
-// the Action lane (Async) keyed on the new generation, so the firing statusClearMsg is
-// resolved on the control path like any other ctrlMsg. A cleared/empty status (Set("")
-// bumps Gen but isn't Shown) schedules nothing. No-op without a status element.
-func (r *Router) scheduleStatusClear(cmds *[]tea.Cmd) {
-	ch := r.sh.Chrome
-	if ch == nil || ch.Status == nil {
-		return
-	}
-	g := ch.Status.Gen()
-	if g == r.statusGen {
-		return
-	}
-	r.statusGen = g
-	if !ch.Status.Shown() {
-		return
-	}
-	r.apply(Async(tea.Tick(statusClearDelay, func(time.Time) tea.Msg {
-		return statusClearMsg{gen: g}
-	})), cmds)
 }
 
 // globalKey handles the keys available in any screen. It returns (act, true) when it

@@ -5,6 +5,7 @@ import (
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/core"
 )
 
@@ -18,8 +19,10 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) core.Action {
 	if mode == removeGlobalArchive {
 		if repoID, err := source.RepoID(g.url); err == nil {
 			if err := archive.RemoveRepo(repoID); err != nil {
-				sh.SetStatus("error: " + err.Error())
-				return core.ResetToRoot()
+				return core.Seq(
+					core.SetStatusAndLog("error: "+err.Error()),
+					core.ResetToRoot(),
+				)
 			}
 			archiveRemoved = true
 		}
@@ -31,8 +34,10 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) core.Action {
 		err = addon.RemoveEntry(globalPath, g.name)
 	}
 	if err != nil {
-		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.Seq(
+			core.SetStatusAndLog("error: "+err.Error()),
+			core.ResetToRoot(),
+		)
 	}
 	global := core.Seq(
 		core.SetStatus("removed "+g.name),

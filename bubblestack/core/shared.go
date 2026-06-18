@@ -61,20 +61,10 @@ func (s *Shared) Log(line string, forceShow ...bool) {
 	}
 }
 
-// WriteStatus sets the transient status line. The status auto-clears ~5s after
-// the most recent write (the router schedules the timer); the log keeps it as the
-// durable record. No-op without chrome. also see: WriteStatusAndLog
-func (s *Shared) WriteStatus(line string) {
-	s.writeStatus(line)
-}
-
-func (s *Shared) WriteStatusAndLog(line string, forceShow ...bool) {
-	show_log := GetOptional(false, forceShow...)
-	s.writeStatus(line, true, show_log)
-}
-
-// shared func for WriteStatus funcs, variadic params: log=false forceShow=false
-func (s *Shared) writeStatus(line string, logParams ...bool) {
+// WriteStatus sets the transient status line. Meant to be used with core.SetStatus,
+// where a timer will be started to clear after 5s. No-op without chrome.
+// variadic params: log=false forceShow=false
+func (s *Shared) WriteStatus(line string, logParams ...bool) {
 	if s.Chrome == nil {
 		return
 	}

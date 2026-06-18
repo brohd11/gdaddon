@@ -3,8 +3,9 @@ package project
 import (
 	"context"
 	"gdaddon/internal/tui/appctx"
-	"github.com/brohd11/bubblestack/core"
 	"strings"
+
+	"github.com/brohd11/bubblestack/core"
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
@@ -77,13 +78,17 @@ func commitRemove(sh *core.Shared, st addon.Status, mode int) core.Action {
 	c := appctx.Of(sh)
 	if mode == removeProjectLocal {
 		if err := addon.Uninstall(st.Addon, c.ProjectRoot); err != nil {
-			sh.SetStatus("error: " + err.Error())
-			return core.ResetToRoot()
+			return core.Seq(
+				core.SetStatusAndLog("error: "+err.Error()),
+				core.ResetToRoot(),
+			)
 		}
 	}
 	if err := addon.RemoveEntry(c.ManifestPath, st.Addon.Name); err != nil {
-		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.Seq(
+			core.SetStatusAndLog("error: "+err.Error()),
+			core.ResetToRoot(),
+		)
 	}
 	return core.Seq(
 		core.SetStatus("removed "+st.Addon.Name),

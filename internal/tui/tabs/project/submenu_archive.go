@@ -5,6 +5,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -33,19 +34,19 @@ func newArchiveSubmenu(st addon.Status) *components.PickerScreen {
 // resolution, already-archived check, and task wiring stay in one place.
 func archiveCurrentVersion(sh *core.Shared, st addon.Status) core.Action {
 	if st.LocalVersion == "" {
-		sh.SetStatus("cannot archive: installed version unknown")
-		return core.Action{}
+		return core.SetStatusAndLog("cannot archive: installed version unknown")
 	}
 	asset := source.Asset{Name: archiveAssetName(st.Addon.URL), URL: st.Addon.URL}
 	sel := versionItem{tag: st.LocalVersion, asset: asset}
 	cs, status, ok := buildArchiveConfirm(st.Addon, st.LocalVersion, sel)
-	if status != "" {
-		sh.SetStatus(status)
-	}
 	if !ok {
-		return core.Action{}
+		return core.SetStatusAndLog(status)
+		// return core.Action{}
 	}
-	return core.Push(cs)
+	return core.Seq(
+		core.SetStatusAndLog(status),
+		core.Push(cs),
+	)
 }
 
 // archiveAssetName derives a stored filename from the manifest url (e.g.

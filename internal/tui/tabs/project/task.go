@@ -29,9 +29,11 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
 		if ev.Err != nil {
-			sh.Log(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err))
-			sh.SetStatus("install failed")
-			return core.ResetToRoot()
+			return core.Seq(
+				core.SetStatusAndLog(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err)),
+				core.SetStatusAndLog("install failed", true),
+				core.ResetToRoot(),
+			)
 		}
 		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
 		res, _ := ev.Payload.(installResult)

@@ -6,6 +6,7 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -103,8 +104,10 @@ func newReleasesLoading(a addon.Addon, local string) *components.LoadingScreen {
 			archived, _ = archive.List(repoID)
 		}
 		if m.err != nil && len(archived) == 0 {
-			sh.SetStatus("error: " + m.err.Error())
-			return core.Pop()
+			return core.Seq(
+				core.SetStatusAndLog("error: "+m.err.Error()),
+				core.Pop(),
+			)
 		}
 		listing := archive.Merge(cloneListing(m.listing), archived)
 		return core.Replace(newVersionsScreen(a, local, listing))
@@ -121,12 +124,16 @@ func newBranchesLoading(a addon.Addon, local string) *components.LoadingScreen {
 			return core.Action{}
 		}
 		if m.err != nil {
-			sh.SetStatus("error: " + m.err.Error())
-			return core.ResetToRoot()
+			return core.Seq(
+				core.SetStatusAndLog("error: "+m.err.Error()),
+				core.ResetToRoot(),
+			)
 		}
 		if len(m.branches) == 0 {
-			sh.SetStatus("no branches found")
-			return core.Pop()
+			return core.Seq(
+				core.SetStatusAndLog("no branches found"),
+				core.Pop(),
+			)
 		}
 		return core.Replace(newBranchPicker(a, local, m.branches))
 	}

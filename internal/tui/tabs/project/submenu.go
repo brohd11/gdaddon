@@ -67,8 +67,10 @@ func exportToGlobal(sh *core.Shared, a addon.Addon) core.Action {
 		err = addon.AddEntry(globalPath, a.Name, url, "")
 	}
 	if err != nil {
-		sh.SetStatus("error: " + err.Error())
-		return core.ResetToRoot()
+		return core.Seq(
+			core.SetStatusAndLog("error: "+err.Error()),
+			core.ResetToRoot(),
+		)
 	}
 	return core.Seq(
 		core.SetStatus("added "+a.Name+" to global list"),

@@ -45,13 +45,17 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 				dir = filepath.Join(root, dir)
 			}
 			if !addon.WithinManifestDepth(root, dir) {
-				sh.SetStatus(fmt.Sprintf("path must be inside the project (within %d dirs of the root)", addon.MaxManifestDepth))
-				return core.Async(f.Focus("dir"))
+				return core.Seq(
+					core.SetStatusAndLog(fmt.Sprintf("path must be inside the project (within %d dirs of the root)", addon.MaxManifestDepth)),
+					core.Async(f.Focus("dir")),
+				)
 			}
 			target := filepath.Join(dir, "addon_manifest.yml")
 			if err := addon.CreateManifest(target); err != nil {
-				sh.SetStatus("error: " + err.Error())
-				return core.Async(f.Focus("dir"))
+				return core.Seq(
+					core.SetStatusAndLog("error: "+err.Error()),
+					core.Async(f.Focus("dir")),
+				)
 			}
 			// Compose the outcome at the call site: set the status, show the Project tab
 			// (ShowTab discards this form's stack), and async-refresh the paths — the
