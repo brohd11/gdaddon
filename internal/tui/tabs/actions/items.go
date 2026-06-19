@@ -36,6 +36,11 @@ func actionItems(sh *core.Shared) []list.Item {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newplugin.NewNewPluginForm()) },
 		},
 		components.Item{
+			Name: "⛁ Sets",
+			Desc: "save and import reusable groups of plugins",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newSetListScreen()) },
+		},
+		components.Item{
 			Name: "◑ Theme",
 			Desc: "change the color theme",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newThemePicker()) },

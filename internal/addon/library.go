@@ -76,6 +76,29 @@ func InGlobalList(url string) bool {
 	return false
 }
 
+// UpsertEntry updates the existing entry for url's repo (matched by source.RepoID)
+// in place — overwriting its url/version — or appends a new one when absent. Used
+// where re-selecting a plugin should re-pin it rather than error on a duplicate
+// (a set's "Add Version"). Reuses UpdateEntry / AddEntryWithVersion.
+func UpsertEntry(manifestPath, name, url, path, version string) error {
+	existingName := ""
+	if id, err := source.RepoID(url); err == nil {
+		if entries, err := Parse(manifestPath); err == nil {
+			for _, e := range entries {
+				if eid, err := source.RepoID(e.URL); err == nil && eid == id {
+					existingName = e.Name
+					break
+				}
+			}
+		}
+	}
+	if existingName != "" {
+		// UpdateEntry leaves path untouched when "" and always writes version.
+		return UpdateEntry(manifestPath, existingName, url, path, version)
+	}
+	return AddEntryWithVersion(manifestPath, name, url, path, version)
+}
+
 // DeriveName extracts a plugin name from a repo URL: the last path segment with
 // any .git/.zip suffix stripped (e.g. github.com/u/Foo.git → "Foo"). Falls back
 // to "plugin" if nothing usable is found.

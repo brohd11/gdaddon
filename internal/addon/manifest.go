@@ -93,6 +93,21 @@ func UpdateEntry(manifestPath, name, url, path, version string) error {
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
+// AddEntryWithVersion appends an entry like AddEntry (deduped by repo identity,
+// creating the file if absent), then pins a version line onto it when version is
+// non-empty. It composes the two existing writers so a versioned add (a set "Add
+// Version", or importing a versioned set entry) doesn't need a second manifest
+// shape. An empty version behaves exactly like AddEntry.
+func AddEntryWithVersion(manifestPath, name, url, path, version string) error {
+	if err := AddEntry(manifestPath, name, url, path); err != nil {
+		return err
+	}
+	if version == "" {
+		return nil
+	}
+	return UpdateEntry(manifestPath, name, "", "", version)
+}
+
 // RemoveEntry deletes a manifest entry — its key line and the indented block
 // beneath it — in place, leaving every other entry byte-for-byte intact. It uses
 // the same flat-shape block detection as UpdateEntry, so it works on the project

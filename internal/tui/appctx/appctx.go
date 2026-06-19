@@ -118,6 +118,9 @@ type (
 	ProjectDirty struct{}
 	GlobalDirty  struct{}
 	ArchiveDirty struct{}
+	// SetsDirty is broadcast after a set is created or deleted, so the pushed Sets
+	// submenu (Actions ▸ Sets) reloads its list from ~/.gdaddon/sets.
+	SetsDirty struct{}
 	// PathRefresh is broadcast after the manifest/project paths themselves change (e.g.
 	// a manifest was just created). Path-dependent roots — the Project list and the
 	// Actions menu — reload from the updated context; the header needs no notification
