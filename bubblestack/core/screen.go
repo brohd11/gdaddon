@@ -80,3 +80,13 @@ func FullscreenMask() ChromeMask {
 // each render and resize, so popping back to a screen that doesn't implement it
 // restores the chrome automatically — no shared state to reset.
 type ChromeMasker interface{ ChromeMask() ChromeMask }
+
+// Overlayer marks a screen the router draws *on top of* the screen below it (a
+// popup/modal) instead of replacing it: rather than rendering only the top screen,
+// the router renders the below-screen's full frame as the background and then
+// composites this screen's View() box centered over it (see Composite), so the
+// screen underneath stays visible around the box. Input is unaffected — only the
+// top screen receives Update — so an overlay is naturally modal. Optional; a screen
+// opts in by implementing it (the marker's bool return is reserved for future
+// "temporarily non-overlay" toggling and is currently ignored).
+type Overlayer interface{ IsOverlay() bool }

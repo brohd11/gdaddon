@@ -383,11 +383,27 @@ func importSetToProject(sh *core.Shared, setName string) core.Action {
 		}
 		added++
 	}
-	return core.Seq(
-		core.SetStatus(fmt.Sprintf("imported %s: %d added, %d skipped", setName, added, skipped)),
-		core.PropagateAll(appctx.ProjectDirty{}),
-		core.ShowTab(appctx.TitleProject),
-	)
+	// Acknowledge with a popup over the Set submenu; dismissing it reloads the
+	// Project tab and jumps there (ShowTab unwinds the stack, discarding the popup).
+	return core.Push(newImportDonePopup(setName, added, skipped))
+}
+
+// newImportDonePopup is the "job done" acknowledgement shown after an import: a small
+// box summarizing the result; pressing done reloads and shows the Project tab.
+func newImportDonePopup(setName string, added, skipped int) *components.PopupScreen {
+	return &components.PopupScreen{
+		Title: "Import complete",
+		Render: func(*core.Shared) string {
+			return fmt.Sprintf("✓ %s\n\n%d added, %d skipped", setName, added, skipped)
+		},
+		OnYes: func(*core.Shared) core.Action {
+			return core.Seq(
+				core.PropagateAll(appctx.ProjectDirty{}),
+				core.ShowTab(appctx.TitleProject),
+			)
+		},
+		Help: components.DefaultPopupHelp,
+	}
 }
 
 // newSetDeleteConfirm confirms deleting the set file, then returns to the (reloaded)

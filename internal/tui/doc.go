@@ -19,7 +19,9 @@
 //	             ResetToRoot/ShowTab, plus Seq to issue several at once), the Screen
 //	             interface plus the optional interfaces the router type-asserts
 //	             (Filterer, Receiver, PopStopper, ChromeMasker — a screen suppresses
-//	             chrome elements while on top, e.g. FullscreenMask). A Screen's Update
+//	             chrome elements while on top, e.g. FullscreenMask; Overlayer — a popup
+//	             the router draws *over* the screen below it, see "Overlays" below). A
+//	             Screen's Update
 //	             returns (Screen, core.Action): the Action bundles a control message
 //	             the router applies to the stack synchronously this same tick (no command
 //	             round-trip) and a genuine async tea.Cmd for bubbletea (Async wraps a
@@ -35,9 +37,10 @@
 //	             the right palette) and re-invokes New on MsgThemeChanged to repaint.
 //	bubblestack/components/  reusable, context-agnostic pieces configured by closures
 //	             — they name no domain type: the Item list row (carries its own Pick
-//	             closure), the screens PickerScreen, ConfirmScreen, LoadingScreen, and
-//	             the generic streaming TaskScreen, and LogPane (the default core.Output
-//	             chrome). A tab supplies the closures.
+//	             closure), the screens PickerScreen, ConfirmScreen, LoadingScreen,
+//	             PopupScreen (the modal overlay, see "Overlays" below), and the generic
+//	             streaming TaskScreen, and LogPane (the default core.Output chrome). A tab
+//	             supplies the closures.
 //
 // The rest is gdaddon's domain front-end, under internal/tui:
 //
@@ -82,6 +85,21 @@
 // what lets the screens live in separate packages — Go forbids import cycles only
 // between packages, and the closure + optional-interface inversions remove the
 // concrete cross-references that would otherwise straddle a boundary.
+//
+// # Overlays (popups / modals)
+//
+// Most screens replace the one below them; a screen that implements core.Overlayer
+// is instead drawn *on top of* it. The router renders the below-screen's full frame
+// (chrome + body) as the background, then core.Composite splices the overlay's box
+// (View) centered over it — so the underlying screen stays visible around the box.
+// Composite is display-cell aware (it slices via x/ansi, bracketing the box with
+// resets) so it doesn't corrupt the background's ANSI styling. Input is unchanged:
+// the router still dispatches only to the top screen, so an overlay is naturally
+// modal, and the background is kept sized (for resize) while it shows through.
+// components.PopupScreen is the ready-made one — a ConfirmScreen-shaped, closure-
+// configured box (core.PopupBox renders it in the theme accent) that renders its own
+// key hints inside the box, since the router keeps showing the background's help bar.
+// See actions.newImportDonePopup for a worked example.
 //
 // # Adding a tab
 //

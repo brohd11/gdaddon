@@ -364,14 +364,19 @@ func (r *Router) switchTab(delta int) bool {
 	return true
 }
 
-// currentMask is the chrome suppression requested by the active (top) screen, or
-// the zero mask (hide nothing) when it doesn't implement ChromeMasker.
-func (r Router) currentMask() ChromeMask {
-	if m, ok := r.Top().(ChromeMasker); ok {
+// maskOf is the chrome suppression requested by screen s, or the zero mask (hide
+// nothing) when it doesn't implement ChromeMasker. Parameterized by screen (rather
+// than always reading r.Top()) so the overlay path can frame the screen below the
+// popup with that screen's own mask.
+func (r Router) maskOf(s Screen) ChromeMask {
+	if m, ok := s.(ChromeMasker); ok {
 		return m.ChromeMask()
 	}
 	return ChromeMask{}
 }
+
+// currentMask is the mask of the active (top) screen.
+func (r Router) currentMask() ChromeMask { return r.maskOf(r.Top()) }
 
 // outputVisible reports whether an output pane currently occupies layout space
 // (present and shown). It does not account for the per-screen mask.
@@ -395,16 +400,18 @@ func (r *Router) clearOutput() {
 	ch.outputFocused = false
 }
 
-// helpView is the active screen's help bar, suppressed (empty) when the screen masks
-// it. helpHeight measures it the same way so the body sizing stays in sync.
-func (r Router) helpView(mask ChromeMask) string {
+// helpViewFor is screen s's help bar, suppressed (empty) when its mask hides it.
+// helpHeightFor measures it the same way so the body sizing stays in sync.
+func (r Router) helpViewFor(s Screen, mask ChromeMask) string {
 	if mask.Help {
 		return ""
 	}
-	return r.Top().HelpView(r.sh)
+	return s.HelpView(r.sh)
 }
 
-func (r Router) helpHeight(mask ChromeMask) int { return vheight(r.helpView(mask)) }
+func (r Router) helpHeightFor(s Screen, mask ChromeMask) int {
+	return vheight(r.helpViewFor(s, mask))
+}
 
 // tabStripView renders the top-level tab strip (omitted when there's only one
 // tab): the tab titles followed by a full-width rule that delimits it from the
@@ -482,11 +489,11 @@ func vheight(s string) int {
 	return lipgloss.Height(s)
 }
 
-// bodyHeight is the rows available to the active screen's body: the space between
-// the top chrome and the help bar, minus the status/output chrome below the body.
-func (r Router) bodyHeight() int {
-	mask := r.currentMask()
-	h := r.sh.height - vheight(r.topChrome(mask)) - vheight(r.belowChrome(mask)) - r.helpHeight(mask)
+// bodyHeightFor is the rows available to screen s's body: the space between the top
+// chrome and the help bar, minus the status/output chrome below the body.
+func (r Router) bodyHeightFor(s Screen) int {
+	mask := r.maskOf(s)
+	h := r.sh.height - vheight(r.topChrome(mask)) - vheight(r.belowChrome(mask)) - r.helpHeightFor(s, mask)
 	if h < 1 {
 		h = 1
 	}
@@ -505,16 +512,25 @@ func (r Router) resize() {
 			r.sh.Chrome.Output.GotoBottom()
 		}
 	}
-	r.Top().SetSize(r.sh, r.sh.width, r.bodyHeight())
+	// When an overlay (popup) is on top, the screen below it is still drawn as the
+	// background, so it must be kept sized too — otherwise it goes stale on resize.
+	if _, ok := r.Top().(Overlayer); ok && len(r.stack) >= 2 {
+		below := r.stack[len(r.stack)-2]
+		below.SetSize(r.sh, r.sh.width, r.bodyHeightFor(below))
+	}
+	r.Top().SetSize(r.sh, r.sh.width, r.bodyHeightFor(r.Top()))
 }
 
-func (r Router) View() string {
+// frame composes the persistent chrome (header/tab strip above, status/output and
+// help below) around screen s's body — the full-screen layout the router shows for
+// the active screen, and the background it draws a popup over (see View).
+func (r Router) frame(s Screen) string {
 	sh := r.sh
-	mask := r.currentMask()
+	mask := r.maskOf(s)
 	chrome := r.topChrome(mask)
-	body := r.Top().View(sh)
+	body := s.View(sh)
 	below := r.belowChrome(mask)
-	help := r.helpView(mask)
+	help := r.helpViewFor(s, mask)
 	// Pad the body so the status/output chrome and the always-visible help bar sit
 	// at the very bottom.
 	if pad := (sh.height - vheight(chrome) - vheight(below) - vheight(help)) - lipgloss.Height(body); pad > 0 {
@@ -532,4 +548,21 @@ func (r Router) View() string {
 		parts = append(parts, help)
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
+func (r Router) View() string {
+	// An overlay (popup) on top draws the screen below it as the background, then
+	// composites its own box centered over it — so the underlying screen stays
+	// visible around the popup. Only the top screen receives input, so it's modal.
+	if _, ok := r.Top().(Overlayer); ok && len(r.stack) >= 2 {
+		bg := r.frame(r.stack[len(r.stack)-2])
+		box := r.Top().View(r.sh)
+		x := (r.sh.width - lipgloss.Width(box)) / 2
+		y := (r.sh.height - lipgloss.Height(box)) / 2
+		if y < 0 {
+			y = 0
+		}
+		return Composite(bg, box, x, y)
+	}
+	return r.frame(r.Top())
 }

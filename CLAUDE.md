@@ -68,8 +68,8 @@ internal/
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin)
 bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd11/bubblestack, replace => ./bubblestack); imports no gdaddon package
-  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask), Router over a screen stack, nav commands that return a core.Action (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, core.Action): Action bundles a control Msg the router applies synchronously and an async Cmd; Async wraps a cmd-only Action, the zero Action is a no-op) + optional interfaces, router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
-  components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, TaskScreen, FormScreen; LogPane = default core.Output) — they name no domain type
+  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask), Router over a screen stack, nav commands that return a core.Action (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, core.Action): Action bundles a control Msg the router applies synchronously and an async Cmd; Async wraps a cmd-only Action, the zero Action is a no-op) + optional interfaces (incl. Overlayer — a popup drawn over the screen below it; Composite/PopupBox in overlay.go do the ANSI-aware compositing), router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
+  components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, ConfirmScreen, LoadingScreen, PopupScreen = modal overlay, TaskScreen, FormScreen; LogPane = default core.Output) — they name no domain type
 ```
 
 ### TUI design goals
@@ -80,7 +80,7 @@ The TUI was restructured for scalability around three ideas:
   (`project`, `global`, `archive`, `actions`) owning its root screen and flows.
   Adding a feature area means adding a tab package, not editing a monolith.
 - **Domains share `components` to simplify logic.** Reusable screens
-  (picker/confirm/loading/streaming-task) live in `bubblestack/components`, are
+  (picker/confirm/loading/popup/streaming-task) live in `bubblestack/components`, are
   context-agnostic, and are configured by closures the tab supplies — so a tab
   composes flows from shared pieces instead of reimplementing list/confirm/task
   plumbing. The framework (`bubblestack/core` + `bubblestack/components`) is a
