@@ -436,26 +436,52 @@ func (r Router) tabStripView() string {
 	return lipgloss.JoinVertical(lipgloss.Left, row, rule)
 }
 
-// topChrome is the persistent chrome above the body: the header box plus the tab
-// strip (if any) below it, each gated by the active screen's mask. Its height is
-// measured (not a constant) so adding the strip automatically shrinks the body.
+// breadcrumbView builds the breadcrumb bar from the live nav stack: it asks each
+// screen implementing Crumber for its segment (root→top, the top screen full and the
+// upstream ones short), skips empty ones, and renders the joined path. Built fresh
+// each frame so it always reflects the current stack — pushing/popping needs no
+// breadcrumb bookkeeping.
+func (r Router) breadcrumbView() string {
+	var crumbs []Crumb
+	for _, s := range r.stack {
+		c, ok := s.(Crumber)
+		if !ok {
+			continue
+		}
+		full := c.CrumbLabel(false)
+		if full == "" {
+			continue
+		}
+		crumbs = append(crumbs, Crumb{Full: full, Short: c.CrumbLabel(true)})
+	}
+	return RenderBreadcrumb(crumbs, r.sh.width)
+}
+
+// topChrome is the persistent chrome above the body: the header box, the tab strip
+// (if any), and the breadcrumb bar below it, each gated by the active screen's mask.
+// Its height is measured (not a constant) so adding/removing a part automatically
+// reflows the body.
 func (r Router) topChrome(mask ChromeMask) string {
-	var header string
+	var parts []string
 	if !mask.Header && r.sh.Chrome != nil {
-		header = r.sh.Chrome.Header.view(r.sh) // nil-receiver safe
+		if header := r.sh.Chrome.Header.view(r.sh); header != "" { // nil-receiver safe
+			parts = append(parts, header)
+		}
 	}
-	var strip string
 	if !mask.TabStrip {
-		strip = r.tabStripView()
+		if strip := r.tabStripView(); strip != "" {
+			parts = append(parts, strip)
+		}
 	}
-	switch {
-	case header != "" && strip != "":
-		return lipgloss.JoinVertical(lipgloss.Left, header, strip)
-	case header != "":
-		return header
-	default:
-		return strip
+	if !mask.Breadcrumb {
+		if crumb := r.breadcrumbView(); crumb != "" {
+			parts = append(parts, crumb)
+		}
 	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 // belowChrome is the chrome rendered between the active screen's body and the help

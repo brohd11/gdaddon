@@ -119,9 +119,17 @@ var (
 	activeTabStyle lipgloss.Style
 	tabStyle       lipgloss.Style
 	tabRuleStyle   lipgloss.Style
-	boxStyle       lipgloss.Style
-	headerStyle    lipgloss.Style
-	labelStyle     lipgloss.Style
+
+	// breadcrumb bar: drawn by the router under the tab strip from the live nav
+	// stack. Upstream segments + separators are muted; the current (top) segment
+	// takes the accent. See RenderBreadcrumb.
+	breadcrumbBarStyle lipgloss.Style
+	crumbMutedStyle    lipgloss.Style
+	crumbCurStyle      lipgloss.Style
+
+	boxStyle    lipgloss.Style
+	headerStyle lipgloss.Style
+	labelStyle  lipgloss.Style
 
 	// listStyles are the bubbles list styles, reused to render breadcrumb/title
 	// bars and static help so they align with the real lists. rebuildStyles resets
@@ -141,6 +149,11 @@ func rebuildStyles() {
 	activeTabStyle = lipgloss.NewStyle().Padding(0, 1).Bold(true).Foreground(FocusedColor)
 	tabStyle = lipgloss.NewStyle().Padding(0, 1).Foreground(MutedColor)
 	tabRuleStyle = lipgloss.NewStyle().Foreground(BorderColor)
+
+	breadcrumbBarStyle = lipgloss.NewStyle().Padding(0, 1)
+	crumbMutedStyle = lipgloss.NewStyle().Foreground(MutedColor)
+	crumbCurStyle = lipgloss.NewStyle().Foreground(FocusedColor).Bold(true)
+
 	// No top margin: the gap above the box is owned by WithCrumb so the body can
 	// hug the top when no breadcrumb is rendered. Margin order is top,right,bottom,left.
 	boxStyle = lipgloss.NewStyle().Margin(0, 2, 1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
@@ -210,6 +223,60 @@ func WithCrumb(crumb, body string) string {
 		return body
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, RenderTitleBar(crumb), body)
+}
+
+// Crumb is one segment of the router-drawn breadcrumb: a full label and an optional
+// shorter form used when the trail is too wide. Short falls back to Full when empty.
+type Crumb struct {
+	Full  string
+	Short string
+}
+
+func (c Crumb) pick(short bool) string {
+	if short && c.Short != "" {
+		return c.Short
+	}
+	return c.Full
+}
+
+// crumbSep separates breadcrumb segments.
+const crumbSep = " › "
+
+// RenderBreadcrumb joins crumbs into the styled breadcrumb bar the router draws under
+// the tab strip: upstream segments + separators muted, the current (last) segment in
+// the accent. When the full trail is too wide for width it retries with the short form
+// of every segment but the last, then left-truncates the whole bar — keeping the
+// current segment visible. An empty slice renders nothing.
+func RenderBreadcrumb(crumbs []Crumb, width int) string {
+	if len(crumbs) == 0 {
+		return ""
+	}
+	last := len(crumbs) - 1
+	labels := func(short bool) []string {
+		out := make([]string, len(crumbs))
+		for i, c := range crumbs {
+			out[i] = c.pick(short && i != last)
+		}
+		return out
+	}
+	avail := width - 2 // breadcrumbBarStyle's horizontal padding
+	chosen := labels(false)
+	if width > 0 && lipgloss.Width(strings.Join(chosen, crumbSep)) > avail {
+		chosen = labels(true)
+	}
+	if width > 0 && lipgloss.Width(strings.Join(chosen, crumbSep)) > avail {
+		// Last resort: truncate the whole trail, keeping the tail (current segment).
+		return breadcrumbBarStyle.Render(crumbMutedStyle.Render(TruncLeft(strings.Join(chosen, crumbSep), avail)))
+	}
+	parts := make([]string, len(chosen))
+	for i, l := range chosen {
+		if i == last {
+			parts[i] = crumbCurStyle.Render(l)
+		} else {
+			parts[i] = crumbMutedStyle.Render(l)
+		}
+	}
+	return breadcrumbBarStyle.Render(strings.Join(parts, crumbMutedStyle.Render(crumbSep)))
 }
 
 // headerTitle is the shared header for a selected addon's screens, e.g.

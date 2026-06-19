@@ -19,9 +19,11 @@
 //	             ResetToRoot/ShowTab, plus Seq to issue several at once), the Screen
 //	             interface plus the optional interfaces the router type-asserts
 //	             (Filterer, Receiver, PopStopper, ChromeMasker — a screen suppresses
-//	             chrome elements while on top, e.g. FullscreenMask; Overlayer — a popup
-//	             the router draws *over* the screen below it, see "Overlays" below). A
-//	             Screen's Update
+//	             chrome elements while on top, e.g. FullscreenMask; Crumber — a screen
+//	             contributes one segment to the router-drawn breadcrumb bar under the
+//	             tab strip, built fresh each frame from the live stack root→top, see
+//	             RenderBreadcrumb; Overlayer — a popup the router draws *over* the
+//	             screen below it, see "Overlays" below). A Screen's Update
 //	             returns (Screen, core.Action): the Action bundles a control message
 //	             the router applies to the stack synchronously this same tick (no command
 //	             round-trip) and a genuine async tea.Cmd for bubbletea (Async wraps a

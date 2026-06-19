@@ -14,23 +14,36 @@ import (
 // type. OnYes runs on confirm (y/enter); any non-reserved key is handed to OnKey
 // (when set), so a caller can add custom interactions like a Project/Global toggle.
 type ConfirmScreen struct {
-	Crumb  string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
-	Render func(*core.Shared) string
-	OnYes  func(*core.Shared) core.Action
-	OnKey  func(*core.Shared, string) core.Action // handles keys other than the reserved confirm/cancel keys
-	Help   []key.Binding
+	Crumb      string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
+	CrumbShort string // optional short breadcrumb-bar segment; defaults to Crumb
+	Render     func(*core.Shared) string
+	OnYes      func(*core.Shared) core.Action
+	OnKey      func(*core.Shared, string) core.Action // handles keys other than the reserved confirm/cancel keys
+	Help       []key.Binding
 }
 
 type ConfirmSimple struct {
-	Crumb string
-	Text  string
-	OnYes core.Action
+	Crumb      string
+	CrumbShort string
+	Text       string
+	OnYes      core.Action
 	// optional
 	OnKey func(*core.Shared, string) core.Action
 	Help  []key.Binding
 }
 
+var _ core.Crumber = (*ConfirmScreen)(nil)
+
 func (s *ConfirmScreen) Init(*core.Shared) tea.Cmd { return nil }
+
+// CrumbLabel contributes the confirm screen's breadcrumb text as its segment (the
+// short form when set, else the full crumb).
+func (s *ConfirmScreen) CrumbLabel(short bool) string {
+	if short && s.CrumbShort != "" {
+		return s.CrumbShort
+	}
+	return s.Crumb
+}
 
 func (s *ConfirmScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
 	key, ok := msg.(tea.KeyMsg)
@@ -67,10 +80,11 @@ func CreateConfirmScreen(sh *core.Shared, cs ConfirmSimple) *ConfirmScreen {
 		cs.Help = DefaultHelpKeys
 	}
 	return &ConfirmScreen{
-		Crumb:  cs.Crumb,
-		Render: func(*core.Shared) string { return sh.Box(cs.Text) },
-		OnYes:  func(s *core.Shared) core.Action { return cs.OnYes },
-		OnKey:  cs.OnKey,
-		Help:   cs.Help,
+		Crumb:      cs.Crumb,
+		CrumbShort: cs.CrumbShort,
+		Render:     func(*core.Shared) string { return sh.Box(cs.Text) },
+		OnYes:      func(s *core.Shared) core.Action { return cs.OnYes },
+		OnKey:      cs.OnKey,
+		Help:       cs.Help,
 	}
 }

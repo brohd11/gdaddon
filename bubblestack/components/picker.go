@@ -17,10 +17,11 @@ import (
 // (push/pop/…); the picker stays on screen itself, so they never need a reference
 // back to it.
 type PickerScreen struct {
-	list     list.Model
-	OnSelect func(*core.Shared, list.Item) core.Action
-	OnKey    func(*core.Shared, string, list.Item) (core.Action, bool)
-	popStop  bool
+	list       list.Model
+	crumbShort string
+	OnSelect   func(*core.Shared, list.Item) core.Action
+	OnKey      func(*core.Shared, string, list.Item) (core.Action, bool)
+	popStop    bool
 }
 
 // pickerOpts configures a pickerScreen. onKey is optional; when it reports
@@ -28,6 +29,7 @@ type PickerScreen struct {
 // key falls through to the list.
 type PickerOpts struct {
 	Title        string
+	CrumbShort   string        // optional short breadcrumb segment; defaults to Title
 	Help         []key.Binding // extra help/hint bindings shown in the list help
 	OnSelect     func(*core.Shared, list.Item) core.Action
 	OnKey        func(*core.Shared, string, list.Item) (core.Action, bool)
@@ -37,13 +39,15 @@ type PickerOpts struct {
 
 var _ core.Filterer = (*PickerScreen)(nil)
 var _ core.PopStopper = (*PickerScreen)(nil)
+var _ core.Crumber = (*PickerScreen)(nil)
 
 func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 	s := &PickerScreen{
-		list:     core.NewSelectList(items, opts.Title, opts.Help...),
-		OnSelect: opts.OnSelect,
-		OnKey:    opts.OnKey,
-		popStop:  opts.PopStop,
+		list:       core.NewSelectList(items, opts.Title, opts.Help...),
+		crumbShort: opts.CrumbShort,
+		OnSelect:   opts.OnSelect,
+		OnKey:      opts.OnKey,
+		popStop:    opts.PopStop,
 	}
 	if opts.InitialIndex > 0 {
 		s.list.Select(opts.InitialIndex)
@@ -52,6 +56,15 @@ func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 }
 
 func (s *PickerScreen) PopStop() bool { return s.popStop }
+
+// CrumbLabel contributes the picker's list title as its breadcrumb segment (the short
+// form when set, else the title).
+func (s *PickerScreen) CrumbLabel(short bool) string {
+	if short && s.crumbShort != "" {
+		return s.crumbShort
+	}
+	return s.list.Title
+}
 
 func (s *PickerScreen) Init(*core.Shared) tea.Cmd { return nil }
 

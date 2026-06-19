@@ -62,17 +62,18 @@ type PopStopper interface{ PopStop() bool }
 // (true ⇒ hidden). The zero value hides nothing; FullscreenMask hides everything,
 // giving a screen the whole canvas.
 type ChromeMask struct {
-	Header   bool
-	TabStrip bool
-	Status   bool
-	Output   bool
-	Help     bool
+	Header     bool
+	TabStrip   bool
+	Breadcrumb bool
+	Status     bool
+	Output     bool
+	Help       bool
 }
 
 // FullscreenMask suppresses every chrome element — the mask a fullscreen screen
 // returns from ChromeMask.
 func FullscreenMask() ChromeMask {
-	return ChromeMask{Header: true, TabStrip: true, Status: true, Output: true, Help: true}
+	return ChromeMask{Header: true, TabStrip: true, Breadcrumb: true, Status: true, Output: true, Help: true}
 }
 
 // chromeMasker is the optional interface a screen implements to suppress chrome
@@ -80,6 +81,15 @@ func FullscreenMask() ChromeMask {
 // each render and resize, so popping back to a screen that doesn't implement it
 // restores the chrome automatically — no shared state to reset.
 type ChromeMasker interface{ ChromeMask() ChromeMask }
+
+// Crumber lets a screen contribute one segment to the router-drawn breadcrumb bar
+// (rendered under the tab strip). The router walks the active stack root→top and
+// asks every screen that implements this for its segment: CrumbLabel(false) for the
+// current (top) screen, CrumbLabel(true) for the upstream ones, joining the non-empty
+// results into a path. short asks for a compact form, supplied when the trail grows
+// long; return "" to contribute no segment. Optional — screens opt in by implementing
+// it.
+type Crumber interface{ CrumbLabel(short bool) string }
 
 // Overlayer marks a screen the router draws *on top of* the screen below it (a
 // popup/modal) instead of replacing it: rather than rendering only the top screen,

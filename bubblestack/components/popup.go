@@ -18,15 +18,27 @@ import (
 // Because the router keeps showing the background screen's help bar, a popup renders
 // its own key hints *inside* the box (from Help) instead of in the chrome help bar.
 type PopupScreen struct {
-	Title  string                                 // accent title line, omitted when ""
-	Render func(*core.Shared) string              // body content
-	OnYes  func(*core.Shared) core.Action         // y/enter
-	OnKey  func(*core.Shared, string) core.Action // handles keys other than the reserved confirm/cancel keys
-	Help   []key.Binding                          // hints rendered inside the box (not the chrome help bar)
-	Width  int                                    // inner content width; 0 ⇒ size to content
+	Title      string                                 // accent title line, omitted when ""
+	CrumbShort string                                 // optional short breadcrumb segment; defaults to Title
+	Render     func(*core.Shared) string              // body content
+	OnYes      func(*core.Shared) core.Action         // y/enter
+	OnKey      func(*core.Shared, string) core.Action // handles keys other than the reserved confirm/cancel keys
+	Help       []key.Binding                          // hints rendered inside the box (not the chrome help bar)
+	Width      int                                    // inner content width; 0 ⇒ size to content
 }
 
+var _ core.Crumber = (*PopupScreen)(nil)
+
 func (s *PopupScreen) IsOverlay() bool { return true }
+
+// CrumbLabel contributes the popup's title as its breadcrumb segment (drawn on the
+// background screen's chrome, which stays visible around the modal).
+func (s *PopupScreen) CrumbLabel(short bool) string {
+	if short && s.CrumbShort != "" {
+		return s.CrumbShort
+	}
+	return s.Title
+}
 
 func (s *PopupScreen) Init(*core.Shared) tea.Cmd { return nil }
 
@@ -61,7 +73,7 @@ func (s *PopupScreen) View(sh *core.Shared) string {
 
 // HelpView is empty: a popup shows its hints inside the box, and the router keeps the
 // background screen's help bar.
-func (s *PopupScreen) HelpView(*core.Shared) string { return "" }
+func (s *PopupScreen) HelpView(*core.Shared) string   { return "" }
 func (s *PopupScreen) SetSize(*core.Shared, int, int) {}
 
 // DefaultPopupHelp is the standard single-key "done" hint for an acknowledgement popup.

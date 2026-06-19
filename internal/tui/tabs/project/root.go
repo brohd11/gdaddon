@@ -20,6 +20,10 @@ type ProjectScreen struct {
 
 var _ core.Filterer = (*ProjectScreen)(nil)
 var _ core.Receiver = (*ProjectScreen)(nil)
+var _ core.Crumber = (*ProjectScreen)(nil)
+
+// CrumbLabel anchors the breadcrumb at the Project root.
+func (s *ProjectScreen) CrumbLabel(bool) string { return s.list.Title }
 
 func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 	l := list.New(projectListItems(sh), core.NewDelegate(), 0, 0)

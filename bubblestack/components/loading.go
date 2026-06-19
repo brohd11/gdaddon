@@ -13,14 +13,25 @@ import (
 // and an onResult closure that turns the fetch result (releasesMsg / branchesMsg /
 // …) into the next navigation command. loadingScreen itself names no domain type.
 type LoadingScreen struct {
-	Title    string
-	label    string
-	cmd      tea.Cmd                                 // the fetch command, run on Init
-	onResult func(*core.Shared, tea.Msg) core.Action // caller's result handler; the zero Action ⇒ ignore msg
+	Title      string
+	CrumbShort string // optional short breadcrumb segment; defaults to Title
+	label      string
+	cmd        tea.Cmd                                 // the fetch command, run on Init
+	onResult   func(*core.Shared, tea.Msg) core.Action // caller's result handler; the zero Action ⇒ ignore msg
 }
+
+var _ core.Crumber = (*LoadingScreen)(nil)
 
 func NewLoadingScreen(Title, label string, cmd tea.Cmd, onResult func(*core.Shared, tea.Msg) core.Action) *LoadingScreen {
 	return &LoadingScreen{Title: Title, label: label, cmd: cmd, onResult: onResult}
+}
+
+// CrumbLabel contributes the loading screen's title as its breadcrumb segment.
+func (s *LoadingScreen) CrumbLabel(short bool) string {
+	if short && s.CrumbShort != "" {
+		return s.CrumbShort
+	}
+	return s.Title
 }
 
 func (s *LoadingScreen) Init(sh *core.Shared) tea.Cmd {

@@ -208,27 +208,38 @@ func (s *StaticField) View(bool) string { return s.style.Render(s.text) }
 // ---------- FormScreen ----------
 
 type FormOpts struct {
-	Crumb    string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
-	Fields   []FormField
-	Help     []key.Binding
-	Focus    string // initial focused field key; default first focusable
-	OnSubmit func(*core.Shared, *FormScreen) core.Action
+	Crumb      string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
+	CrumbShort string // optional short breadcrumb-bar segment; defaults to Crumb
+	Fields     []FormField
+	Help       []key.Binding
+	Focus      string // initial focused field key; default first focusable
+	OnSubmit   func(*core.Shared, *FormScreen) core.Action
 }
 
 type FormScreen struct {
-	crumb    string
-	fields   []FormField
-	help     []key.Binding
-	focus    int
-	onSubmit func(*core.Shared, *FormScreen) core.Action
+	crumb      string
+	crumbShort string
+	fields     []FormField
+	help       []key.Binding
+	focus      int
+	onSubmit   func(*core.Shared, *FormScreen) core.Action
 }
 
 var _ core.Screen = (*FormScreen)(nil)
 var _ core.Filterer = (*FormScreen)(nil)
+var _ core.Crumber = (*FormScreen)(nil)
 var _ Typable = (*FormScreen)(nil)
 
+// CrumbLabel contributes the form's breadcrumb text as its segment.
+func (f *FormScreen) CrumbLabel(short bool) string {
+	if short && f.crumbShort != "" {
+		return f.crumbShort
+	}
+	return f.crumb
+}
+
 func NewForm(opts FormOpts) *FormScreen {
-	f := &FormScreen{crumb: opts.Crumb, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit}
+	f := &FormScreen{crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit}
 	f.focus = f.firstFocusable()
 	if opts.Focus != "" {
 		for i, fld := range f.fields {
