@@ -27,6 +27,13 @@ type Ctx struct {
 	GlobalAddons  []addon.Addon // cached from ~/.gdaddon/plugins.yml
 	ArchivedIDs   []string      // cached repo IDs from archive.Repos()
 	ProjectAddons []addon.Addon // cached from the project manifest
+
+	// UpdateChecks caches the project list's per-addon update-check results,
+	// keyed by addon name. It's populated asynchronously (network) by the Project
+	// tab and refreshed after a ProjectDirty/PathRefresh; the list reads it back
+	// to draw the "update available" marker. A missing key reads as a zero
+	// UpdateInfo (UpdateUnknown), i.e. no marker.
+	UpdateChecks map[string]addon.UpdateInfo
 }
 
 // New builds the context for a project root and performs the initial path scan.
@@ -73,6 +80,10 @@ func (c *Ctx) RefreshArchive() { c.loadArchive() }
 
 // RefreshProject reloads the cached project addon list from disk.
 func (c *Ctx) RefreshProject() { c.loadProject() }
+
+// SetUpdateChecks caches the latest per-addon update-check results for the
+// Project list to render.
+func (c *Ctx) SetUpdateChecks(m map[string]addon.UpdateInfo) { c.UpdateChecks = m }
 
 // Scan resolves the project's paths from the project root: it walks for the addon
 // manifest and derives the display fields (ManifestRel, ProjectName, HasProject). It's

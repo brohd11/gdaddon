@@ -5,6 +5,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
+	"gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -40,20 +41,28 @@ func addonDesc(s addon.Status) string {
 
 // addonItem builds one browse row. A non-installable addon gets a nil Pick (an
 // inert row), which replaces the old Installable() gate in the screen's Update.
-func addonItem(s addon.Status) components.Item {
+// upd is the cached update-check result, decorating the name with an "update"
+// marker when a newer release than the installed one exists.
+func addonItem(s addon.Status, upd addon.UpdateInfo) components.Item {
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
-	return components.Item{Name: s.Addon.Name, Desc: addonDesc(s), Pick: pick}
+	name := s.Addon.Name
+	if upd.State == addon.UpdateAvailable {
+		name += "  ↑ update"
+	}
+	return components.Item{Name: name, Desc: addonDesc(s), Pick: pick}
 }
 
-// projectListItems builds the browse list contents: one row per addon.
+// projectListItems builds the browse list contents: one row per addon, decorated
+// with the cached update-check markers.
 func projectListItems(sh *core.Shared) []list.Item {
 	statuses := inspect(sh)
+	checks := appctx.Of(sh).UpdateChecks
 	items := make([]list.Item, 0, len(statuses))
 	for _, s := range statuses {
-		items = append(items, addonItem(s))
+		items = append(items, addonItem(s, checks[s.Addon.Name]))
 	}
 	return items
 }

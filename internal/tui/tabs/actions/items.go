@@ -26,9 +26,15 @@ func actionItems(sh *core.Shared) []list.Item {
 	}
 	return append(items,
 		components.Item{
-			Name: "↧ Install / update all",
-			Desc: "download everything per the manifest",
+			Name: "↧ Install all",
+			Desc: "download and install everything per the manifest",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newInstallAllConfirm(sh)) },
+		},
+		components.Item{
+			// Inert placeholder (nil Pick): the update-all action isn't wired yet —
+			// the Project tab only surfaces which addons have updates for now.
+			Name: "⟳ Update all",
+			Desc: "update installed addons to their latest release (coming soon)",
 		},
 		components.Item{
 			Name: "+ New Plugin",

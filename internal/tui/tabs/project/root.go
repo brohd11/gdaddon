@@ -38,7 +38,9 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 	return &ProjectScreen{list: l}
 }
 
-func (s *ProjectScreen) Init(*core.Shared) tea.Cmd { return nil }
+// Init kicks off the initial update check so the "update available" markers fill
+// in asynchronously once the release listings come back.
+func (s *ProjectScreen) Init(sh *core.Shared) tea.Cmd { return checkUpdatesCmd(sh) }
 
 func (s *ProjectScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
@@ -63,9 +65,15 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 // just created) broadcast, keeping the browse-specific list logic out of the router.
 // The status line and any focus switch are composed at the call site (core.Seq).
 func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
-	switch payload.(type) {
+	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
 		appctx.Of(sh).RefreshProject()
+		s.list.SetItems(projectListItems(sh))
+		// Re-run the update check against the refreshed manifest; the markers
+		// fill back in when its results broadcast.
+		return core.Async(checkUpdatesCmd(sh))
+	case updateChecksReady:
+		appctx.Of(sh).SetUpdateChecks(p.checks)
 		s.list.SetItems(projectListItems(sh))
 	}
 	return core.Action{}
