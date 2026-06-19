@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"strings"
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
@@ -41,28 +42,41 @@ func addonDesc(s addon.Status) string {
 
 // addonItem builds one browse row. A non-installable addon gets a nil Pick (an
 // inert row), which replaces the old Installable() gate in the screen's Update.
-// upd is the cached update-check result, decorating the name with an "update"
-// marker when a newer release than the installed one exists.
-func addonItem(s addon.Status, upd addon.UpdateInfo) components.Item {
+// upd is the cached update-check result and missingDeps whether the addon has
+// unsatisfied dependencies; rowMarker decorates the name from both.
+func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps bool) components.Item {
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
-	name := s.Addon.Name
+	return components.Item{Name: s.Addon.Name + rowMarker(upd, missingDeps), Desc: addonDesc(s), Pick: pick}
+}
+
+// rowMarker builds the combined name suffix from the update and dependency checks,
+// e.g. "  ⚠ [update]", "  ⚠ [missing deps]", or "  ⚠ [update / missing deps]".
+// Empty when the addon is current and its deps are satisfied.
+func rowMarker(upd addon.UpdateInfo, missingDeps bool) string {
+	var parts []string
 	if upd.State == addon.UpdateAvailable {
-		name += "  ↑ update"
+		parts = append(parts, "update")
 	}
-	return components.Item{Name: name, Desc: addonDesc(s), Pick: pick}
+	if missingDeps {
+		parts = append(parts, "missing deps")
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "  ⚠ [" + strings.Join(parts, " / ") + "]"
 }
 
 // projectListItems builds the browse list contents: one row per addon, decorated
-// with the cached update-check markers.
+// with the cached update-check and dependency-check markers.
 func projectListItems(sh *core.Shared) []list.Item {
 	statuses := inspect(sh)
-	checks := appctx.Of(sh).UpdateChecks
+	c := appctx.Of(sh)
 	items := make([]list.Item, 0, len(statuses))
 	for _, s := range statuses {
-		items = append(items, addonItem(s, checks[s.Addon.Name]))
+		items = append(items, addonItem(s, c.UpdateChecks[s.Addon.Name], len(c.DepChecks[s.Addon.Name]) > 0))
 	}
 	return items
 }

@@ -93,10 +93,10 @@ func UpsertEntry(manifestPath, name, url, path, version string) error {
 		}
 	}
 	if existingName != "" {
-		// UpdateEntry leaves path untouched when "" and always writes version.
-		return UpdateEntry(manifestPath, existingName, url, path, version)
+		// UpdateEntry leaves path/tag untouched when "" and writes version.
+		return UpdateEntry(manifestPath, existingName, url, path, version, "")
 	}
-	return AddEntryWithVersion(manifestPath, name, url, path, version)
+	return AddEntryWithVersion(manifestPath, name, url, path, version, "")
 }
 
 // DeriveName extracts a plugin name from a repo URL: the last path segment with

@@ -377,7 +377,7 @@ func importSetToProject(sh *core.Shared, setName string) core.Action {
 	}
 	added, skipped := 0, 0
 	for _, e := range entries {
-		if err := addon.AddEntryWithVersion(c.ManifestPath, e.Name, e.URL, e.Path, e.Version); err != nil {
+		if err := addon.AddEntryWithVersion(c.ManifestPath, e.Name, e.URL, e.Path, e.Version, ""); err != nil {
 			skipped++
 			continue
 		}

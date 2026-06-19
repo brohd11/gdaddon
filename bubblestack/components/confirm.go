@@ -79,11 +79,17 @@ func CreateConfirmScreen(sh *core.Shared, cs ConfirmSimple) *ConfirmScreen {
 	if cs.Help == nil {
 		cs.Help = DefaultHelpKeys
 	}
+	if cs.Crumb == "" {
+		cs.Crumb = "Confirm"
+	}
+	if cs.CrumbShort == "" {
+		cs.CrumbShort = "Conf"
+	}
 	return &ConfirmScreen{
 		Crumb:      cs.Crumb,
 		CrumbShort: cs.CrumbShort,
 		Render:     func(*core.Shared) string { return sh.Box(cs.Text) },
-		OnYes:      func(s *core.Shared) core.Action { return cs.OnYes },
+		OnYes:      func(sh *core.Shared) core.Action { return cs.OnYes },
 		OnKey:      cs.OnKey,
 		Help:       cs.Help,
 	}

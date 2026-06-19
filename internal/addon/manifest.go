@@ -12,14 +12,15 @@ func LocalVersion(fullPath string) string {
 	return getLocalPluginVersion(fullPath)
 }
 
-// UpdateEntry rewrites a single manifest entry's url, path, and version in place.
-// It edits only those lines (inserting them if absent), leaving every other line
-// — blank lines, comments, indentation, quoting — byte-for-byte intact. An empty
-// url or path leaves that existing line untouched (e.g. after install/update we
-// pin the resolved path + version but keep the user's original source url).
+// UpdateEntry rewrites a single manifest entry's url, path, version, and tag in
+// place. It edits only those lines (inserting them if absent), leaving every other
+// line — blank lines, comments, indentation, quoting — byte-for-byte intact. An
+// empty value for any field leaves its existing line untouched (e.g. after
+// install/update we pin the resolved path + version + tag but keep the user's
+// original source url; adding a dependency pins url + tag with no version yet).
 // It assumes the flat manifest shape: top-level entry keys at column 0 with
-// indented url/path/version fields beneath them.
-func UpdateEntry(manifestPath, name, url, path, version string) error {
+// indented url/path/version/tag fields beneath them.
+func UpdateEntry(manifestPath, name, url, path, version, tag string) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return err
@@ -51,7 +52,7 @@ func UpdateEntry(manifestPath, name, url, path, version string) error {
 	}
 
 	indent := "    "
-	urlDone, pathDone, versionDone := false, false, false
+	urlDone, pathDone, versionDone, tagDone := false, false, false, false
 	for i := keyIdx + 1; i < end; i++ {
 		ind, key, ok := splitField(lines[i])
 		if !ok {
@@ -70,8 +71,15 @@ func UpdateEntry(manifestPath, name, url, path, version string) error {
 			}
 			pathDone = true
 		case "version":
-			lines[i] = ind + `version: "` + version + `"`
+			if version != "" {
+				lines[i] = ind + `version: "` + version + `"`
+			}
 			versionDone = true
+		case "tag":
+			if tag != "" {
+				lines[i] = ind + `tag: "` + tag + `"`
+			}
+			tagDone = true
 		}
 	}
 
@@ -82,8 +90,11 @@ func UpdateEntry(manifestPath, name, url, path, version string) error {
 	if !pathDone && path != "" {
 		inserts = append(inserts, indent+"path: "+path)
 	}
-	if !versionDone {
+	if !versionDone && version != "" {
 		inserts = append(inserts, indent+`version: "`+version+`"`)
+	}
+	if !tagDone && tag != "" {
+		inserts = append(inserts, indent+`tag: "`+tag+`"`)
 	}
 	if len(inserts) > 0 {
 		tail := append(inserts, lines[keyIdx+1:]...)
@@ -94,18 +105,18 @@ func UpdateEntry(manifestPath, name, url, path, version string) error {
 }
 
 // AddEntryWithVersion appends an entry like AddEntry (deduped by repo identity,
-// creating the file if absent), then pins a version line onto it when version is
-// non-empty. It composes the two existing writers so a versioned add (a set "Add
-// Version", or importing a versioned set entry) doesn't need a second manifest
-// shape. An empty version behaves exactly like AddEntry.
-func AddEntryWithVersion(manifestPath, name, url, path, version string) error {
+// creating the file if absent), then pins version and/or tag lines onto it when
+// non-empty. It composes the two existing writers so a versioned/tagged add (a set
+// "Add Version", importing a set entry, or adding a tagged dependency) doesn't need
+// a second manifest shape. Empty version and tag behave exactly like AddEntry.
+func AddEntryWithVersion(manifestPath, name, url, path, version, tag string) error {
 	if err := AddEntry(manifestPath, name, url, path); err != nil {
 		return err
 	}
-	if version == "" {
+	if version == "" && tag == "" {
 		return nil
 	}
-	return UpdateEntry(manifestPath, name, "", "", version)
+	return UpdateEntry(manifestPath, name, "", "", version, tag)
 }
 
 // RemoveEntry deletes a manifest entry — its key line and the indented block

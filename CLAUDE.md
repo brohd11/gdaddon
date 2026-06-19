@@ -47,7 +47,16 @@ my_addon:
   url: https://example.com/addon.zip   # or https://github.com/user/repo.git
   path: addons/my_addon                # relative to Godot project root
   version: "1.2.3"                     # optional; skips install if already matches plugin.cfg
+  tag: "v1.2.3"                        # optional; the release tag installed from (what dependency specs match)
 ```
+
+An installed addon may declare its own dependencies in its `plugin.cfg`
+(`dependencies=["owner/repo@v1.0.0", "owner/repo"]` — host defaults to github.com,
+tag optional). The per-addon **Get dependencies** TUI action reads them and adds the
+missing ones to the manifest (tag-pinned, or repo-only when tagless) without
+installing; `Install All` then installs them. `version` (the author-controlled
+plugin.cfg version) can diverge from `tag` (the release identity), so dependency
+matching uses `tag` with semver `>=`.
 
 ## Architecture
 
@@ -57,7 +66,7 @@ cmd/
   root.go            — the single `gdaddon` cobra command: TUI by default, --install for non-interactive
   paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
 internal/
-  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, ~/.gdaddon global list
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list
   source/            — resolves remote versions from a URL (github.go: releases, branches, source archives; RepoID)
   archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   tui/               — bubbletea front-end (see internal/tui/doc.go)

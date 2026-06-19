@@ -26,7 +26,7 @@ func TestUpdateEntryPreservesFormatting(t *testing.T) {
 	}
 
 	newURL := "https://github.com/TokisanGames/Terrain3D/releases/download/v1.0.2-stable/Terrain3D_v1.0.2-stable.zip"
-	if err := UpdateEntry(path, "Terrain3D", newURL, "", "1.0.2"); err != nil {
+	if err := UpdateEntry(path, "Terrain3D", newURL, "", "1.0.2", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -65,7 +65,7 @@ func TestUpdateEntryEmptyURLPreservesURL(t *testing.T) {
 	}
 
 	origURL := "url: https://github.com/TokisanGames/Terrain3D/releases/download/v1.0.1/Terrain3D_v1.0.1.zip"
-	if err := UpdateEntry(path, "Terrain3D", "", "", "1.0.2"); err != nil {
+	if err := UpdateEntry(path, "Terrain3D", "", "", "1.0.2", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -88,7 +88,7 @@ func TestUpdateEntryInsertsPath(t *testing.T) {
 	}
 
 	// Empty url leaves the url untouched; path + version are inserted.
-	if err := UpdateEntry(path, "Libby", "", "addons/libby", "1.0.0"); err != nil {
+	if err := UpdateEntry(path, "Libby", "", "addons/libby", "1.0.0", ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -102,6 +102,60 @@ func TestUpdateEntryInsertsPath(t *testing.T) {
 	}
 	if !strings.Contains(got, `version: "1.0.0"`) {
 		t.Errorf("version not inserted; got:\n%s", got)
+	}
+}
+
+func TestUpdateEntryTag(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pin a tag onto an entry that has none; version arg empty must leave the
+	// existing version untouched (no `version: ""` written).
+	if err := UpdateEntry(path, "Terrain3D", "", "", "", "v1.0.1"); err != nil {
+		t.Fatal(err)
+	}
+	got := string(mustRead(t, path))
+	t.Logf("\n%s", got)
+	if !strings.Contains(got, `tag: "v1.0.1"`) {
+		t.Errorf("tag not written; got:\n%s", got)
+	}
+	if !strings.Contains(got, `version: "1.0.1"`) {
+		t.Errorf("existing version should be untouched; got:\n%s", got)
+	}
+	if strings.Contains(got, `version: ""`) {
+		t.Errorf("empty version arg should not write an empty version line; got:\n%s", got)
+	}
+
+	// Empty tag arg on a later call leaves the tag untouched.
+	if err := UpdateEntry(path, "Terrain3D", "", "", "1.0.2", ""); err != nil {
+		t.Fatal(err)
+	}
+	got = string(mustRead(t, path))
+	if !strings.Contains(got, `tag: "v1.0.1"`) {
+		t.Errorf("tag should be untouched when tag arg empty; got:\n%s", got)
+	}
+	if !strings.Contains(got, `version: "1.0.2"`) {
+		t.Errorf("version not updated; got:\n%s", got)
+	}
+}
+
+func TestAddEntryWithTagNoVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	// A tagged dependency add: url + tag, no version line yet.
+	if err := AddEntryWithVersion(path, "Dep", "https://github.com/u/Dep/releases/download/v1.2.0/dep.zip", "", "", "v1.2.0"); err != nil {
+		t.Fatal(err)
+	}
+	got := string(mustRead(t, path))
+	t.Logf("\n%s", got)
+	if !strings.Contains(got, "Dep:") || !strings.Contains(got, `tag: "v1.2.0"`) {
+		t.Errorf("expected a tagged Dep entry; got:\n%s", got)
+	}
+	if strings.Contains(got, "version:") {
+		t.Errorf("no version line should be written for a tag-only add; got:\n%s", got)
 	}
 }
 

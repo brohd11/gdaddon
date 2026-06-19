@@ -34,6 +34,14 @@ type Ctx struct {
 	// to draw the "update available" marker. A missing key reads as a zero
 	// UpdateInfo (UpdateUnknown), i.e. no marker.
 	UpdateChecks map[string]addon.UpdateInfo
+
+	// DepChecks caches each project addon's unsatisfied dependencies, keyed by
+	// addon name (only addons with >0 missing deps appear). Unlike UpdateChecks it's
+	// local-only (compares declared plugin.cfg deps against the manifest), so it's
+	// recomputed synchronously in loadProject on every refresh. The list reads it to
+	// draw the "missing deps" marker; the per-addon submenu gates its "Get
+	// dependencies" item on it.
+	DepChecks map[string][]addon.Dependency
 }
 
 // New builds the context for a project root and performs the initial path scan.
@@ -67,9 +75,24 @@ func (c *Ctx) loadArchive() {
 func (c *Ctx) loadProject() {
 	if c.ManifestPath == "" {
 		c.ProjectAddons = nil
+		c.DepChecks = nil
 		return
 	}
 	c.ProjectAddons, _ = addon.Parse(c.ManifestPath)
+	c.refreshDepChecks()
+}
+
+// refreshDepChecks recomputes each addon's unsatisfied dependencies against the
+// freshly loaded manifest. Local-only and cheap (reads small plugin.cfg files), so
+// it rides every loadProject rather than needing its own async pass.
+func (c *Ctx) refreshDepChecks() {
+	checks := make(map[string][]addon.Dependency)
+	for _, a := range c.ProjectAddons {
+		if missing, err := addon.MissingDeps(a, c.ProjectRoot, c.ProjectAddons); err == nil && len(missing) > 0 {
+			checks[a.Name] = missing
+		}
+	}
+	c.DepChecks = checks
 }
 
 // RefreshGlobal reloads the cached global addon list from disk.

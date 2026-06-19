@@ -26,10 +26,16 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 	if version == "" {
 		version = strings.TrimPrefix(pick.tag, "v")
 	}
+	// Branch-HEAD installs carry the branch name in pick.tag but have no release
+	// tag; pick.branch marks them so we don't record a bogus tag.
+	tag := pick.tag
+	if pick.branch {
+		tag = ""
+	}
 
 	status := "updated " + name + " → " + version
 	return func() tea.Msg {
-		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version)
+		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version, tag)
 		return core.Seq(
 			core.SetStatus(status),
 			core.PropagateAll(appctx.ProjectDirty{}),

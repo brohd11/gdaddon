@@ -17,9 +17,13 @@ import (
 )
 
 // Asset is one downloadable file (a .zip archive, or a .git clone URL fallback).
+// Generated marks the host's auto-generated source archive (appended to every
+// release in resolveReleases) as opposed to an asset the author uploaded — so
+// callers can prefer the uploaded build without relying on asset ordering.
 type Asset struct {
-	Name string
-	URL  string
+	Name      string
+	URL       string
+	Generated bool
 }
 
 // Release is a selectable version: a tag plus its downloadable assets.
@@ -175,8 +179,9 @@ func resolveReleases(ctx context.Context, rule *config.VCSRule, owner, repo stri
 		// last. For releases with no uploaded .zip it's the only option.
 		if rule.SourceArchive.URL != "" {
 			rel.Assets = append(rel.Assets, Asset{
-				Name: rule.SourceArchive.Name,
-				URL:  restrule.Render(rule.SourceArchive.URL, vars(owner, repo, tag, "")),
+				Name:      rule.SourceArchive.Name,
+				URL:       restrule.Render(rule.SourceArchive.URL, vars(owner, repo, tag, "")),
+				Generated: true,
 			})
 		}
 		releases = append(releases, rel)
@@ -204,6 +209,32 @@ func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo stri
 		})
 	}
 	return branches, nil
+}
+
+// DependencyAsset picks the asset to install for a tagged dependency, where no
+// user is present to choose. Pinning a tagged dependency asserts the release is
+// unambiguous: exactly one uploaded asset → install it (e.g. a GDExtension addon's
+// precompiled build, where the generated source archive is useless); no uploaded
+// asset → the generated source archive (a pure-GDScript addon); two or more uploaded
+// assets → ambiguous (ok=false), so the caller reports and skips it.
+func DependencyAsset(rel Release) (Asset, bool) {
+	var uploaded []Asset
+	var generated *Asset
+	for i := range rel.Assets {
+		if rel.Assets[i].Generated {
+			generated = &rel.Assets[i]
+		} else {
+			uploaded = append(uploaded, rel.Assets[i])
+		}
+	}
+	switch {
+	case len(uploaded) == 1:
+		return uploaded[0], true
+	case len(uploaded) == 0 && generated != nil:
+		return *generated, true
+	default:
+		return Asset{}, false
+	}
 }
 
 // asSlice coerces a decoded JSON value to a slice (nil when it isn't one).

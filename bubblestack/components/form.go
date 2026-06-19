@@ -239,6 +239,12 @@ func (f *FormScreen) CrumbLabel(short bool) string {
 }
 
 func NewForm(opts FormOpts) *FormScreen {
+	if opts.Crumb == "" {
+		opts.Crumb = "Form"
+	}
+	if opts.CrumbShort == "" {
+		opts.CrumbShort = "Form"
+	}
 	f := &FormScreen{crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit}
 	f.focus = f.firstFocusable()
 	if opts.Focus != "" {

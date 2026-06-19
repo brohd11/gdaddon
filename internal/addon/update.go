@@ -164,7 +164,7 @@ func UpdateAll(manifestPath string, plans []UpdatePlan, baseDir string, report R
 			if version == "" {
 				version = strings.TrimPrefix(p.NewTag, "v")
 			}
-			_ = UpdateEntry(manifestPath, a.Name, p.Asset.URL, res.Path, version)
+			_ = UpdateEntry(manifestPath, a.Name, p.Asset.URL, res.Path, version, p.NewTag)
 		}
 	}
 	return nil

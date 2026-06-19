@@ -34,6 +34,15 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			},
 		},
 	}
+	// Offered only when the addon is installed and actually has unsatisfied deps
+	// (the cached check), so a fully-satisfied addon doesn't show a no-op action.
+	if a.URL != "" && st.Present() && len(c.DepChecks[a.Name]) > 0 {
+		items = append(items, components.Item{
+			Name: "⛓ Get dependencies",
+			Desc: "add this plugin's missing dependencies to the manifest (Install All to install)",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newGetDepsLoading(st, sh)) },
+		})
+	}
 	if a.URL != "" && !st.InGlobal(c.GlobalAddons) {
 		items = append(items, components.Item{
 			Name: "⬆ Export to Global",

@@ -19,12 +19,16 @@ import (
 // stdout; the TUI funnels them into bubbletea messages.
 type Reporter func(format string, args ...any)
 
-// Addon is a single manifest entry. Name is the manifest key.
+// Addon is a single manifest entry. Name is the manifest key. Tag records the
+// release tag the entry was installed from (empty for branch-HEAD installs, which
+// have no tag); it's what dependency specs match against, since Version holds the
+// author-controlled plugin.cfg version which can diverge from the tag.
 type Addon struct {
 	Name    string `yaml:"-"`
 	URL     string `yaml:"url"`
 	Path    string `yaml:"path"`
 	Version string `yaml:"version"`
+	Tag     string `yaml:"tag"`
 }
 
 // State describes an addon's local install relative to the manifest.
@@ -165,7 +169,7 @@ func InstallAll(manifestPath string, statuses []Status, baseDir string, report R
 			continue
 		}
 		if res.Path != "" {
-			_ = UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version)
+			_ = UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version, "")
 		}
 	}
 	return nil
