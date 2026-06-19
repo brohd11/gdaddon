@@ -40,12 +40,13 @@ const (
 // id, the tag (release tag or branch name), the asset, and flags describing it — enough
 // for any leaf action (archive, install, remove) without the flow knowing which.
 type Selection struct {
-	RepoID     string
-	Tag        string
-	Asset      source.Asset
-	Branch     bool // chosen via the HEAD/branches path (vs a release)
-	Prerelease bool // the release was a prerelease (false for branches / archive)
-	Archived   bool // the asset is a local archived copy (local-file URL)
+	RepoID        string
+	Tag           string
+	Asset         source.Asset
+	ArchivedAsset source.Asset // a local archived copy of this same remote version, if one exists (install toggle); zero = none
+	Branch        bool         // chosen via the HEAD/branches path (vs a release)
+	Prerelease    bool         // the release was a prerelease (false for branches / archive)
+	Archived      bool         // the asset is a local archived copy (local-file URL)
 }
 
 // Endpoint builds the screen the flow pushes for the chosen package — a command submenu
@@ -57,15 +58,26 @@ type Endpoint func(Selection) core.Screen
 // (rather than unpacked into positional args) so new knobs can be added without
 // touching every signature.
 type BrowseOpts struct {
-	Source       Source   // where versions come from
-	IncludeHEAD  bool     // also offer a HEAD row (branch tracking); ignored for archive
-	Endpoint     Endpoint // the per-package command menu
-	MarkArchived bool     // mark already-archived remote versions instead of listing the local copies (archive flows)
+	Source         Source   // where versions come from
+	IncludeHEAD    bool     // also offer a HEAD row (branch tracking); ignored for archive
+	Endpoint       Endpoint // the per-package command menu
+	MarkArchived   bool     // mark already-archived remote versions instead of listing the local copies (archive flows)
+	ArchivedMarker string   // override the text tagging an archived version (defaults to archivedMarker)
 }
 
-// archivedSet indexes a repo's archived packages by tag → stored filename, so a remote
-// listing can mark versions that already have a local copy.
-type archivedSet map[string]map[string]bool
+// marker returns the text used to tag a version that has a local archived copy.
+func (o BrowseOpts) marker() string {
+	if o.ArchivedMarker != "" {
+		return o.ArchivedMarker
+	}
+	return archivedMarker
+}
+
+// archivedSet indexes a repo's archived packages by tag → asset name → the stored
+// local asset, so a remote listing can mark (and offer to install from) versions that
+// already have a local copy. Keys use the remote asset name (the " - archived" suffix
+// trimmed) so a remote asset can be looked up directly.
+type archivedSet map[string]map[string]source.Asset
 
 // buildArchivedSet folds arch.List output (assets named "<file> - archived") into the
 // index. Returns nil when there is nothing archived (so callers can treat nil as "no
@@ -76,19 +88,29 @@ func buildArchivedSet(archived []source.Release) archivedSet {
 	}
 	s := make(archivedSet, len(archived))
 	for _, rel := range archived {
-		names := make(map[string]bool, len(rel.Assets))
+		assets := make(map[string]source.Asset, len(rel.Assets))
 		for _, a := range rel.Assets {
-			names[strings.TrimSuffix(a.Name, archivedSuffix)] = true
+			assets[strings.TrimSuffix(a.Name, archivedSuffix)] = a
 		}
-		s[rel.Tag] = names
+		s[rel.Tag] = assets
 	}
 	return s
 }
 
 // has reports whether a remote asset (by tag + name) already has a local copy.
 func (s archivedSet) has(tag, assetName string) bool {
-	names, ok := s[tag]
-	return ok && names[assetName]
+	_, ok := s.get(tag, assetName)
+	return ok
+}
+
+// get returns the local archived asset for a remote asset (by tag + name), if any.
+func (s archivedSet) get(tag, assetName string) (source.Asset, bool) {
+	assets, ok := s[tag]
+	if !ok {
+		return source.Asset{}, false
+	}
+	a, ok := assets[assetName]
+	return a, ok
 }
 
 // releaseArchived reports whether every asset of a remote release is already archived.
@@ -208,10 +230,12 @@ func BrowseRepo(repoURL string, opts BrowseOpts) core.Screen {
 // newReleasesLoading fetches a repo's upstream versions, consults the local archive
 // (when SourceAll or MarkArchived), then replaces itself with the versions picker.
 //
-// MarkArchived keeps the remote rows and marks the ones already archived (archive
-// flows). Otherwise SourceAll folds the local copies in as selectable "- archived"
-// assets (install-style). On a hard fetch failure it pops with a status — except a
-// plain SourceAll merge can still fall back to an archive-only listing.
+// Both SourceAll (install) and MarkArchived (archive) keep one row per remote version
+// and tag the ones with a local copy via opts.marker(). MarkArchived stops there (you
+// can't archive a non-remote version); SourceAll additionally lists archive-only
+// versions (delisted upstream / archived branch HEAD) as their own rows installed from
+// the local copy. On a hard fetch failure it pops with a status — except a SourceAll
+// browse can still fall back to an archive-only listing.
 func newReleasesLoading(repoID, repoURL string, opts BrowseOpts) *components.LoadingScreen {
 	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
 		m, ok := msg.(releasesMsg)
@@ -222,6 +246,7 @@ func newReleasesLoading(repoID, repoURL string, opts BrowseOpts) *components.Loa
 		if opts.Source == SourceAll || opts.MarkArchived {
 			archived, _ = arch.List(repoID)
 		}
+		set := buildArchivedSet(archived)
 
 		if opts.MarkArchived {
 			if m.err != nil { // no remote ⇒ nothing new to archive
@@ -230,20 +255,41 @@ func newReleasesLoading(repoID, repoURL string, opts BrowseOpts) *components.Loa
 					core.Pop(),
 				)
 			}
-			listing := cloneListing(m.listing)
-			return core.Replace(newVersionsPicker(repoID, repoURL, opts, listing.Releases, buildArchivedSet(archived)))
+			return core.Replace(newVersionsPicker(repoID, repoURL, opts, cloneListing(m.listing).Releases, set))
 		}
 
-		if m.err != nil && len(archived) == 0 {
-			return core.Seq(
-				core.SetStatusAndLog("error: "+m.err.Error()),
-				core.Pop(),
-			)
+		if m.err != nil {
+			if len(archived) == 0 {
+				return core.Seq(
+					core.SetStatusAndLog("error: "+m.err.Error()),
+					core.Pop(),
+				)
+			}
+			// offline / delisted: install straight from the archive-only listing.
+			return core.Replace(newVersionsPicker(repoID, repoURL, opts, archived, set))
 		}
-		listing := arch.Merge(cloneListing(m.listing), archived)
-		return core.Replace(newVersionsPicker(repoID, repoURL, opts, listing.Releases, nil))
+		releases := cloneListing(m.listing).Releases
+		releases = append(releases, archiveOnly(releases, archived)...)
+		return core.Replace(newVersionsPicker(repoID, repoURL, opts, releases, set))
 	}
 	return components.NewLoadingScreen(repoID, "fetching versions…", fetchReleases(repoURL), onResult)
+}
+
+// archiveOnly returns the archived releases whose tag is absent from the remote
+// releases, so an install browse still surfaces versions no longer upstream (their
+// assets are local copies, installed without a download).
+func archiveOnly(remote, archived []source.Release) []source.Release {
+	have := make(map[string]bool, len(remote))
+	for _, r := range remote {
+		have[r.Tag] = true
+	}
+	var out []source.Release
+	for _, ar := range archived {
+		if !have[ar.Tag] {
+			out = append(out, ar)
+		}
+	}
+	return out
 }
 
 func fetchReleases(url string) tea.Cmd {
@@ -281,8 +327,10 @@ func cloneListing(l *source.Listing) *source.Listing {
 // HEAD row is prepended (lazily fetches branches). A version with a single asset drops
 // straight to its endpoint menu; multiple assets open an asset picker first (mirrors
 // the project versions.go release rule).
-// When archived is non-nil (an archive flow), a release all of whose assets already
-// have a local copy is marked with archivedMarker.
+// A release with a local copy is tagged opts.marker(): for marking/install flows that's
+// a release whose assets are all in `archived`, plus (SourceAll only) archive-only rows
+// whose assets are themselves local. A SourceAll release with a local twin also carries
+// it on the Selection (releaseSelection) so the install confirm can offer a source toggle.
 func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []source.Release, archived archivedSet) *components.PickerScreen {
 	var items []list.Item
 	if opts.IncludeHEAD {
@@ -298,15 +346,15 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 		if rel.Prerelease {
 			desc += " · prerelease"
 		}
-		if archived.releaseArchived(rel) {
-			desc += " · " + archivedMarker
+		if archived.releaseArchived(rel) || (opts.Source == SourceAll && allLocal(rel)) {
+			desc += " · " + opts.marker()
 		}
 		items = append(items, components.Item{
 			Name: rel.Tag,
 			Desc: desc,
 			Pick: func(sh *core.Shared) core.Action {
 				if len(rel.Assets) == 1 {
-					return core.Push(opts.Endpoint(releaseSelection(repoID, rel, rel.Assets[0])))
+					return core.Push(opts.Endpoint(releaseSelection(repoID, rel, rel.Assets[0], archived)))
 				}
 				return core.Push(newAssetPicker(repoID, rel, opts, archived))
 			},
@@ -324,33 +372,57 @@ func NewVersionsPicker(repo arch.RepoArchive, opts BrowseOpts) *components.Picke
 }
 
 // newAssetPicker lists the assets of a multi-asset release; selecting one opens its
-// endpoint menu. When archived is non-nil (an archive flow), assets that already have a
-// local copy are marked with archivedMarker.
+// endpoint menu. An asset with a local copy is tagged opts.marker() — either a remote
+// asset present in `archived`, or (SourceAll only) an asset that is itself local.
 func newAssetPicker(repoID string, rel source.Release, opts BrowseOpts, archived archivedSet) *components.PickerScreen {
 	items := make([]list.Item, 0, len(rel.Assets))
 	for _, a := range rel.Assets {
 		a := a
 		name := a.Name
-		if archived.has(rel.Tag, a.Name) {
-			name += " " + archivedMarker
+		if archived.has(rel.Tag, a.Name) || (opts.Source == SourceAll && isArchived(a)) {
+			name += " " + opts.marker()
 		}
 		items = append(items, components.Item{
 			Name: name,
-			Pick: func(sh *core.Shared) core.Action { return core.Push(opts.Endpoint(releaseSelection(repoID, rel, a))) },
+			Pick: func(sh *core.Shared) core.Action {
+				return core.Push(opts.Endpoint(releaseSelection(repoID, rel, a, archived)))
+			},
 		})
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: repoID + " — " + rel.Tag})
 }
 
-// releaseSelection builds the Selection for a chosen release asset.
-func releaseSelection(repoID string, rel source.Release, a source.Asset) Selection {
-	return Selection{
+// allLocal reports whether every asset of a release is a local archived copy (no
+// remote download) — true for archive-only / SourceArchive rows.
+func allLocal(rel source.Release) bool {
+	if len(rel.Assets) == 0 {
+		return false
+	}
+	for _, a := range rel.Assets {
+		if !isArchived(a) {
+			return false
+		}
+	}
+	return true
+}
+
+// releaseSelection builds the Selection for a chosen release asset. When the chosen
+// asset is remote and a local archived copy of it exists, ArchivedAsset carries that
+// copy so an install confirm can offer a Download/Archive source toggle.
+func releaseSelection(repoID string, rel source.Release, a source.Asset, archived archivedSet) Selection {
+	sel := Selection{
 		RepoID:     repoID,
 		Tag:        rel.Tag,
 		Asset:      a,
 		Prerelease: rel.Prerelease,
 		Archived:   isArchived(a),
 	}
+	if !sel.Archived {
+		if ar, ok := archived.get(rel.Tag, a.Name); ok {
+			sel.ArchivedAsset = ar
+		}
+	}
+	return sel
 }
 
 // newBranchesLoading fetches the repo's branches as HEAD-archive assets, then opens the

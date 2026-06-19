@@ -26,9 +26,10 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Desc: "pick a version, branch, or asset to install",
 			Pick: func(sh *core.Shared) core.Action {
 				return core.Push(packages.BrowseRepo(a.URL, packages.BrowseOpts{
-					Source:      packages.SourceAll,
-					IncludeHEAD: true,
-					Endpoint:    installEndpoint(a, local),
+					Source:         packages.SourceAll,
+					IncludeHEAD:    true,
+					Endpoint:       installEndpoint(a, local),
+					ArchivedMarker: "(archived)",
 				}))
 			},
 		},

@@ -73,10 +73,11 @@ func projectListItems(sh *core.Shared) []list.Item {
 // confirm/install. It is a payload built from a packages.Selection at the install
 // endpoint boundary (see installEndpoint).
 type versionItem struct {
-	tag      string
-	asset    source.Asset
-	branch   bool
-	archived bool // asset comes from the local archive (local-file URL)
+	tag           string
+	asset         source.Asset
+	archivedAsset source.Asset // local archived copy of this version, if any (enables the install source toggle); zero = none
+	branch        bool
+	archived      bool // asset comes from the local archive (local-file URL)
 }
 
 // pickSection describes the chosen asset for the confirm breadcrumb, e.g.

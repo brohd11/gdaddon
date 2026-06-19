@@ -46,6 +46,11 @@ func actionItems(sh *core.Shared) []list.Item {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newSetListScreen()) },
 		},
 		components.Item{
+			Name: "⌖ Paths",
+			Desc: "open project, addons, manifest, or ~/.gdaddon in the file manager",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newPathsPicker(sh)) },
+		},
+		components.Item{
 			Name: "◑ Theme",
 			Desc: "change the color theme",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newThemePicker()) },

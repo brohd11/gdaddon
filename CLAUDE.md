@@ -12,8 +12,6 @@ It's a single command, not a suite of subcommands:
 - no args → launches the interactive TUI (browse, pick versions/branches/assets, install/update)
 - `--install` → runs the non-interactive install (inspect manifest + install/update all), then exits
 
-A companion Godot EditorScript (`namespace_builder.gd`) also lives here — it runs
-inside the Godot editor to auto-generate GDScript namespace preload files.
 
 ## Build commands
 

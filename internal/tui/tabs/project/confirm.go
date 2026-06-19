@@ -30,20 +30,73 @@ var confirmHelp = []key.Binding{
 // release/branch/asset the shared browse flow hands back.
 func installEndpoint(selected addon.Addon, local string) packages.Endpoint {
 	return func(sel packages.Selection) core.Screen {
-		pick := versionItem{tag: sel.Tag, asset: sel.Asset, branch: sel.Branch, archived: sel.Archived}
+		pick := versionItem{tag: sel.Tag, asset: sel.Asset, archivedAsset: sel.ArchivedAsset, branch: sel.Branch, archived: sel.Archived}
 		return newInstallConfirm(selected, local, pick)
 	}
 }
 
+// install source modes (also the vertical option order); shown only when the picked
+// version has a local archived copy to install from.
+const (
+	installDownload = iota // fetch from the remote url
+	installArchive         // install from the local archived copy
+)
+
+var installToggleHelp = []key.Binding{
+	core.Hint("source", core.Keys.Up, core.Keys.Down),
+	core.Hint("confirm", core.Keys.Yes),
+	core.Hint("cancel", core.Keys.No),
+}
+
 func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *components.ConfirmScreen {
-	return &components.ConfirmScreen{
-		Crumb:  core.HeaderTitle(selected.Name, local, pickSection(pick)),
-		Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
-		OnYes: func(sh *core.Shared) core.Action {
-			return core.Replace(newInstallTask(selected, local, pick))
-		},
-		Help: confirmHelp,
+	// No archived copy ⇒ the plain confirm (current behavior).
+	if pick.archivedAsset.URL == "" {
+		return &components.ConfirmScreen{
+			Crumb:  core.HeaderTitle(selected.Name, local, pickSection(pick)),
+			Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
+			OnYes: func(sh *core.Shared) core.Action {
+				return core.Replace(newInstallTask(selected, local, pick))
+			},
+			Help: confirmHelp,
+		}
 	}
+	// Archived copy exists ⇒ offer a Download/Archive source toggle (default Download).
+	mode := installDownload
+	return &components.ConfirmScreen{
+		Crumb: core.HeaderTitle(selected.Name, local, pickSection(pick)),
+		Render: func(sh *core.Shared) string {
+			body := confirmInstallBody(sh, selected, effectivePick(pick, mode))
+			return sh.Box(body + "\n\n  source:\n" + installSourceOptions(mode))
+		},
+		OnKey: func(sh *core.Shared, k string) core.Action {
+			switch {
+			case core.MatchKey(k, core.Keys.Up):
+				if mode > installDownload {
+					mode--
+				}
+			case core.MatchKey(k, core.Keys.Down):
+				if mode < installArchive {
+					mode++
+				}
+			}
+			return core.Action{}
+		},
+		OnYes: func(sh *core.Shared) core.Action {
+			return core.Replace(newInstallTask(selected, local, effectivePick(pick, mode)))
+		},
+		Help: installToggleHelp,
+	}
+}
+
+// effectivePick resolves the source toggle: in archive mode it installs from the local
+// copy (swapping the url and flagging archived so finishInstallCmd keeps the canonical
+// manifest url); the asset name stays the remote one for clean crumbs/labels.
+func effectivePick(pick versionItem, mode int) versionItem {
+	if mode == installArchive && pick.archivedAsset.URL != "" {
+		pick.asset.URL = pick.archivedAsset.URL
+		pick.archived = true
+	}
+	return pick
 }
 
 func confirmInstallBody(sh *core.Shared, selected addon.Addon, pick versionItem) string {
@@ -52,6 +105,27 @@ func confirmInstallBody(sh *core.Shared, selected addon.Addon, pick versionItem)
 	return fmt.Sprintf(
 		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s",
 		selected.Name, pick.tag, pick.asset.Name, selected.Path, urlBlock)
+}
+
+// installSourceOptions renders the two install sources stacked vertically, the active
+// one marked and highlighted (mirrors removeOptions).
+func installSourceOptions(mode int) string {
+	active := lipgloss.NewStyle().Foreground(core.FocusedColor).Bold(true)
+	dim := lipgloss.NewStyle().Foreground(core.MutedColor)
+	opts := []struct{ label, desc string }{
+		{"Download", "fetch a fresh copy from the remote"},
+		{"Archive", "install from the local archived copy"},
+	}
+	lines := make([]string, len(opts))
+	for i, o := range opts {
+		text := o.label + " — " + o.desc
+		if i == mode {
+			lines[i] = "  ▸ " + active.Render(text)
+		} else {
+			lines[i] = "    " + dim.Render(text)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // ---------- remove confirm ----------
