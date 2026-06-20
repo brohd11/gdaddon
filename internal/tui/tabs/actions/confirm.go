@@ -7,11 +7,8 @@ import (
 )
 
 func newInstallAllConfirm(sh *core.Shared) *components.ConfirmScreen {
-	return components.CreateConfirmScreen(
-		sh,
-		components.ConfirmSimple{
-			Crumb: "Install All",
-			Text:  "Do you want to install all packages in project?",
-			OnYes: core.Push(newInstallAllTask()),
-		})
+	return components.CreateConfirmScreen(components.ConfirmSimple{
+		Text:  "Do you want to install all packages in project?",
+		OnYes: core.Push(newInstallAllTask()),
+	})
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 )
 
@@ -33,12 +32,10 @@ func ArchiveEndpoint(sel Selection) core.Screen {
 			},
 		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: sel.RepoID + " - " + stripSuffix(sel.Asset.Name)})
-}
-
-var archiveConfirmHelp = []key.Binding{
-	core.Hint("confirm", core.Keys.Yes),
-	core.Hint("cancel", core.Keys.No),
+	return components.NewPicker(items, components.PickerOpts{
+		Crumb: "Package",
+		Title: sel.RepoID + " - " + stripSuffix(sel.Asset.Name),
+	})
 }
 
 // NewArchiveConfirm builds the confirm that downloads the given assets and stores
@@ -57,15 +54,11 @@ func NewArchiveConfirm(name, repoID, tag string, assets []source.Asset) (*compon
 	if len(remote) == 0 {
 		return nil, tag + " already archived", false
 	}
-
-	cs := &components.ConfirmScreen{
-		Crumb:  core.HeaderTitle(name, "", "Archive "+tag),
-		Render: func(sh *core.Shared) string { return sh.Box(archiveConfirmBody(name, tag, remote)) },
-		OnYes: func(sh *core.Shared) core.Action {
-			return core.Replace(newArchiveTask(tag, repoID, remote))
-		},
-		Help: archiveConfirmHelp,
-	}
+	cs := components.CreateConfirmScreen(components.ConfirmSimple{
+		Title: "Archive " + tag,
+		Text:  archiveConfirmBody(name, tag, remote),
+		OnYes: core.Replace(newArchiveTask(tag, repoID, remote)),
+	})
 	return cs, "", true
 }
 

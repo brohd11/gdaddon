@@ -47,7 +47,7 @@ type Config struct {
 // the tabs, and blocks on the bubbletea program until the user quits.
 func Run(cfg Config) error {
 	sh := core.NewShared(cfg.App)
-	sh.Chrome = &core.Chrome{Output: cfg.Output, Status: cfg.Status}
+	sh.Chrome = &core.Chrome{Breadcrumb: core.NewBreadcrumbPane(), Output: cfg.Output, Status: cfg.Status}
 	if cfg.Header != nil {
 		sh.Chrome.Header = core.NewHeaderPane(cfg.Header)
 	}

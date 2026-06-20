@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -123,9 +122,10 @@ var (
 	// breadcrumb bar: drawn by the router under the tab strip from the live nav
 	// stack. Upstream segments + separators are muted; the current (top) segment
 	// takes the accent. See RenderBreadcrumb.
-	breadcrumbBarStyle lipgloss.Style
-	crumbMutedStyle    lipgloss.Style
-	crumbCurStyle      lipgloss.Style
+	breadcrumbBarStyle  lipgloss.Style
+	breadcrumbRuleStyle lipgloss.Style
+	crumbMutedStyle     lipgloss.Style
+	crumbCurStyle       lipgloss.Style
 
 	boxStyle    lipgloss.Style
 	headerStyle lipgloss.Style
@@ -151,11 +151,12 @@ func rebuildStyles() {
 	tabRuleStyle = lipgloss.NewStyle().Foreground(BorderColor)
 
 	breadcrumbBarStyle = lipgloss.NewStyle().Padding(0, 1)
+	breadcrumbRuleStyle = lipgloss.NewStyle().Foreground(BorderColor)
 	crumbMutedStyle = lipgloss.NewStyle().Foreground(MutedColor)
 	crumbCurStyle = lipgloss.NewStyle().Foreground(FocusedColor).Bold(true)
 
-	// No top margin: the gap above the box is owned by WithCrumb so the body can
-	// hug the top when no breadcrumb is rendered. Margin order is top,right,bottom,left.
+	// No top margin: the gap above the box is owned by WithTitle so the body can
+	// hug the top when no title bar is rendered. Margin order is top,right,bottom,left.
 	boxStyle = lipgloss.NewStyle().Margin(0, 2, 1, 2).Padding(1, 2).Border(lipgloss.RoundedBorder())
 	headerStyle = lipgloss.NewStyle().Padding(0, 1).Border(lipgloss.NormalBorder()).BorderForeground(BorderColor)
 	labelStyle = lipgloss.NewStyle().Foreground(MutedColor)
@@ -215,82 +216,14 @@ func RenderTitleBar(text string) string {
 	return listStyles.TitleBar.Render(listStyles.Title.Render(text))
 }
 
-// WithCrumb prepends a styled breadcrumb bar to body, or returns body unchanged
-// when crumb is empty — so any screen can make its breadcrumb optional by
-// passing the raw (unrendered) crumb text straight through.
-func WithCrumb(crumb, body string) string {
-	if crumb == "" {
+// WithTitle prepends a styled title bar to body, or returns body unchanged when
+// title is empty — so any screen can make its in-body title optional by passing the
+// raw (unrendered) title text straight through.
+func WithTitle(title, body string) string {
+	if title == "" {
 		return body
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, RenderTitleBar(crumb), body)
-}
-
-// Crumb is one segment of the router-drawn breadcrumb: a full label and an optional
-// shorter form used when the trail is too wide. Short falls back to Full when empty.
-type Crumb struct {
-	Full  string
-	Short string
-}
-
-func (c Crumb) pick(short bool) string {
-	if short && c.Short != "" {
-		return c.Short
-	}
-	return c.Full
-}
-
-// crumbSep separates breadcrumb segments.
-const crumbSep = " › "
-
-// RenderBreadcrumb joins crumbs into the styled breadcrumb bar the router draws under
-// the tab strip: upstream segments + separators muted, the current (last) segment in
-// the accent. When the full trail is too wide for width it retries with the short form
-// of every segment but the last, then left-truncates the whole bar — keeping the
-// current segment visible. An empty slice renders nothing.
-func RenderBreadcrumb(crumbs []Crumb, width int) string {
-	if len(crumbs) == 0 {
-		return ""
-	}
-	last := len(crumbs) - 1
-	labels := func(short bool) []string {
-		out := make([]string, len(crumbs))
-		for i, c := range crumbs {
-			out[i] = c.pick(short && i != last)
-		}
-		return out
-	}
-	avail := width - 2 // breadcrumbBarStyle's horizontal padding
-	chosen := labels(false)
-	if width > 0 && lipgloss.Width(strings.Join(chosen, crumbSep)) > avail {
-		chosen = labels(true)
-	}
-	if width > 0 && lipgloss.Width(strings.Join(chosen, crumbSep)) > avail {
-		// Last resort: truncate the whole trail, keeping the tail (current segment).
-		return breadcrumbBarStyle.Render(crumbMutedStyle.Render(TruncLeft(strings.Join(chosen, crumbSep), avail)))
-	}
-	parts := make([]string, len(chosen))
-	for i, l := range chosen {
-		if i == last {
-			parts[i] = crumbCurStyle.Render(l)
-		} else {
-			parts[i] = crumbMutedStyle.Render(l)
-		}
-	}
-	return breadcrumbBarStyle.Render(strings.Join(parts, crumbMutedStyle.Render(crumbSep)))
-}
-
-// headerTitle is the shared header for a selected addon's screens, e.g.
-// "MyAddon - Current:v1.0.0 - Versions". An empty section yields just the base.
-func HeaderTitle(name, local, section string) string {
-	cur := "none"
-	if local != "" {
-		cur = "v" + local
-	}
-	base := fmt.Sprintf("%s - Current:%s", name, cur)
-	if section == "" {
-		return base
-	}
-	return base + " - " + section
+	return lipgloss.JoinVertical(lipgloss.Left, RenderTitleBar(title), body)
 }
 
 // ---------- confirm/summary box ----------
@@ -323,7 +256,11 @@ func HelpView(l list.Model) string {
 // to zero; the owning screen's SetSize gives it real dimensions.
 func NewSelectList(items []list.Item, title string, extra ...key.Binding) list.Model {
 	l := list.New(items, NewDelegate(), 0, 0)
-	l.Title = title
+	if title != "" {
+		l.Title = title
+	} else {
+		l.SetShowTitle(false)
+	}
 	StyleList(&l)
 	keys := func() []key.Binding {
 		return append([]key.Binding{

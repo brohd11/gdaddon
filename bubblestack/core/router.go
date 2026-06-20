@@ -438,8 +438,9 @@ func (r Router) tabStripView() string {
 
 // breadcrumbView builds the breadcrumb bar from the live nav stack: it asks each
 // screen implementing Crumber for its segment (root→top, the top screen full and the
-// upstream ones short), skips empty ones, and renders the joined path. Built fresh
-// each frame so it always reflects the current stack — pushing/popping needs no
+// upstream ones short), skips empty ones, and hands the crumbs to Chrome.Breadcrumb
+// to render (joined path + separator rule, gated by the pane's hidden flag). Built
+// fresh each frame so it always reflects the current stack — pushing/popping needs no
 // breadcrumb bookkeeping.
 func (r Router) breadcrumbView() string {
 	var crumbs []Crumb
@@ -454,7 +455,11 @@ func (r Router) breadcrumbView() string {
 		}
 		crumbs = append(crumbs, Crumb{Full: full, Short: c.CrumbLabel(true)})
 	}
-	return RenderBreadcrumb(crumbs, r.sh.width)
+	var bc *BreadcrumbPane
+	if r.sh.Chrome != nil {
+		bc = r.sh.Chrome.Breadcrumb
+	}
+	return bc.view(crumbs, r.sh.width) // nil-safe: renders normally
 }
 
 // topChrome is the persistent chrome above the body: the header box, the tab strip

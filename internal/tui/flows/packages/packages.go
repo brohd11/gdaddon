@@ -360,7 +360,7 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 			},
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: repoID})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Repo", Title: repoID})
 }
 
 // NewVersionsPicker lists an archived repo's versions; a thin wrapper over
@@ -389,7 +389,7 @@ func newAssetPicker(repoID string, rel source.Release, opts BrowseOpts, archived
 			},
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: repoID + " — " + rel.Tag})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Assets", Title: repoID})
 }
 
 // allLocal reports whether every asset of a release is a local archived copy (no
@@ -447,7 +447,7 @@ func newBranchesLoading(repoID, repoURL string, opts BrowseOpts) *components.Loa
 		}
 		return core.Replace(newBranchPicker(repoID, m.branches, opts))
 	}
-	return components.NewLoadingScreen(repoID, "fetching branches…", fetchBranches(repoURL), onResult)
+	return components.NewLoadingScreen(repoID, "fetching branches...", fetchBranches(repoURL), onResult)
 }
 
 // newBranchPicker lists refs/heads; each opens its endpoint menu. The branch asset is a
@@ -464,5 +464,5 @@ func newBranchPicker(repoID string, branches []source.Asset, opts BrowseOpts) *c
 			},
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: repoID + " — Branches"})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Branches", Title: repoID})
 }

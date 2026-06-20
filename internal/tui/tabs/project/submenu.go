@@ -62,7 +62,8 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 	})
 
 	return components.NewPicker(items, components.PickerOpts{
-		Title:   core.HeaderTitle(a.Name, local, ""),
+		// Crumb:   "Plugin",
+		Title:   a.Name,
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 	})
 }

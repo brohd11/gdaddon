@@ -24,7 +24,7 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 	dirF := components.NewTextField("dir", "Dir:  ", "(optional — defaults to the project root)")
 
 	return components.NewForm(components.FormOpts{
-		Crumb: "Create manifest",
+		Crumb: "Create Manifest",
 		Fields: []components.FormField{
 			components.NewHeading("Create manifest"),
 			components.NewNote("addon_manifest.yml is created in this directory (blank ⇒ project root)."),
@@ -63,7 +63,7 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 			// (validated above to be within the walk depth), then broadcasts PathRefresh
 			// so the Project list and Actions menu reload.
 			return core.Seq(
-				core.SetStatus("Created Manifest: "+target),
+				core.SetStatusAndLog("Created Manifest: "+target),
 				core.ShowTab(appctx.TitleProject),
 				core.Async(appctx.RefreshPaths(sh, true)),
 			)

@@ -34,10 +34,7 @@ func (s *PopupScreen) IsOverlay() bool { return true }
 // CrumbLabel contributes the popup's title as its breadcrumb segment (drawn on the
 // background screen's chrome, which stays visible around the modal).
 func (s *PopupScreen) CrumbLabel(short bool) string {
-	if short && s.CrumbShort != "" {
-		return s.CrumbShort
-	}
-	return s.Title
+	return crumbSeg(short, s.CrumbShort, s.Title, "")
 }
 
 func (s *PopupScreen) Init(*core.Shared) tea.Cmd { return nil }

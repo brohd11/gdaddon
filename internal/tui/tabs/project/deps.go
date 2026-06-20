@@ -128,12 +128,11 @@ func (p depPlan) nothingToAdd(name string) string {
 // newGetDepsConfirm lists the dependencies that will be added (and notes how many
 // are already satisfied / skipped), committing them only on confirm.
 func newGetDepsConfirm(name, manifestPath string, plan depPlan) *components.ConfirmScreen {
-	return &components.ConfirmScreen{
-		Crumb:  core.HeaderTitle(name, "", "Get dependencies"),
-		Render: func(sh *core.Shared) string { return sh.Box(depsConfirmBody(name, plan)) },
-		OnYes:  func(sh *core.Shared) core.Action { return commitDeps(name, manifestPath, plan) },
-		Help:   confirmHelp,
-	}
+	return components.CreateConfirmScreen(components.ConfirmSimple{
+		Crumb: "Get Dependencies",
+		Text:  depsConfirmBody(name, plan),
+		OnYes: commitDeps(name, manifestPath, plan),
+	})
 }
 
 func depsConfirmBody(name string, plan depPlan) string {

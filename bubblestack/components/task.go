@@ -19,6 +19,7 @@ type RunFunc func(sh *core.Shared, report func(string, ...any), done chan<- core
 // doneLabel + onDismiss. It names no domain type.
 type TaskScreen struct {
 	label, doneLabel string
+	Crumb            string
 	CrumbShort       string // optional short breadcrumb segment; defaults to label
 	stay             bool
 	run              RunFunc
@@ -31,10 +32,7 @@ var _ core.Crumber = (*TaskScreen)(nil)
 
 // CrumbLabel contributes the task's label as its breadcrumb segment.
 func (s *TaskScreen) CrumbLabel(short bool) string {
-	if short && s.CrumbShort != "" {
-		return s.CrumbShort
-	}
-	return s.label
+	return crumbSeg(short, s.CrumbShort, "Task", "Task")
 }
 
 // NewTask builds a task that navigates away as soon as it finishes (install,

@@ -37,7 +37,7 @@ func newThemePicker() core.Screen {
 	}
 
 	return components.NewPicker(items, components.PickerOpts{
-		Title:        "Theme",
+		Crumb:        "Theme",
 		InitialIndex: initialIndex,
 	})
 }

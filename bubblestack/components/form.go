@@ -208,7 +208,8 @@ func (s *StaticField) View(bool) string { return s.style.Render(s.text) }
 // ---------- FormScreen ----------
 
 type FormOpts struct {
-	Crumb      string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
+	Title      string // optional in-body title bar (core.WithTitle); omitted ⇒ no bar
+	Crumb      string // breadcrumb segment (CrumbLabel); omitted ⇒ contributes none
 	CrumbShort string // optional short breadcrumb-bar segment; defaults to Crumb
 	Fields     []FormField
 	Help       []key.Binding
@@ -217,6 +218,7 @@ type FormOpts struct {
 }
 
 type FormScreen struct {
+	title      string
 	crumb      string
 	crumbShort string
 	fields     []FormField
@@ -230,22 +232,14 @@ var _ core.Filterer = (*FormScreen)(nil)
 var _ core.Crumber = (*FormScreen)(nil)
 var _ Typable = (*FormScreen)(nil)
 
-// CrumbLabel contributes the form's breadcrumb text as its segment.
+// CrumbLabel contributes the form's breadcrumb segment, defaulting to "Form" when no
+// Crumb is declared.
 func (f *FormScreen) CrumbLabel(short bool) string {
-	if short && f.crumbShort != "" {
-		return f.crumbShort
-	}
-	return f.crumb
+	return crumbSeg(short, f.crumbShort, f.crumb, "Form")
 }
 
 func NewForm(opts FormOpts) *FormScreen {
-	if opts.Crumb == "" {
-		opts.Crumb = "Form"
-	}
-	if opts.CrumbShort == "" {
-		opts.CrumbShort = "Form"
-	}
-	f := &FormScreen{crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit}
+	f := &FormScreen{title: opts.Title, crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit}
 	f.focus = f.firstFocusable()
 	if opts.Focus != "" {
 		for i, fld := range f.fields {
@@ -398,7 +392,7 @@ func (f *FormScreen) View(sh *core.Shared) string {
 	for i, fld := range f.fields {
 		rows[i] = fld.View(i == f.focus)
 	}
-	return core.WithCrumb(f.crumb, sh.Box(strings.Join(rows, "\n")))
+	return core.WithTitle(f.title, sh.Box(strings.Join(rows, "\n")))
 }
 
 func (f *FormScreen) HelpView(sh *core.Shared) string { return sh.BindingHelp(f.help) }

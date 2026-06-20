@@ -18,6 +18,7 @@ import (
 // back to it.
 type PickerScreen struct {
 	list       list.Model
+	crumb      string // breadcrumb segment; defaults to the list title when ""
 	crumbShort string
 	OnSelect   func(*core.Shared, list.Item) core.Action
 	OnKey      func(*core.Shared, string, list.Item) (core.Action, bool)
@@ -29,7 +30,8 @@ type PickerScreen struct {
 // key falls through to the list.
 type PickerOpts struct {
 	Title        string
-	CrumbShort   string        // optional short breadcrumb segment; defaults to Title
+	Crumb        string        // optional breadcrumb segment; defaults to Title
+	CrumbShort   string        // optional short breadcrumb segment; defaults to Crumb/Title
 	Help         []key.Binding // extra help/hint bindings shown in the list help
 	OnSelect     func(*core.Shared, list.Item) core.Action
 	OnKey        func(*core.Shared, string, list.Item) (core.Action, bool)
@@ -44,6 +46,7 @@ var _ core.Crumber = (*PickerScreen)(nil)
 func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 	s := &PickerScreen{
 		list:       core.NewSelectList(items, opts.Title, opts.Help...),
+		crumb:      opts.Crumb,
 		crumbShort: opts.CrumbShort,
 		OnSelect:   opts.OnSelect,
 		OnKey:      opts.OnKey,
@@ -57,13 +60,10 @@ func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 
 func (s *PickerScreen) PopStop() bool { return s.popStop }
 
-// CrumbLabel contributes the picker's list title as its breadcrumb segment (the short
-// form when set, else the title).
+// CrumbLabel contributes the picker's breadcrumb segment: the short form when set,
+// else the explicit crumb, else the list title (the default — crumb and title agree).
 func (s *PickerScreen) CrumbLabel(short bool) string {
-	if short && s.crumbShort != "" {
-		return s.crumbShort
-	}
-	return s.list.Title
+	return crumbSeg(short, s.crumbShort, s.crumb, s.list.Title)
 }
 
 func (s *PickerScreen) Init(*core.Shared) tea.Cmd { return nil }

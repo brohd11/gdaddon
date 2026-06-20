@@ -37,14 +37,14 @@ func newPathsPicker(sh *core.Shared) core.Screen {
 
 	add("Project", c.ProjectRoot, false)
 	if c.ProjectRoot != "" {
-		add("Addons dir", filepath.Join(c.ProjectRoot, "addons"), false)
+		add("Addons Dir", filepath.Join(c.ProjectRoot, "addons"), false)
 	}
 	add("Manifest", c.ManifestPath, true)
 	if home, err := os.UserHomeDir(); err == nil {
 		add(".gdaddon", filepath.Join(home, ".gdaddon"), false)
 	}
 
-	return components.NewPicker(items, components.PickerOpts{Title: "Paths"})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Paths"})
 }
 
 // openInFileManager opens path in the OS file manager. When reveal is set (used for a

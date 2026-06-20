@@ -60,7 +60,11 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 
 	// PopStop: this submenu is the per-plugin command hub, so the archive sub-flow
 	// returns here (PopTo) after it finishes.
-	return components.NewPicker(items, components.PickerOpts{Title: g.name, PopStop: true})
+	return components.NewPicker(items, components.PickerOpts{
+		// Crumb: "Plugin", // looks better with name
+		Title:   g.name,
+		PopStop: true,
+	})
 }
 
 // importToProject copies the global entry into the project manifest, then broadcasts

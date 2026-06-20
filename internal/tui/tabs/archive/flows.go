@@ -31,7 +31,7 @@ func newPackageSubmenu(sel pck.Selection) core.Screen {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(sel.RepoID, sel.Asset)) },
 		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: sel.RepoID + " - " + sel.Asset.Name})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Package", Title: sel.RepoID + " - " + sel.Asset.Name})
 }
 
 // newRemoveConfirm confirms deleting one archived package, then refreshes the tab.

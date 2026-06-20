@@ -2,9 +2,10 @@ package project
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
-	"strings"
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
@@ -51,19 +52,25 @@ var installToggleHelp = []key.Binding{
 func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *components.ConfirmScreen {
 	// No archived copy ⇒ the plain confirm (current behavior).
 	if pick.archivedAsset.URL == "" {
-		return &components.ConfirmScreen{
-			Crumb:  core.HeaderTitle(selected.Name, local, pickSection(pick)),
+		return components.CreateConfirmScreen(components.ConfirmSimple{
 			Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
-			OnYes: func(sh *core.Shared) core.Action {
-				return core.Replace(newInstallTask(selected, local, pick))
-			},
-			Help: confirmHelp,
-		}
+			OnYes:  core.Replace(newInstallTask(selected, local, pick)),
+		})
+		// return &components.ConfirmScreen{
+		// 	Title:  pickSection(pick),
+		// 	Crumb:  "Install",
+		// 	Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
+		// 	OnYes: func(sh *core.Shared) core.Action {
+		// 		return core.Replace(newInstallTask(selected, local, pick))
+		// 	},
+		// 	Help: confirmHelp,
+		// }
 	}
 	// Archived copy exists ⇒ offer a Download/Archive source toggle (default Download).
 	mode := installDownload
 	return &components.ConfirmScreen{
-		Crumb: core.HeaderTitle(selected.Name, local, pickSection(pick)),
+		// Title: pickSection(pick),
+		Crumb: "Install",
 		Render: func(sh *core.Shared) string {
 			body := confirmInstallBody(sh, selected, effectivePick(pick, mode))
 			return sh.Box(body + "\n\n  source:\n" + installSourceOptions(mode))
@@ -148,7 +155,7 @@ var removeConfirmHelp = []key.Binding{
 func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
 	mode := removeProject // local copy the selector mutates; default = non-destructive
 	return &components.ConfirmScreen{
-		Crumb:  core.HeaderTitle(st.Addon.Name, st.LocalVersion, "Remove"),
+		Crumb:  "Remove",
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
 		OnKey: func(sh *core.Shared, k string) core.Action {
 			switch {

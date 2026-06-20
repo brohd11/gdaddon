@@ -85,7 +85,7 @@ func newSourcePicker(dst *searchpkg.Source) *components.PickerScreen {
 			Pick: func(sh *core.Shared) core.Action { *dst = src; return core.Pop() },
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: "Select source"})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Source"})
 }
 
 // ---------- search loading + results ----------
@@ -148,7 +148,7 @@ func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchp
 		return core.Action{}, false
 	}
 	help := []key.Binding{core.Hint("results", core.Keys.PageNext, core.Keys.PagePrev)}
-	return components.NewPicker(items, components.PickerOpts{Title: title, OnKey: onKey, Help: help})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Results", Title: title, OnKey: onKey, Help: help})
 }
 
 func resultDesc(r searchpkg.Summary) string {

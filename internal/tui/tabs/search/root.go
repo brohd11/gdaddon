@@ -8,6 +8,7 @@ package search
 import (
 	searchpkg "gdaddon/internal/search"
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -25,7 +26,7 @@ var _ core.Filterer = (*SearchScreen)(nil)
 var _ core.Crumber = (*SearchScreen)(nil)
 
 // CrumbLabel anchors the breadcrumb at the Search root.
-func (s *SearchScreen) CrumbLabel(bool) string { return s.list.Title }
+func (s *SearchScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewSearchScreen() *SearchScreen {
 	return &SearchScreen{list: core.NewSelectList(searchItems(), "Search")}

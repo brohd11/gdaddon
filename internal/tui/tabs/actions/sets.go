@@ -74,8 +74,10 @@ func (s *SetListScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *SetListScreen) View(*core.Shared) string     { return s.list.View() }
-func (s *SetListScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpMinimal) }
+func (s *SetListScreen) View(*core.Shared) string { return s.list.View() }
+func (s *SetListScreen) HelpView(*core.Shared) string {
+	return core.ShortHelp(s.list, core.HelpMinimal)
+}
 
 // Receive reloads the set list from disk on a SetsDirty broadcast (after a set is
 // created/edited/deleted), so the submenu reflects the change.
@@ -126,7 +128,7 @@ func newSetForm(sh *core.Shared) *components.FormScreen {
 	}
 
 	return components.NewForm(components.FormOpts{
-		Crumb:  "New set",
+		Crumb:  "New Set",
 		Fields: fields,
 		Focus:  "name",
 		Help:   help,
@@ -150,7 +152,7 @@ func newSetForm(sh *core.Shared) *components.FormScreen {
 				status += " from current project"
 			}
 			return core.Seq(
-				core.SetStatus(status),
+				core.SetStatusAndLog(status),
 				core.PropagateAll(appctx.SetsDirty{}),
 				core.Pop(),
 			)
@@ -188,7 +190,7 @@ func newSetOptions(sh *core.Shared, setName string) *components.PickerScreen {
 		Desc: "delete this set file",
 		Pick: func(sh *core.Shared) core.Action { return core.Push(newSetDeleteConfirm(setName)) },
 	})
-	return components.NewPicker(items, components.PickerOpts{Title: "Set: " + setName, PopStop: true})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Set", Title: setName, PopStop: true})
 }
 
 // ---------- add entry ----------
@@ -219,7 +221,7 @@ func newSetAddEntryPicker(setName string) core.Screen {
 			Desc: "every global plugin is already in this set (or none exist)",
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: setName + " — Add entry"})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Add entry", Title: setName})
 }
 
 // newSetPluginSubmenu is a chosen global plugin's add menu: "Add Plugin" (url only,
@@ -235,7 +237,7 @@ func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.Pic
 					return core.SetStatusAndLog("error: " + err.Error())
 				}
 				return core.Seq(
-					core.SetStatus("added "+g.Name+" to "+setName),
+					core.SetStatusAndLog("added "+g.Name+" to "+setName),
 					core.PropagateAll(appctx.SetsDirty{}),
 					core.PopTo(),
 				)
@@ -243,7 +245,7 @@ func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.Pic
 		},
 		setAddVersionItem(setName, setPath, g.Name, g.URL),
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: g.Name})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Plugins", Title: g.Name})
 }
 
 // setAddVersionItem is the shared "Add Version" row: it browses url's upstream
@@ -285,7 +287,7 @@ func setVersionEndpoint(setName, setPath, pluginName string) pck.Endpoint {
 				},
 			},
 		}
-		return components.NewPicker(items, components.PickerOpts{Title: pluginName + " — " + sel.Tag})
+		return components.NewPicker(items, components.PickerOpts{Crumb: "Add Entry", Title: pluginName + " — " + sel.Tag})
 	}
 }
 
@@ -332,7 +334,7 @@ func newSetPluginsPicker(setName string) core.Screen {
 	if len(items) == 0 {
 		items = append(items, components.Item{Name: "(set is empty)", Desc: "add plugins via Add entry"})
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: setName + " — Plugins"})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Plugins", Title: setName})
 }
 
 // newSetEntrySubmenu is a set member's command menu: re-pin a version (Add Version)
@@ -410,16 +412,16 @@ func newImportDonePopup(setName string, added, skipped int) *components.PopupScr
 // set list.
 func newSetDeleteConfirm(setName string) *components.ConfirmScreen {
 	return &components.ConfirmScreen{
-		Crumb: "Delete set",
+		Crumb: "Delete",
 		Render: func(sh *core.Shared) string {
-			return sh.Box("Delete set\n\n  " + setName + "\n\n  Removes the set file. Installed plugins are not touched.")
+			return sh.Box("Delete set: " + setName + "\n\n  Removes the set file. Installed plugins are not touched.")
 		},
 		OnYes: func(sh *core.Shared) core.Action {
 			if err := addon.DeleteSet(setName); err != nil {
 				return core.Seq(core.SetStatusAndLog("error: "+err.Error()), core.PopTo())
 			}
 			return core.Seq(
-				core.SetStatus("deleted set "+setName),
+				core.SetStatusAndLog("deleted set "+setName),
 				core.PropagateAll(appctx.SetsDirty{}),
 				core.Pop(2), // drop this confirm + the set's options, back to the set list
 			)

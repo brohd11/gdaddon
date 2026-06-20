@@ -14,7 +14,8 @@ import (
 // type. OnYes runs on confirm (y/enter); any non-reserved key is handed to OnKey
 // (when set), so a caller can add custom interactions like a Project/Global toggle.
 type ConfirmScreen struct {
-	Crumb      string // raw breadcrumb text; rendered via core.WithCrumb, omitted entirely when ""
+	Title      string // optional in-body title bar (core.WithTitle); omitted ⇒ no bar
+	Crumb      string // breadcrumb segment (CrumbLabel); omitted ⇒ contributes none
 	CrumbShort string // optional short breadcrumb-bar segment; defaults to Crumb
 	Render     func(*core.Shared) string
 	OnYes      func(*core.Shared) core.Action
@@ -23,26 +24,25 @@ type ConfirmScreen struct {
 }
 
 type ConfirmSimple struct {
+	Text  string
+	OnYes core.Action
+	// optional
+	Title      string // optional in-body title bar; omitted ⇒ no bar
 	Crumb      string
 	CrumbShort string
-	Text       string
-	OnYes      core.Action
-	// optional
-	OnKey func(*core.Shared, string) core.Action
-	Help  []key.Binding
+	Render     func(*core.Shared) string // this overides text if not nil
+	OnKey      func(*core.Shared, string) core.Action
+	Help       []key.Binding
 }
 
 var _ core.Crumber = (*ConfirmScreen)(nil)
 
 func (s *ConfirmScreen) Init(*core.Shared) tea.Cmd { return nil }
 
-// CrumbLabel contributes the confirm screen's breadcrumb text as its segment (the
-// short form when set, else the full crumb).
+// CrumbLabel contributes the confirm screen's breadcrumb segment, defaulting to
+// "Confirm" when no Crumb is declared.
 func (s *ConfirmScreen) CrumbLabel(short bool) string {
-	if short && s.CrumbShort != "" {
-		return s.CrumbShort
-	}
-	return s.Crumb
+	return crumbSeg(short, s.CrumbShort, s.Crumb, "Conf")
 }
 
 func (s *ConfirmScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
@@ -64,7 +64,7 @@ func (s *ConfirmScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 }
 
 func (s *ConfirmScreen) View(sh *core.Shared) string {
-	return core.WithCrumb(s.Crumb, s.Render(sh))
+	return core.WithTitle(s.Title, s.Render(sh))
 }
 
 func (s *ConfirmScreen) HelpView(sh *core.Shared) string { return sh.BindingHelp(s.Help) }
@@ -75,20 +75,20 @@ var DefaultHelpKeys = []key.Binding{
 	core.Hint("cancel", core.Keys.No),
 }
 
-func CreateConfirmScreen(sh *core.Shared, cs ConfirmSimple) *ConfirmScreen {
+func CreateConfirmScreen(cs ConfirmSimple) *ConfirmScreen {
 	if cs.Help == nil {
 		cs.Help = DefaultHelpKeys
 	}
-	if cs.Crumb == "" {
-		cs.Crumb = "Confirm"
+	render := func(sh *core.Shared) string { return sh.Box(cs.Text) }
+	if cs.Render != nil {
+		render = cs.Render
 	}
-	if cs.CrumbShort == "" {
-		cs.CrumbShort = "Conf"
-	}
+
 	return &ConfirmScreen{
+		Title:      cs.Title,
 		Crumb:      cs.Crumb,
 		CrumbShort: cs.CrumbShort,
-		Render:     func(*core.Shared) string { return sh.Box(cs.Text) },
+		Render:     render,
 		OnYes:      func(sh *core.Shared) core.Action { return cs.OnYes },
 		OnKey:      cs.OnKey,
 		Help:       cs.Help,

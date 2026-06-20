@@ -27,7 +27,7 @@ var _ core.Receiver = (*GlobalScreen)(nil)
 var _ core.Crumber = (*GlobalScreen)(nil)
 
 // CrumbLabel anchors the breadcrumb at the Global root.
-func (s *GlobalScreen) CrumbLabel(bool) string { return s.list.Title }
+func (s *GlobalScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewGlobalScreen(sh *core.Shared) *GlobalScreen {
 	return &GlobalScreen{list: core.NewSelectList(globalItems(sh), "Global Plugins")}

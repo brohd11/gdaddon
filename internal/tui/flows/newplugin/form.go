@@ -90,7 +90,6 @@ var newPluginConfirmHelp = []key.Binding{
 func newNewPluginConfirm(name, url, path string, addTarget int) *components.ConfirmScreen {
 	target := addTarget // local copy the toggle mutates
 	return &components.ConfirmScreen{
-		Crumb:  "New Plugin",
 		Render: func(sh *core.Shared) string { return sh.Box(newPluginConfirmBody(sh, name, url, path, target)) },
 		OnKey: func(sh *core.Shared, k string) core.Action {
 			if core.MatchKey(k, core.Keys.Left) || core.MatchKey(k, core.Keys.Right) {

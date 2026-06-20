@@ -91,12 +91,11 @@ func resolveUpdatePlansCmd(manifestPath, projectRoot string) tea.Cmd {
 // newUpdateAllConfirm lists the pending updates ("name old → new") and, on confirm,
 // runs the batch update task.
 func newUpdateAllConfirm(plans []addon.UpdatePlan) *components.ConfirmScreen {
-	return &components.ConfirmScreen{
-		Crumb:  "Update All",
-		Render: func(sh *core.Shared) string { return sh.Box(updateAllBody(plans)) },
-		OnYes:  func(sh *core.Shared) core.Action { return core.Replace(newUpdateAllTask(plans)) },
-		Help:   components.DefaultHelpKeys,
-	}
+	return components.CreateConfirmScreen(components.ConfirmSimple{
+		Crumb: "Update All",
+		Text:  updateAllBody(plans),
+		OnYes: core.Replace(newUpdateAllTask(plans)),
+	})
 }
 
 func updateAllBody(plans []addon.UpdatePlan) string {

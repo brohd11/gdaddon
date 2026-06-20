@@ -24,7 +24,7 @@ var _ core.Receiver = (*ArchiveScreen)(nil)
 var _ core.Crumber = (*ArchiveScreen)(nil)
 
 // CrumbLabel anchors the breadcrumb at the Archive root.
-func (s *ArchiveScreen) CrumbLabel(bool) string { return s.list.Title }
+func (s *ArchiveScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewArchiveScreen() *ArchiveScreen {
 	return &ArchiveScreen{list: core.NewSelectList(pck.RepoItems(archiveOpts), "Archived Packages")}

@@ -2,6 +2,7 @@ package actions
 
 import (
 	"gdaddon/internal/tui/appctx"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -21,7 +22,7 @@ var _ core.Receiver = (*ActionsScreen)(nil)
 var _ core.Crumber = (*ActionsScreen)(nil)
 
 // CrumbLabel anchors the breadcrumb at the Actions root.
-func (s *ActionsScreen) CrumbLabel(bool) string { return s.list.Title }
+func (s *ActionsScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewActionsScreen(sh *core.Shared) *ActionsScreen {
 	return &ActionsScreen{list: core.NewSelectList(actionItems(sh), "Actions")}

@@ -1,6 +1,11 @@
 package core
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Chrome is the optional UI furniture the router draws around the active screen's
 // body: a persistent header box, a transient status line, and a pluggable output
@@ -15,9 +20,10 @@ import tea "github.com/charmbracelet/bubbletea"
 // is an interface (its default implementation, the scrollable log pane, lives in
 // components — core ← components, so core only names the interface).
 type Chrome struct {
-	Header *HeaderPane // nil ⇒ no header box
-	Output Output      // nil ⇒ no output pane (default impl: components.LogPane)
-	Status Status      // nil ⇒ no status line (default impl: components.StatusLine)
+	Header     *HeaderPane     // nil ⇒ no header box
+	Breadcrumb *BreadcrumbPane // nil ⇒ breadcrumb still drawn (default, shown); set to toggle it
+	Output     Output          // nil ⇒ no output pane (default impl: components.LogPane)
+	Status     Status          // nil ⇒ no status line (default impl: components.StatusLine)
 
 	// outputFocused routes input to the output pane (scrolling) instead of the
 	// active screen. Owned by the router; the pane itself is focus-agnostic and only
@@ -48,6 +54,92 @@ func (h *HeaderPane) view(s *Shared) string {
 		return ""
 	}
 	return h.Render(s)
+}
+
+// BreadcrumbPane carries the runtime hidden flag for the router-drawn breadcrumb
+// bar (built from the live nav stack — see Router.breadcrumbView), so the breadcrumb
+// can be toggled off without the router tracking visibility itself. Parallel to
+// HeaderPane.
+type BreadcrumbPane struct {
+	hidden bool
+}
+
+// NewBreadcrumbPane returns a shown breadcrumb pane. The facade's Run sets this on
+// Chrome so a consumer can sh.Chrome.Breadcrumb.Hide() it.
+func NewBreadcrumbPane() *BreadcrumbPane { return &BreadcrumbPane{} }
+
+func (b *BreadcrumbPane) Hide()        { b.hidden = true }
+func (b *BreadcrumbPane) Show()        { b.hidden = false }
+func (b *BreadcrumbPane) Toggle()      { b.hidden = !b.hidden }
+func (b *BreadcrumbPane) Hidden() bool { return b.hidden }
+
+// view renders the breadcrumb bar plus a full-width rule under it (mirroring the tab
+// strip), or "" when the pane is hidden or there are no crumbs. A nil pane renders
+// normally (shown), so the router can hand crumbs to it uniformly. Nil-receiver safe.
+func (b *BreadcrumbPane) view(crumbs []Crumb, width int) string {
+	if b != nil && b.hidden {
+		return ""
+	}
+	bar := RenderBreadcrumb(crumbs, width)
+	if bar == "" || width <= 0 {
+		return bar
+	}
+	rule := breadcrumbRuleStyle.Render(strings.Repeat("─", width))
+	return lipgloss.JoinVertical(lipgloss.Left, bar, rule)
+}
+
+// Crumb is one segment of the router-drawn breadcrumb: a full label and an optional
+// shorter form used when the trail is too wide. Short falls back to Full when empty.
+type Crumb struct {
+	Full  string
+	Short string
+}
+
+func (c Crumb) pick(short bool) string {
+	if short && c.Short != "" {
+		return c.Short
+	}
+	return c.Full
+}
+
+// crumbSep separates breadcrumb segments.
+const crumbSep = " › "
+
+// RenderBreadcrumb joins crumbs into the styled breadcrumb bar the router draws under
+// the tab strip: upstream segments + separators muted, the current (last) segment in
+// the accent. When the full trail is too wide for width it retries with the short form
+// of every segment but the last, then left-truncates the whole bar — keeping the
+// current segment visible. An empty slice renders nothing.
+func RenderBreadcrumb(crumbs []Crumb, width int) string {
+	if len(crumbs) == 0 {
+		return ""
+	}
+	last := len(crumbs) - 1
+	labels := func(short bool) []string {
+		out := make([]string, len(crumbs))
+		for i, c := range crumbs {
+			out[i] = c.pick(short && i != last)
+		}
+		return out
+	}
+	avail := width - 2 // breadcrumbBarStyle's horizontal padding
+	chosen := labels(false)
+	if width > 0 && lipgloss.Width(strings.Join(chosen, crumbSep)) > avail {
+		chosen = labels(true)
+	}
+	if width > 0 && lipgloss.Width(strings.Join(chosen, crumbSep)) > avail {
+		// Last resort: truncate the whole trail, keeping the tail (current segment).
+		return breadcrumbBarStyle.Render(crumbMutedStyle.Render(TruncLeft(strings.Join(chosen, crumbSep), avail)))
+	}
+	parts := make([]string, len(chosen))
+	for i, l := range chosen {
+		if i == last {
+			parts[i] = crumbCurStyle.Render(l)
+		} else {
+			parts[i] = crumbMutedStyle.Render(l)
+		}
+	}
+	return breadcrumbBarStyle.Render(strings.Join(parts, crumbMutedStyle.Render(crumbSep)))
 }
 
 // Output is a pluggable below-body pane the router renders, sizes, and — while it
