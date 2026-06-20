@@ -152,11 +152,26 @@ func statusFor(a Addon, baseDir string) Status {
 	return s
 }
 
+// InstallOutcome records one addon that was actually installed in a batch run, so a
+// caller can follow up per addon (the TUI's post-install location form). PriorPath is
+// the entry's manifest path before the install (empty for a path-less first install),
+// Path/Version the resolved result, URL the entry's source url. Only single-folder
+// installs (a pinnable Path) produce an outcome.
+type InstallOutcome struct {
+	Name      string
+	URL       string
+	PriorPath string
+	Path      string
+	Version   string
+}
+
 // InstallAll applies the manifest's skip/update policy: already-installed and
 // unversioned-present entries are skipped, mismatches are updated. After a
 // successful install it pins the resolved path + version back into the manifest
-// (entries start url-only; this records where they landed).
-func InstallAll(ctx context.Context, manifestPath string, statuses []Status, baseDir string, report Reporter) error {
+// (entries start url-only; this records where they landed). It returns one
+// InstallOutcome per addon actually installed (to a single, pinnable folder).
+func InstallAll(ctx context.Context, manifestPath string, statuses []Status, baseDir string, report Reporter) ([]InstallOutcome, error) {
+	var outcomes []InstallOutcome
 	for _, s := range statuses {
 		a := s.Addon
 		switch s.State {
@@ -184,9 +199,12 @@ func InstallAll(ctx context.Context, manifestPath string, statuses []Status, bas
 		}
 		if res.Path != "" {
 			_ = UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version, "")
+			outcomes = append(outcomes, InstallOutcome{
+				Name: a.Name, URL: a.URL, PriorPath: a.Path, Path: res.Path, Version: res.Version,
+			})
 		}
 	}
-	return nil
+	return outcomes, nil
 }
 
 // InstallResult reports where a single addon landed so the manifest entry can be

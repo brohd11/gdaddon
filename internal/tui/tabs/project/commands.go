@@ -7,8 +7,6 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"gdaddon/internal/addon"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // pinInstall writes the freshly installed entry's url/path/version/tag (+clone
@@ -50,22 +48,6 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 		return "cloned " + name + " (" + pick.tag + ")"
 	}
 	return "updated " + name + " → " + version
-}
-
-// finishInstallCmd pins the freshly installed url, resolved path, and version into the
-// manifest (disk IO, so it stays an async cmd), then returns ProjectDirty as its result
-// message; the router broadcasts it (reload + focus) when it arrives. Used when the
-// resolved path matched the entry's pinned path (no location form needed).
-func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
-	manifestPath := appctx.Of(sh).ManifestPath
-	return func() tea.Msg {
-		status := pinInstall(manifestPath, selected, pick, instPath, instVersion)
-		return core.Seq(
-			core.SetStatus(status),
-			core.PropagateAll(appctx.ProjectDirty{}),
-			core.ShowTab(appctx.TitleProject),
-		)
-	}
 }
 
 // commitRemove removes the addon from the project: the installed files too when

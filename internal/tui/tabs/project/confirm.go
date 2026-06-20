@@ -143,7 +143,7 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 }
 
 // effectivePick resolves the source toggle: in archive mode it installs from the local
-// copy (swapping the url and flagging archived so finishInstallCmd keeps the canonical
+// copy (swapping the url and flagging archived so pinInstall keeps the canonical
 // manifest url); the asset name stays the remote one for clean crumbs/labels.
 func effectivePick(pick versionItem, mode int) versionItem {
 	if mode == installArchive && pick.archivedAsset.URL != "" {

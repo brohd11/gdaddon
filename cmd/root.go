@@ -72,5 +72,6 @@ func runInstall(projectRoot string) error {
 		return nil
 	}
 	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
-	return addon.InstallAll(context.Background(), manifest, statuses, projectRoot, report)
+	_, err = addon.InstallAll(context.Background(), manifest, statuses, projectRoot, report)
+	return err
 }

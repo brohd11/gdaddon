@@ -22,24 +22,27 @@ const maxDepRounds = 10
 // dependencies declared by installed addons and installs them, until a round adds
 // nothing new (or the round cap is hit). Dependency assets are resolved over the
 // network automatically; each step is reported.
-func InstallAllDeps(ctx context.Context, manifestPath, baseDir string, report Reporter) error {
+func InstallAllDeps(ctx context.Context, manifestPath, baseDir string, report Reporter) ([]InstallOutcome, error) {
+	var outcomes []InstallOutcome
 	for round := 1; round <= maxDepRounds; round++ {
 		statuses, err := Inspect(manifestPath, baseDir)
 		if err != nil {
-			return err
+			return outcomes, err
 		}
-		if err := InstallAll(ctx, manifestPath, statuses, baseDir, report); err != nil {
-			return err
+		got, err := InstallAll(ctx, manifestPath, statuses, baseDir, report)
+		if err != nil {
+			return outcomes, err
 		}
+		outcomes = append(outcomes, got...)
 
 		added := importDeps(ctx, manifestPath, baseDir, report)
 		if added == 0 {
-			return nil
+			return outcomes, nil
 		}
 		report("Added %d dependenc%s to the manifest; installing…", added, plural(added))
 	}
 	report("Dependency resolution stopped after %d rounds.", maxDepRounds)
-	return nil
+	return outcomes, nil
 }
 
 // importDeps scans every installed addon for declared dependencies the manifest does

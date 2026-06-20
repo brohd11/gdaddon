@@ -50,15 +50,12 @@ func newInstallAllDepsConfirm(sh *core.Shared) *components.ConfirmScreen {
 func newInstallAllDepsTask() *components.TaskScreen {
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		c := appctx.Of(sh)
-		_ = addon.InstallAllDeps(ctx, c.ManifestPath, c.ProjectRoot, report)
-		done <- core.TaskEvent{Done: true}
+		outcomes, _ := addon.InstallAllDeps(ctx, c.ManifestPath, c.ProjectRoot, report)
+		done <- core.TaskEvent{Done: true, Payload: outcomes}
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		return core.Seq(
-			core.SetStatus("install complete"),
-			core.PropagateAll(appctx.ProjectDirty{}),
-			core.ShowTab(appctx.TitleProject),
-		)
+		outcomes, _ := ev.Payload.([]addon.InstallOutcome)
+		return finishBatch(sh, outcomes, "install complete")
 	}
 	return components.NewTask("installing all addons + dependencies…", run, onDone)
 }

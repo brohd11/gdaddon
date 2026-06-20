@@ -77,10 +77,11 @@ func InGlobalList(url string) bool {
 }
 
 // UpsertEntry updates the existing entry for url's repo (matched by source.RepoID)
-// in place — overwriting its url/version — or appends a new one when absent. Used
+// in place — overwriting its url/version/tag — or appends a new one when absent. Used
 // where re-selecting a plugin should re-pin it rather than error on a duplicate
-// (a set's "Add Version"). Reuses UpdateEntry / AddEntryWithVersion.
-func UpsertEntry(manifestPath, name, url, path, version string) error {
+// (a set's "Add Version"). Reuses UpdateEntry / AddEntryWithVersion. An empty tag
+// leaves an existing tag line untouched (a branch pin records no tag).
+func UpsertEntry(manifestPath, name, url, path, version, tag string) error {
 	existingName := ""
 	if id, err := source.RepoID(url); err == nil {
 		if entries, err := Parse(manifestPath); err == nil {
@@ -94,9 +95,9 @@ func UpsertEntry(manifestPath, name, url, path, version string) error {
 	}
 	if existingName != "" {
 		// UpdateEntry leaves path/tag untouched when "" and writes version.
-		return UpdateEntry(manifestPath, existingName, url, path, version, "")
+		return UpdateEntry(manifestPath, existingName, url, path, version, tag)
 	}
-	return AddEntryWithVersion(manifestPath, name, url, path, version, "")
+	return AddEntryWithVersion(manifestPath, name, url, path, version, tag)
 }
 
 // DeriveName extracts a plugin name from a repo URL: the last path segment with

@@ -233,7 +233,7 @@ func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.Pic
 			Name: "+ Add Plugin",
 			Desc: "add to the set (url only, no version)",
 			Pick: func(sh *core.Shared) core.Action {
-				if err := addon.AddEntry(setPath, g.Name, addon.NormalizeRepoURL(g.URL), ""); err != nil {
+				if err := addon.AddEntry(setPath, g.Name, addon.NormalizeRepoURL(g.URL), g.Path); err != nil {
 					return core.SetStatusAndLog("error: " + err.Error())
 				}
 				return core.Seq(
@@ -243,7 +243,7 @@ func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.Pic
 				)
 			},
 		},
-		setAddVersionItem(setName, setPath, g.Name, g.URL),
+		setAddVersionItem(setName, setPath, g.Name, g.URL, g.Path),
 	}
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Plugins", Title: g.Name})
 }
@@ -252,7 +252,7 @@ func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.Pic
 // versions (the packages flow) and pins the chosen one into the set via
 // setVersionEndpoint. Reused by the add-entry candidate submenu and the per-member
 // submenu.
-func setAddVersionItem(setName, setPath, name, url string) components.Item {
+func setAddVersionItem(setName, setPath, name, url, path string) components.Item {
 	return components.Item{
 		Name: "◷ Add Version",
 		Desc: "browse the repo's versions and pin one",
@@ -260,7 +260,7 @@ func setAddVersionItem(setName, setPath, name, url string) components.Item {
 			return core.Push(pck.BrowseRepo(url, pck.BrowseOpts{
 				Source:      pck.SourceRemote,
 				IncludeHEAD: true,
-				Endpoint:    setVersionEndpoint(setName, setPath, name),
+				Endpoint:    setVersionEndpoint(setName, setPath, name, path),
 			}))
 		},
 	}
@@ -269,14 +269,20 @@ func setAddVersionItem(setName, setPath, name, url string) components.Item {
 // setVersionEndpoint is the packages-flow leaf for Add Version: it confirms the
 // chosen version, then pins it (url = the asset's download URL, version = the tag)
 // into the set and returns to the set's command hub (PopTo).
-func setVersionEndpoint(setName, setPath, pluginName string) pck.Endpoint {
+func setVersionEndpoint(setName, setPath, pluginName, path string) pck.Endpoint {
 	return func(sel pck.Selection) core.Screen {
 		items := []list.Item{
 			components.Item{
 				Name: "+ Add " + sel.Tag,
 				Desc: "pin this version in " + setName + " (replaces any existing entry)",
 				Pick: func(sh *core.Shared) core.Action {
-					if err := addon.UpsertEntry(setPath, pluginName, sel.Asset.URL, "", sel.Tag); err != nil {
+					// Record the release tag for a real release (a branch pin has no tag,
+					// matching the project install's branch-tag rule).
+					validTag := ""
+					if !sel.Branch && sel.Tag != "" {
+						validTag = sel.Tag
+					}
+					if err := addon.UpsertEntry(setPath, pluginName, sel.Asset.URL, path, sel.Tag, validTag); err != nil {
 						return core.SetStatusAndLog("error: " + err.Error())
 					}
 					return core.Seq(
@@ -341,7 +347,7 @@ func newSetPluginsPicker(setName string) core.Screen {
 // or drop it from the set (Remove plugin). Both return to the set's command hub.
 func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.PickerScreen {
 	items := []list.Item{
-		setAddVersionItem(setName, setPath, e.Name, e.URL),
+		setAddVersionItem(setName, setPath, e.Name, e.URL, e.Path),
 		components.Item{
 			Name: "✗ Remove plugin",
 			Desc: "remove this plugin from the set",
@@ -389,7 +395,7 @@ func importSetToProject(sh *core.Shared, setName string) core.Action {
 	}
 	added, skipped := 0, 0
 	for _, e := range entries {
-		if err := addon.AddEntryWithVersion(c.ManifestPath, e.Name, e.URL, e.Path, e.Version, ""); err != nil {
+		if err := addon.AddEntryWithVersion(c.ManifestPath, e.Name, e.URL, e.Path, e.Version, e.Tag); err != nil {
 			skipped++
 			continue
 		}

@@ -216,6 +216,10 @@ type FormOpts struct {
 	Focus      string // initial focused field key; default first focusable
 	OnSubmit   func(*core.Shared, *FormScreen) core.Action
 	OnCancel   func(*core.Shared) core.Action // Back handler; defaults to a plain Pop
+	// OnKey claims extra keys before the form's default handling: it returns
+	// (action, true) for a key it handles, or (_, false) to let the form process it
+	// normally. Consumers must only claim non-text keys so editing still works.
+	OnKey func(*core.Shared, string) (core.Action, bool)
 }
 
 type FormScreen struct {
@@ -227,6 +231,7 @@ type FormScreen struct {
 	focus      int
 	onSubmit   func(*core.Shared, *FormScreen) core.Action
 	onCancel   func(*core.Shared) core.Action
+	onKey      func(*core.Shared, string) (core.Action, bool)
 }
 
 var _ core.Screen = (*FormScreen)(nil)
@@ -241,7 +246,7 @@ func (f *FormScreen) CrumbLabel(short bool) string {
 }
 
 func NewForm(opts FormOpts) *FormScreen {
-	f := &FormScreen{title: opts.Title, crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit, onCancel: opts.OnCancel}
+	f := &FormScreen{title: opts.Title, crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit, onCancel: opts.OnCancel, onKey: opts.OnKey}
 	f.focus = f.firstFocusable()
 	if opts.Focus != "" {
 		for i, fld := range f.fields {
@@ -288,6 +293,11 @@ func (f *FormScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 		return f, core.Action{}
 	}
 	k := key.String()
+	if f.onKey != nil {
+		if act, handled := f.onKey(sh, k); handled {
+			return f, act
+		}
+	}
 	switch {
 	case core.MatchKey(k, core.Keys.Back):
 		if f.onCancel != nil {

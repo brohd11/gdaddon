@@ -6,6 +6,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/postinstall"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -42,16 +43,21 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 		}
 		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
 		res, _ := ev.Payload.(installResult)
-		// When the resolved path differs from the entry's prior manifest path (a
-		// path-less or relocated entry), let the user confirm/correct where it
-		// landed — and optionally record it globally — before pinning. A package
-		// shipping several addons (res.Path == "") can't be tracked to one folder,
-		// so it finishes silently.
+		// Pin the resolved path immediately (matches the batch flows). When that path
+		// differs from the entry's prior manifest path (a path-less or relocated
+		// entry), hand off to the shared location form so the user can confirm/correct
+		// it and optionally record it globally; a package shipping several addons
+		// (res.Path == "") can't be tracked to one folder, so it finishes silently.
+		status := pinInstall(appctx.Of(sh).ManifestPath, selected, pick, res.Path, res.Version)
 		if res.Path != "" && res.Path != selected.Path {
-			inGlobal, _ := globalEntry(selected.URL, appctx.Of(sh).GlobalAddons)
-			return core.Replace(newLocationForm(selected, pick, res.Path, res.Version, inGlobal))
+			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: res.Version}
+			return core.Replace(postinstall.New(sh, []postinstall.Target{t}))
 		}
-		return core.Async(finishInstallCmd(sh, selected, pick, res.Path, res.Version))
+		return core.Seq(
+			core.SetStatus(status),
+			core.PropagateAll(appctx.ProjectDirty{}),
+			core.ShowTab(appctx.TitleProject),
+		)
 	}
 	return components.NewTask("installing "+selected.Name+"…", run, onDone)
 }

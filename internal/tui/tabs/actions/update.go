@@ -119,15 +119,12 @@ func updateAllBody(plans []addon.UpdatePlan) string {
 func newUpdateAllTask(plans []addon.UpdatePlan) *components.TaskScreen {
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		c := appctx.Of(sh)
-		_ = addon.UpdateAll(ctx, c.ManifestPath, plans, c.ProjectRoot, report)
-		done <- core.TaskEvent{Done: true}
+		outcomes, _ := addon.UpdateAll(ctx, c.ManifestPath, plans, c.ProjectRoot, report)
+		done <- core.TaskEvent{Done: true, Payload: outcomes}
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		return core.Seq(
-			core.SetStatus("update complete"),
-			core.PropagateAll(appctx.ProjectDirty{}),
-			core.ShowTab(appctx.TitleProject),
-		)
+		outcomes, _ := ev.Payload.([]addon.InstallOutcome)
+		return finishBatch(sh, outcomes, "update complete")
 	}
 	return components.NewTask("updating addons…", run, onDone)
 }

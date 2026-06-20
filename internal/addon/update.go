@@ -149,7 +149,8 @@ func resolveUpdateAsset(currentURL string, releases []source.Release, latest sou
 // url/path/version back into the manifest, reporting progress per addon. Plans
 // come from ResolveUpdate; an empty slice is a no-op. A single addon's failure is
 // reported and skipped so the rest still update.
-func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, baseDir string, report Reporter) error {
+func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, baseDir string, report Reporter) ([]InstallOutcome, error) {
+	var outcomes []InstallOutcome
 	for _, p := range plans {
 		a := p.Addon
 		old := p.OldVersion
@@ -170,9 +171,12 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 				version = strings.TrimPrefix(p.NewTag, "v")
 			}
 			_ = UpdateEntry(manifestPath, a.Name, p.Asset.URL, res.Path, version, p.NewTag)
+			outcomes = append(outcomes, InstallOutcome{
+				Name: a.Name, URL: a.URL, PriorPath: a.Path, Path: res.Path, Version: version,
+			})
 		}
 	}
-	return nil
+	return outcomes, nil
 }
 
 // latestRelease picks the newest non-prerelease (releases come newest-first),
