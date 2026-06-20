@@ -31,6 +31,7 @@ type ConfirmSimple struct {
 	Crumb      string
 	CrumbShort string
 	Render     func(*core.Shared) string // this overides text if not nil
+	OnYesLamda func(*core.Shared) core.Action
 	OnKey      func(*core.Shared, string) core.Action
 	Help       []key.Binding
 }
@@ -83,13 +84,17 @@ func CreateConfirmScreen(cs ConfirmSimple) *ConfirmScreen {
 	if cs.Render != nil {
 		render = cs.Render
 	}
+	onYes := func(sh *core.Shared) core.Action { return cs.OnYes }
+	if cs.OnYesLamda != nil {
+		onYes = cs.OnYesLamda
+	}
 
 	return &ConfirmScreen{
 		Title:      cs.Title,
 		Crumb:      cs.Crumb,
 		CrumbShort: cs.CrumbShort,
 		Render:     render,
-		OnYes:      func(sh *core.Shared) core.Action { return cs.OnYes },
+		OnYes:      onYes,
 		OnKey:      cs.OnKey,
 		Help:       cs.Help,
 	}

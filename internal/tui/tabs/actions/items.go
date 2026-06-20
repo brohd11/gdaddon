@@ -1,6 +1,8 @@
 package actions
 
 import (
+	"runtime"
+
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/newplugin"
 
@@ -19,12 +21,12 @@ func actionItems(sh *core.Shared) []list.Item {
 	var items []list.Item
 	if appctx.Of(sh).ManifestPath == "" {
 		items = append(items, components.Item{
-			Name: "✎ Create manifest",
+			Name: "✎ Create Manifest",
 			Desc: "create an addon_manifest.yml to track this project's plugins",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newCreateManifestForm(sh)) },
 		})
 	}
-	return append(items,
+	items = append(items,
 		components.Item{
 			Name: "↧ Install/Update All",
 			Desc: "install or update everything in the manifest",
@@ -42,9 +44,19 @@ func actionItems(sh *core.Shared) []list.Item {
 		},
 		components.Item{
 			Name: "⌖ Paths",
-			Desc: "open project, addons, manifest, or ~/.gdaddon in the file manager",
+			Desc: "open path in the file manager",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newPathsPicker(sh)) },
 		},
+	)
+	// macOS quarantines compiled plugins' native binaries; offer a manual clear.
+	if runtime.GOOS == "darwin" && appctx.Of(sh).ProjectRoot != "" {
+		items = append(items, components.Item{
+			Name: "⚿ Dequarantine Addons",
+			Desc: "clear macOS quarantine from addons folder",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newDequarantineConfirm(sh)) },
+		})
+	}
+	return append(items,
 		components.Item{
 			Name: "◑ Theme",
 			Desc: "change the color theme",

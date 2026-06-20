@@ -2,7 +2,7 @@
 // still be reinstalled after its upstream repo is delisted or deleted. Packages
 // are stored under a configurable directory (default ~/.gdaddon/archive), one
 // folder per repo and a subfolder per version, and surfaced back into the version
-// listing as "- archived" assets with local-file URLs.
+// listing as " (archived)" assets with local-file URLs.
 package archive
 
 import (
@@ -22,8 +22,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// archivedSuffix marks an asset name as coming from the local archive.
-const archivedSuffix = " - archived"
+// ArchivedSuffix marks an asset name as coming from the local archive.
+const ArchivedSuffix = " (archived)"
 
 // Dir resolves the archive root: ~/.gdaddon/config.yml's archive_dir if set,
 // otherwise ~/.gdaddon/archive. A leading "~" in archive_dir is expanded.
@@ -103,7 +103,7 @@ func Archive(ctx context.Context, repoID, tag string, asset source.Asset) error 
 // cleanAssetName strips the archived suffix (so re-archiving an archived asset
 // doesn't compound it) and any path separators.
 func cleanAssetName(name string) string {
-	name = strings.TrimSuffix(name, archivedSuffix)
+	name = strings.TrimSuffix(name, ArchivedSuffix)
 	return filepath.Base(name)
 }
 
@@ -160,7 +160,7 @@ func listDir(base string) ([]source.Release, error) {
 				continue
 			}
 			rel.Assets = append(rel.Assets, source.Asset{
-				Name: f.Name() + archivedSuffix,
+				Name: f.Name() + ArchivedSuffix,
 				URL:  filepath.Join(base, td.Name(), f.Name()),
 			})
 		}

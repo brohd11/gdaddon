@@ -346,18 +346,28 @@ func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.Pick
 			Name: "✗ Remove plugin",
 			Desc: "remove this plugin from the set",
 			Pick: func(sh *core.Shared) core.Action {
-				if err := addon.RemoveEntry(setPath, e.Name); err != nil {
-					return core.SetStatusAndLog("error: " + err.Error())
-				}
-				return core.Seq(
-					core.SetStatus("removed "+e.Name+" from "+setName),
-					core.PropagateAll(appctx.SetsDirty{}),
-					core.PopTo(),
-				)
+				return core.Push(newRemovePluginConf(setName, setPath, e))
 			},
 		},
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: e.Name})
+}
+
+func newRemovePluginConf(setName, setPath string, e addon.Addon) *components.ConfirmScreen {
+	return components.CreateConfirmScreen(components.ConfirmSimple{
+		Text: fmt.Sprintf("Remove %s from %s?", e.Name, setName),
+		OnYesLamda: func(sh *core.Shared) core.Action {
+			if err := addon.RemoveEntry(setPath, e.Name); err != nil {
+				return core.SetStatusAndLog("error: " + err.Error())
+			}
+			return core.Seq(
+				core.SetStatus("removed "+e.Name+" from "+setName),
+				core.PropagateAll(appctx.SetsDirty{}),
+				core.PopTo(), // pop to set menu and push refreshed plugins menu
+				core.Push(newSetPluginsPicker(setName)),
+			)
+		},
+	})
 }
 
 // ---------- import / delete ----------

@@ -23,8 +23,8 @@ import (
 
 // Display tokens for archived packages, kept here for easy editing.
 const (
-	archivedSuffix = " - archived"        // suffix on an asset sourced from the local archive
-	archivedMarker = "(already archived)" // marks a remote version that already has a local copy
+	archivedSuffix = arch.ArchivedSuffix   // suffix on an asset sourced from the local archive
+	archivedMarker = " (already archived)" // marks a remote version that already has a local copy
 )
 
 // Source selects where a package flow draws its versions from.
@@ -75,11 +75,11 @@ func (o BrowseOpts) marker() string {
 
 // archivedSet indexes a repo's archived packages by tag → asset name → the stored
 // local asset, so a remote listing can mark (and offer to install from) versions that
-// already have a local copy. Keys use the remote asset name (the " - archived" suffix
+// already have a local copy. Keys use the remote asset name (the " (archived)" suffix
 // trimmed) so a remote asset can be looked up directly.
 type archivedSet map[string]map[string]source.Asset
 
-// buildArchivedSet folds arch.List output (assets named "<file> - archived") into the
+// buildArchivedSet folds arch.List output (assets named "<file> (archived)") into the
 // index. Returns nil when there is nothing archived (so callers can treat nil as "no
 // annotation").
 func buildArchivedSet(archived []source.Release) archivedSet {
@@ -347,6 +347,10 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 	for _, rel := range releases {
 		rel := rel
 		desc := fmt.Sprintf("%d asset(s)", len(rel.Assets))
+		if len(rel.Assets) == 1 {
+			desc = "1 asset - " + rel.Assets[0].Name
+			// desc = stripSuffix(desc) // not sure about this
+		}
 		if rel.Prerelease {
 			desc += " · prerelease"
 		}

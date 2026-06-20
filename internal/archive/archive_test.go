@@ -72,7 +72,7 @@ func TestStoreAndList(t *testing.T) {
 		t.Errorf("expected newest first, got %q", releases[0].Tag)
 	}
 	a := releases[0].Assets[0]
-	if !strings.HasSuffix(a.Name, " - archived") {
+	if !strings.HasSuffix(a.Name, " (archived)") {
 		t.Errorf("asset name missing suffix: %q", a.Name)
 	}
 	if !strings.HasPrefix(a.URL, home) || !strings.HasSuffix(a.URL, "pkg.zip") {
@@ -192,8 +192,8 @@ func TestMerge(t *testing.T) {
 		{Tag: "v1.0.0", Assets: []source.Asset{{Name: "a.zip", URL: "http://x/a.zip"}}},
 	}}
 	archived := []source.Release{
-		{Tag: "v1.0.0", Assets: []source.Asset{{Name: "a.zip - archived", URL: "/local/a.zip"}}},
-		{Tag: "v0.9.0", Assets: []source.Asset{{Name: "old.zip - archived", URL: "/local/old.zip"}}},
+		{Tag: "v1.0.0", Assets: []source.Asset{{Name: "a.zip (archived)", URL: "/local/a.zip"}}},
+		{Tag: "v0.9.0", Assets: []source.Asset{{Name: "old.zip (archived)", URL: "/local/old.zip"}}},
 	}
 
 	got := Merge(listing, archived)
