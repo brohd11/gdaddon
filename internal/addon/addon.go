@@ -268,6 +268,33 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 	return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
 }
 
+// Relocate moves an installed addon directory from fromRel to toRel (both
+// project-root-relative), creating the destination's parent. It fails if the
+// destination already exists — the caller decides what to do about a clash rather
+// than silently overwriting. Used by the post-install "confirm location" form to
+// honor a corrected path without re-downloading; a plain os.Rename moves a normal
+// install or a clone (.git and all) alike.
+func Relocate(root, fromRel, toRel string) error {
+	from, err := filepath.Abs(filepath.Join(root, fromRel))
+	if err != nil {
+		return err
+	}
+	to, err := filepath.Abs(filepath.Join(root, toRel))
+	if err != nil {
+		return err
+	}
+	if from == to {
+		return nil
+	}
+	if _, err := os.Stat(to); err == nil {
+		return fmt.Errorf("destination already exists: %s", toRel)
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		return err
+	}
+	return os.Rename(from, to)
+}
+
 // Uninstall deletes an addon's installed files under baseDir, symmetric with
 // Install. The location is the entry's recorded path; it is lenient — an empty
 // path (nothing recorded) or an already-absent directory is a no-op — so a

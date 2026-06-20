@@ -166,6 +166,33 @@ func TestIsSourceArchiveURL(t *testing.T) {
 	}
 }
 
+func TestRelocate(t *testing.T) {
+	root := t.TempDir()
+	mkPlugin(t, root, "addons/my_addon")
+
+	// Moves the dir (creating the new parent) and leaves the old path gone.
+	if err := Relocate(root, "addons/my_addon", "addons/lib/renamed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "addons/lib/renamed/plugin.cfg")); err != nil {
+		t.Fatalf("file not moved: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "addons/my_addon")); !os.IsNotExist(err) {
+		t.Errorf("source dir should be gone")
+	}
+
+	// Same from/to is a no-op (not an error).
+	if err := Relocate(root, "addons/lib/renamed", "addons/lib/renamed"); err != nil {
+		t.Errorf("same-path relocate should be a no-op, got %v", err)
+	}
+
+	// Refuses to overwrite an existing destination.
+	mkPlugin(t, root, "addons/occupied")
+	if err := Relocate(root, "addons/lib/renamed", "addons/occupied"); err == nil {
+		t.Errorf("expected error relocating onto an existing dir")
+	}
+}
+
 func TestInspectURLOnlyIsMissing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")

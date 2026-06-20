@@ -11,11 +11,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// finishInstallCmd pins the freshly installed url, resolved path, and version into the
-// manifest (disk IO, so it stays an async cmd), then returns ProjectDirty as its result
-// message; the router broadcasts it (reload + focus) when it arrives.
-func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
-	manifestPath := appctx.Of(sh).ManifestPath
+// pinInstall writes the freshly installed entry's url/path/version/tag (+clone
+// flag) into the manifest and returns a human status line. path is passed in
+// explicitly so the post-install location form can pin a corrected path; the
+// url/version/tag derivation is shared with the silent finish path.
+func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, path, instVersion string) string {
 	name, url := selected.Name, pick.asset.URL
 	// Installing from the local archive must not pin the machine-specific archive
 	// path as the manifest url — keep the entry's canonical repo url instead.
@@ -41,15 +41,25 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 		url = "https://" + pick.repoID + ".git"
 	}
 
-	status := "updated " + name + " → " + version
+	_ = addon.UpdateEntry(manifestPath, name, url, path, version, tag)
 	if pick.clone {
-		status = "cloned " + name + " (" + pick.tag + ")"
+		_ = addon.SetCloneFlag(manifestPath, name, true)
 	}
+
+	if pick.clone {
+		return "cloned " + name + " (" + pick.tag + ")"
+	}
+	return "updated " + name + " → " + version
+}
+
+// finishInstallCmd pins the freshly installed url, resolved path, and version into the
+// manifest (disk IO, so it stays an async cmd), then returns ProjectDirty as its result
+// message; the router broadcasts it (reload + focus) when it arrives. Used when the
+// resolved path matched the entry's pinned path (no location form needed).
+func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, instPath, instVersion string) tea.Cmd {
+	manifestPath := appctx.Of(sh).ManifestPath
 	return func() tea.Msg {
-		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version, tag)
-		if pick.clone {
-			_ = addon.SetCloneFlag(manifestPath, name, true)
-		}
+		status := pinInstall(manifestPath, selected, pick, instPath, instVersion)
 		return core.Seq(
 			core.SetStatus(status),
 			core.PropagateAll(appctx.ProjectDirty{}),

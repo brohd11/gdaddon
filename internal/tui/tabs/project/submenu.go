@@ -69,8 +69,8 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 }
 
 // exportToGlobal copies the project addon into the global list, stripping the
-// (often release/archive-pinned) url down to its canonical repo url and dropping
-// the project-relative path — global entries are url-only. It then broadcasts
+// (often release/archive-pinned) url down to its canonical repo url and carrying
+// the project-relative path along as the global entry's remembered default. It then broadcasts
 // GlobalDirty (Focus false → the Global list reloads silently without leaving the
 // Project tab) and pops the submenu back. The row that triggers this is only shown
 // when the repo isn't already in the global list (addon.InGlobalList).
@@ -81,7 +81,7 @@ func exportToGlobal(sh *core.Shared, a addon.Addon) core.Action {
 	}
 	globalPath, err := addon.GlobalListPath()
 	if err == nil {
-		err = addon.AddEntry(globalPath, a.Name, url, "")
+		err = addon.AddEntry(globalPath, a.Name, url, a.Path)
 	}
 	if err != nil {
 		return core.Seq(

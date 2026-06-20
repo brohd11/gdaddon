@@ -42,6 +42,15 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 		}
 		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
 		res, _ := ev.Payload.(installResult)
+		// When the resolved path differs from the entry's prior manifest path (a
+		// path-less or relocated entry), let the user confirm/correct where it
+		// landed — and optionally record it globally — before pinning. A package
+		// shipping several addons (res.Path == "") can't be tracked to one folder,
+		// so it finishes silently.
+		if res.Path != "" && res.Path != selected.Path {
+			inGlobal, _ := globalEntry(selected.URL, appctx.Of(sh).GlobalAddons)
+			return core.Replace(newLocationForm(selected, pick, res.Path, res.Version, inGlobal))
+		}
 		return core.Async(finishInstallCmd(sh, selected, pick, res.Path, res.Version))
 	}
 	return components.NewTask("installing "+selected.Name+"…", run, onDone)
