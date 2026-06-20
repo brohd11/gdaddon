@@ -215,6 +215,7 @@ type FormOpts struct {
 	Help       []key.Binding
 	Focus      string // initial focused field key; default first focusable
 	OnSubmit   func(*core.Shared, *FormScreen) core.Action
+	OnCancel   func(*core.Shared) core.Action // Back handler; defaults to a plain Pop
 }
 
 type FormScreen struct {
@@ -225,6 +226,7 @@ type FormScreen struct {
 	help       []key.Binding
 	focus      int
 	onSubmit   func(*core.Shared, *FormScreen) core.Action
+	onCancel   func(*core.Shared) core.Action
 }
 
 var _ core.Screen = (*FormScreen)(nil)
@@ -239,7 +241,7 @@ func (f *FormScreen) CrumbLabel(short bool) string {
 }
 
 func NewForm(opts FormOpts) *FormScreen {
-	f := &FormScreen{title: opts.Title, crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit}
+	f := &FormScreen{title: opts.Title, crumb: opts.Crumb, crumbShort: opts.CrumbShort, fields: opts.Fields, help: opts.Help, onSubmit: opts.OnSubmit, onCancel: opts.OnCancel}
 	f.focus = f.firstFocusable()
 	if opts.Focus != "" {
 		for i, fld := range f.fields {
@@ -288,6 +290,9 @@ func (f *FormScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 	k := key.String()
 	switch {
 	case core.MatchKey(k, core.Keys.Back):
+		if f.onCancel != nil {
+			return f, f.onCancel(sh)
+		}
 		return f, core.Pop()
 	case core.MatchKey(k, core.Keys.PrevField):
 		f.move(-1)

@@ -60,6 +60,14 @@ func newLocationForm(selected addon.Addon, pick versionItem, instPath, instVersi
 		OnSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
 			return commitLocation(sh, selected, pick, instPath, instVersion, f, globalF)
 		},
+		// Dismissing without confirming leaves the files at the resolved path but
+		// pins nothing — log that so the entry's unpinned state isn't a surprise.
+		OnCancel: func(sh *core.Shared) core.Action {
+			return core.Seq(
+				core.SetStatusAndLog(selected.Name+": path not pinned (files left at "+instPath+")"),
+				core.ShowTab(appctx.TitleProject),
+			)
+		},
 	})
 	return form
 }
@@ -78,7 +86,8 @@ func commitLocation(sh *core.Shared, selected addon.Addon, pick versionItem, ins
 		)
 	}
 
-	if finalPath != instPath {
+	moved := finalPath != instPath
+	if moved {
 		if err := addon.Relocate(c.ProjectRoot, instPath, finalPath); err != nil {
 			return core.Seq(
 				core.SetStatusAndLog("error: "+err.Error()),
@@ -87,18 +96,39 @@ func commitLocation(sh *core.Shared, selected addon.Addon, pick versionItem, ins
 		}
 	}
 
-	status := pinInstall(c.ManifestPath, selected, pick, finalPath, instVersion)
+	pinStatus := pinInstall(c.ManifestPath, selected, pick, finalPath, instVersion)
 
-	acts := []core.Action{core.SetStatus(status), core.PropagateAll(appctx.ProjectDirty{})}
+	// Log only what actually changed: a move and/or a global write each get a log
+	// line; a quiet accept (no move, global skipped) keeps just a transient status.
+	acts := []core.Action{core.PropagateAll(appctx.ProjectDirty{})}
+	logged := false
+	if moved {
+		acts = append(acts, core.SetStatusAndLog("moved "+selected.Name+" → "+finalPath))
+		logged = true
+	}
 	if globalF.Index() == globalDo {
 		if err := applyGlobal(c, selected, finalPath); err != nil {
 			acts = append(acts, core.SetStatusAndLog("global: "+err.Error()))
 		} else {
+			acts = append(acts, core.SetStatusAndLog(globalActionMsg(c, selected)))
 			acts = append(acts, core.PropagateAll(appctx.GlobalDirty{}))
 		}
+		logged = true
+	}
+	if !logged {
+		acts = append(acts, core.SetStatus(pinStatus))
 	}
 	acts = append(acts, core.ShowTab(appctx.TitleProject))
 	return core.Seq(acts...)
+}
+
+// globalActionMsg describes the global write for the log: an update when the repo was
+// already listed, an export otherwise. Computed from the cached list (pre-write).
+func globalActionMsg(c *appctx.Ctx, selected addon.Addon) string {
+	if inGlobal, _ := globalEntry(selected.URL, c.GlobalAddons); inGlobal {
+		return "updated global path for " + selected.Name
+	}
+	return "exported " + selected.Name + " to global"
 }
 
 // applyGlobal records the install path in the global list: it adds a new url+path
