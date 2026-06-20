@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
 )
 
@@ -110,12 +111,35 @@ func importDeps(manifestPath, baseDir string, report Reporter) int {
 // ResolveDepAsset finds the dependency's required release and picks its install asset
 // (source.DependencyAsset: the single uploaded build, or the generated source archive
 // when none was uploaded; ambiguous multi-upload releases yield ok=false).
+//
+// It is archive-first: a tag-equal local copy avoids the network and survives upstream
+// delisting. It falls through to the network when the archive has no (unambiguous) match.
 func ResolveDepAsset(ctx context.Context, d Dependency) (source.Asset, bool) {
+	if asset, ok := archivedDepAsset(d); ok {
+		return asset, true
+	}
 	listing, err := source.AvailableVersions(ctx, d.RepoURL)
 	if err != nil || listing == nil {
 		return source.Asset{}, false
 	}
 	for _, rel := range listing.Releases {
+		if tagEqual(rel.Tag, d.Tag) {
+			return source.DependencyAsset(rel)
+		}
+	}
+	return source.Asset{}, false
+}
+
+// archivedDepAsset returns a locally archived asset for the dependency's required tag,
+// if one exists. The archive is keyed by tag, so this only applies to tagged deps; an
+// ambiguous archive (multiple stored assets at the tag) yields ok=false and lets the
+// caller fall through to the network.
+func archivedDepAsset(d Dependency) (source.Asset, bool) {
+	releases, err := archive.List(d.RepoID)
+	if err != nil {
+		return source.Asset{}, false
+	}
+	for _, rel := range releases {
 		if tagEqual(rel.Tag, d.Tag) {
 			return source.DependencyAsset(rel)
 		}
