@@ -55,36 +55,38 @@ func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 // update plan for each installed addon that has a newer release than the one
 // installed. Not-installed or url-less entries are skipped (nothing to compare).
 // The plans are name-sorted so the confirm list is deterministic.
-func resolveUpdatePlansCmd(manifestPath, projectRoot string) tea.Cmd {
-	return func() tea.Msg {
-		statuses, err := addon.Inspect(manifestPath, projectRoot)
-		if err != nil {
-			return updatePlansMsg{}
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), updateResolveTimeout)
-		defer cancel()
-
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		plans := make([]addon.UpdatePlan, 0)
-		for _, s := range statuses {
-			if !s.Present() || s.Addon.URL == "" {
-				continue
+func resolveUpdatePlansCmd(manifestPath, projectRoot string) func(context.Context) tea.Cmd {
+	return func(parent context.Context) tea.Cmd {
+		return func() tea.Msg {
+			statuses, err := addon.Inspect(manifestPath, projectRoot)
+			if err != nil {
+				return updatePlansMsg{}
 			}
-			wg.Add(1)
-			go func(a addon.Addon, local string) {
-				defer wg.Done()
-				if plan, ok := addon.ResolveUpdate(ctx, a, local); ok {
-					mu.Lock()
-					plans = append(plans, plan)
-					mu.Unlock()
+
+			ctx, cancel := context.WithTimeout(parent, updateResolveTimeout)
+			defer cancel()
+
+			var mu sync.Mutex
+			var wg sync.WaitGroup
+			plans := make([]addon.UpdatePlan, 0)
+			for _, s := range statuses {
+				if !s.Present() || s.Addon.URL == "" {
+					continue
 				}
-			}(s.Addon, s.LocalVersion)
+				wg.Add(1)
+				go func(a addon.Addon, local string) {
+					defer wg.Done()
+					if plan, ok := addon.ResolveUpdate(ctx, a, local); ok {
+						mu.Lock()
+						plans = append(plans, plan)
+						mu.Unlock()
+					}
+				}(s.Addon, s.LocalVersion)
+			}
+			wg.Wait()
+			sort.Slice(plans, func(i, j int) bool { return plans[i].Addon.Name < plans[j].Addon.Name })
+			return updatePlansMsg{plans: plans}
 		}
-		wg.Wait()
-		sort.Slice(plans, func(i, j int) bool { return plans[i].Addon.Name < plans[j].Addon.Name })
-		return updatePlansMsg{plans: plans}
 	}
 }
 
@@ -115,9 +117,9 @@ func updateAllBody(plans []addon.UpdatePlan) string {
 // (a ProjectDirty reloads it from the updated manifest), mirroring the install-all
 // task's completion.
 func newUpdateAllTask(plans []addon.UpdatePlan) *components.TaskScreen {
-	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
+	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		c := appctx.Of(sh)
-		_ = addon.UpdateAll(c.ManifestPath, plans, c.ProjectRoot, report)
+		_ = addon.UpdateAll(ctx, c.ManifestPath, plans, c.ProjectRoot, report)
 		done <- core.TaskEvent{Done: true}
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {

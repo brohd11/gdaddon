@@ -6,6 +6,7 @@
 package archive
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -69,12 +70,12 @@ func Store(repoID, tag, assetName string, r io.Reader) (string, error) {
 
 // Archive downloads a remote asset zip and stores it under the repo/tag. Assets
 // whose URL is already a local path are skipped (nothing to fetch).
-func Archive(repoID, tag string, asset source.Asset) error {
+func Archive(ctx context.Context, repoID, tag string, asset source.Asset) error {
 	if !strings.HasPrefix(asset.URL, "http") {
 		return nil
 	}
 
-	req, err := http.NewRequest(http.MethodGet, asset.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
 	if err != nil {
 		return err
 	}

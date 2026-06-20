@@ -45,7 +45,13 @@
 //	             closure), the screens PickerScreen, ConfirmScreen, LoadingScreen,
 //	             PopupScreen (the modal overlay, see "Overlays" below), and the generic
 //	             streaming TaskScreen, and LogPane (the default core.Output chrome). A tab
-//	             supplies the closures.
+//	             supplies the closures. The two screens that run background work —
+//	             TaskScreen (a streaming task) and LoadingScreen (a fetch spinner) — each
+//	             own a context.WithCancel and let esc abort the in-flight work: the work
+//	             closure (TaskScreen's RunFunc, LoadingScreen's Run) takes that ctx as its
+//	             first arg, so a cancellable closure threads it into its network/process
+//	             call; the screen then unwinds (TaskScreen lingers on an "aborted" log,
+//	             LoadingScreen pops back).
 //
 // The rest is gdaddon's domain front-end, under internal/tui:
 //

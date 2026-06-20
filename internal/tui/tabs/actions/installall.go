@@ -1,6 +1,8 @@
 package actions
 
 import (
+	"context"
+
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
 
@@ -46,9 +48,9 @@ func newInstallAllDepsConfirm(sh *core.Shared) *components.ConfirmScreen {
 // dependencies → install → repeat until nothing new), then lands on the Project tab
 // like the plain install-all task.
 func newInstallAllDepsTask() *components.TaskScreen {
-	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
+	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		c := appctx.Of(sh)
-		_ = addon.InstallAllDeps(c.ManifestPath, c.ProjectRoot, report)
+		_ = addon.InstallAllDeps(ctx, c.ManifestPath, c.ProjectRoot, report)
 		done <- core.TaskEvent{Done: true}
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {

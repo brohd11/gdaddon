@@ -1,6 +1,7 @@
 package packages
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -77,10 +78,10 @@ func archiveConfirmBody(name, tag string, assets []source.Asset) string {
 // ArchiveDirty so the Archive tab reloads. It stays on the log until dismissed and
 // pops back to the nearest command hub (PopTo).
 func newArchiveTask(tag, repoID string, assets []source.Asset) *components.TaskScreen {
-	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
+	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		for _, a := range assets {
 			report("downloading %s …", strings.TrimSuffix(a.Name, archivedSuffix))
-			if err := arch.Archive(repoID, tag, a); err != nil {
+			if err := arch.Archive(ctx, repoID, tag, a); err != nil {
 				done <- core.TaskEvent{Done: true, Err: err}
 				return
 			}

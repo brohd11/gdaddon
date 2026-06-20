@@ -60,7 +60,7 @@ func TestParseDependencyList(t *testing.T) {
 
 func TestDependenciesFromCfg(t *testing.T) {
 	dir := t.TempDir()
-	cfg := "[plugin]\nname=\"Demo\"\nversion=\"1.0.0\"\ndependencies=[\"u/Dep@v1.2.0\"]\n"
+	cfg := "[plugin]\nname=\"Demo\"\nversion=\"1.0.0\"\ndeps=[\"u/Dep@v1.2.0\"]\n"
 	if err := os.WriteFile(filepath.Join(dir, "plugin.cfg"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestMissingDeps(t *testing.T) {
 	}
 	cfg := `[plugin]
 name="A"
-dependencies=["u/Present@v1.0.0", "u/Absent@v1.0.0", "u/Stale@v2.0.0", "u/Tagless"]
+deps=["u/Present@v1.0.0", "u/Absent@v1.0.0", "u/Stale@v2.0.0", "u/Tagless"]
 `
 	if err := os.WriteFile(filepath.Join(addonDir, "plugin.cfg"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)

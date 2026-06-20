@@ -2,6 +2,7 @@ package addon
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,20 +15,21 @@ import (
 // fetchToStaging downloads (.zip) or clones (.git) the addon into a temporary
 // staging directory and returns its content root: for zips, GitHub's single
 // "repo-tag/" wrapper folder is unwrapped so the layout matches a git checkout.
-// The returned cleanup removes all temp artifacts.
-func fetchToStaging(url, addonName string, report Reporter) (stagingRoot string, cleanup func(), err error) {
+// The returned cleanup removes all temp artifacts. ctx cancels the in-flight
+// download/clone when the caller aborts.
+func fetchToStaging(ctx context.Context, url, addonName string, report Reporter) (stagingRoot string, cleanup func(), err error) {
 	switch {
 	case strings.HasSuffix(url, ".zip"):
-		return fetchZip(url, addonName, report)
+		return fetchZip(ctx, url, addonName, report)
 	case strings.HasSuffix(url, ".git"):
-		return fetchGit(url, addonName, report)
+		return fetchGit(ctx, url, addonName, report)
 	default:
 		return "", func() {}, fmt.Errorf("URL must end in '.zip' or '.git'. Found: %s", url)
 	}
 }
 
-func fetchZip(url, addonName string, report Reporter) (string, func(), error) {
-	zipPath, zipCleanup, err := obtainZip(url, addonName, report)
+func fetchZip(ctx context.Context, url, addonName string, report Reporter) (string, func(), error) {
+	zipPath, zipCleanup, err := obtainZip(ctx, url, addonName, report)
 	if err != nil {
 		return "", func() {}, err
 	}
@@ -56,14 +58,14 @@ func fetchZip(url, addonName string, report Reporter) (string, func(), error) {
 // obtainZip returns a path to the zip to extract: a local archive file is used in
 // place (cleanup is a no-op so the user's archive isn't deleted); a remote url is
 // downloaded to a temp file (cleanup removes it).
-func obtainZip(url, addonName string, report Reporter) (zipPath string, cleanup func(), err error) {
+func obtainZip(ctx context.Context, url, addonName string, report Reporter) (zipPath string, cleanup func(), err error) {
 	if info, err := os.Stat(url); err == nil && !info.IsDir() {
 		report("[%s] Using local archive %s...", addonName, url)
 		return url, func() {}, nil
 	}
 
 	report("[%s] Downloading ZIP from %s...", addonName, url)
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", func() {}, err
 	}
@@ -88,7 +90,7 @@ func obtainZip(url, addonName string, report Reporter) (zipPath string, cleanup 
 	return tmpFile.Name(), func() { os.Remove(tmpFile.Name()) }, nil
 }
 
-func fetchGit(url, addonName string, report Reporter) (string, func(), error) {
+func fetchGit(ctx context.Context, url, addonName string, report Reporter) (string, func(), error) {
 	report("[%s] Cloning repository...", addonName)
 
 	tempDir, err := os.MkdirTemp("", "godot-addon-clone-*")
@@ -97,7 +99,7 @@ func fetchGit(url, addonName string, report Reporter) (string, func(), error) {
 	}
 	cleanup := func() { os.RemoveAll(tempDir) }
 
-	cmd := exec.Command("git", "clone", "--depth", "1", url, tempDir)
+	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", url, tempDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		report("  -> Failed to clone %s:\n%s", addonName, string(out))
 		cleanup()

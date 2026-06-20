@@ -65,55 +65,57 @@ func newGetDepsLoading(st addon.Status, sh *core.Shared) *components.LoadingScre
 	return components.NewLoadingScreen(name, "resolving dependencies…", resolveDepsCmd(manifestPath, addonDir), onResult)
 }
 
-func resolveDepsCmd(manifestPath, addonDir string) tea.Cmd {
-	return func() tea.Msg {
-		deps, err := addon.Dependencies(addonDir)
-		if err != nil {
-			return depPlan{err: err}
-		}
-		entries, err := addon.Parse(manifestPath)
-		if err != nil {
-			return depPlan{err: err}
-		}
-		byRepo := make(map[string]addon.Addon, len(entries))
-		for _, e := range entries {
-			if id, err := source.RepoID(e.URL); err == nil {
-				byRepo[id] = e
+func resolveDepsCmd(manifestPath, addonDir string) func(context.Context) tea.Cmd {
+	return func(parent context.Context) tea.Cmd {
+		return func() tea.Msg {
+			deps, err := addon.Dependencies(addonDir)
+			if err != nil {
+				return depPlan{err: err}
 			}
-		}
+			entries, err := addon.Parse(manifestPath)
+			if err != nil {
+				return depPlan{err: err}
+			}
+			byRepo := make(map[string]addon.Addon, len(entries))
+			for _, e := range entries {
+				if id, err := source.RepoID(e.URL); err == nil {
+					byRepo[id] = e
+				}
+			}
 
-		ctx, cancel := context.WithTimeout(context.Background(), depsResolveTimeout)
-		defer cancel()
+			ctx, cancel := context.WithTimeout(parent, depsResolveTimeout)
+			defer cancel()
 
-		var plan depPlan
-		for _, d := range deps {
-			// Tagless dependency: any present copy satisfies it; when absent, plan to
-			// add the repo version-less (Install All clones it; user can pin later).
-			if d.Tag == "" {
-				if _, ok := byRepo[d.RepoID]; ok {
-					plan.satisfied++
+			var plan depPlan
+			for _, d := range deps {
+				// Tagless dependency: any present copy satisfies it; when absent, plan to
+				// add the repo version-less (Install All clones it; user can pin later).
+				if d.Tag == "" {
+					if _, ok := byRepo[d.RepoID]; ok {
+						plan.satisfied++
+						continue
+					}
+					plan.add = append(plan.add, plannedDep{name: addon.DeriveName(d.RepoURL), url: addon.NormalizeRepoURL(d.RepoURL)})
 					continue
 				}
-				plan.add = append(plan.add, plannedDep{name: addon.DeriveName(d.RepoURL), url: addon.NormalizeRepoURL(d.RepoURL)})
-				continue
-			}
 
-			if existing, ok := byRepo[d.RepoID]; ok {
-				if sat, _ := d.SatisfiedByTag(existing.Tag); sat {
-					plan.satisfied++
-				} else {
-					plan.skipped = append(plan.skipped, fmt.Sprintf("%s has %s, needs %s", d.RepoID, tagOrNone(existing.Tag), d.Tag))
+				if existing, ok := byRepo[d.RepoID]; ok {
+					if sat, _ := d.SatisfiedByTag(existing.Tag); sat {
+						plan.satisfied++
+					} else {
+						plan.skipped = append(plan.skipped, fmt.Sprintf("%s has %s, needs %s", d.RepoID, tagOrNone(existing.Tag), d.Tag))
+					}
+					continue
 				}
-				continue
+				asset, ok := addon.ResolveDepAsset(ctx, d)
+				if !ok {
+					plan.skipped = append(plan.skipped, d.RepoID+" (no asset for "+d.Tag+")")
+					continue
+				}
+				plan.add = append(plan.add, plannedDep{name: addon.DeriveName(d.RepoURL), url: asset.URL, tag: d.Tag})
 			}
-			asset, ok := addon.ResolveDepAsset(ctx, d)
-			if !ok {
-				plan.skipped = append(plan.skipped, d.RepoID+" (no asset for "+d.Tag+")")
-				continue
-			}
-			plan.add = append(plan.add, plannedDep{name: addon.DeriveName(d.RepoURL), url: asset.URL, tag: d.Tag})
+			return plan
 		}
-		return plan
 	}
 }
 

@@ -292,17 +292,21 @@ func archiveOnly(remote, archived []source.Release) []source.Release {
 	return out
 }
 
-func fetchReleases(url string) tea.Cmd {
-	return func() tea.Msg {
-		listing, err := source.AvailableVersions(context.Background(), url)
-		return releasesMsg{listing: listing, err: err}
+func fetchReleases(url string) func(context.Context) tea.Cmd {
+	return func(ctx context.Context) tea.Cmd {
+		return func() tea.Msg {
+			listing, err := source.AvailableVersions(ctx, url)
+			return releasesMsg{listing: listing, err: err}
+		}
 	}
 }
 
-func fetchBranches(url string) tea.Cmd {
-	return func() tea.Msg {
-		branches, err := source.Branches(context.Background(), url)
-		return branchesMsg{branches: branches, err: err}
+func fetchBranches(url string) func(context.Context) tea.Cmd {
+	return func(ctx context.Context) tea.Cmd {
+		return func() tea.Msg {
+			branches, err := source.Branches(ctx, url)
+			return branchesMsg{branches: branches, err: err}
+		}
 	}
 }
 

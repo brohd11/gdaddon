@@ -1,6 +1,7 @@
 package components
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/brohd11/bubblestack/core"
@@ -10,13 +11,19 @@ import (
 )
 
 // RunFunc executes a streaming background task: report() pipes progress lines into
-// the log, and the terminating core.TaskEvent (Done:true) is sent on done.
-type RunFunc func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent)
+// the log, and the terminating core.TaskEvent (Done:true) is sent on done. ctx is
+// cancelled when the user aborts the task (esc), so a cancellable RunFunc should
+// thread it into its network/process work and return promptly once it fires.
+type RunFunc func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent)
 
 // TaskScreen runs a streaming background task and shows its log. It is context-
 // agnostic: the calling tab supplies run (the work), onDone (what to do with the
 // terminating event), and — for tasks that stay on the log until dismissed — a
 // doneLabel + onDismiss. It names no domain type.
+//
+// While the task runs, esc requests an abort: the run's context is cancelled and the
+// screen waits for the run to unwind, then stays on the log showing "aborted" until
+// the user dismisses it (rather than running onDone's success navigation).
 type TaskScreen struct {
 	label, doneLabel string
 	Crumb            string
@@ -26,6 +33,8 @@ type TaskScreen struct {
 	onDone           func(*core.Shared, core.TaskEvent) core.Action
 	onDismiss        func(*core.Shared) core.Action
 	done             bool
+	cancel           context.CancelFunc
+	aborting         bool
 }
 
 var _ core.Crumber = (*TaskScreen)(nil)
@@ -48,7 +57,11 @@ func NewStayTask(label, doneLabel string, run RunFunc,
 	return &TaskScreen{label: label, doneLabel: doneLabel, stay: true, run: run, onDone: onDone, onDismiss: onDismiss}
 }
 
-func (s *TaskScreen) Init(sh *core.Shared) tea.Cmd { return startTask(sh, s.run) }
+func (s *TaskScreen) Init(sh *core.Shared) tea.Cmd {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
+	return startTask(ctx, sh, s.run)
+}
 
 func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
 	switch msg := msg.(type) {
@@ -58,6 +71,12 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 			return s, core.Async(waitForEvent(sh.Events))
 		}
 		s.done = true
+		if s.aborting {
+			// The run unwound after the abort. Stay on the log with an "aborted"
+			// notice until the user dismisses it, rather than running onDone's
+			// success navigation (which would land as if the work had completed).
+			return s, core.SetStatusAndLog("aborted")
+		}
 		act := s.onDone(sh, msg)
 		// A non-stay task navigates away via act (e.g. a ShowTab). A stay-task remains
 		// on its log until the user dismisses it (esc/enter), but act is still applied
@@ -66,9 +85,24 @@ func (s *TaskScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 		return s, act
 
 	case tea.KeyMsg:
-		if s.stay && s.done {
-			k := msg.String()
-			if core.MatchKey(k, core.Keys.Back) || core.MatchKey(k, core.Keys.Select) {
+		k := msg.String()
+		// While the task is still running, esc requests an abort: cancel the run's
+		// context and wait for its terminating event (handled above) to unwind it.
+		if !s.done && !s.aborting && core.MatchKey(k, core.Keys.Back) {
+			s.aborting = true
+			if s.cancel != nil {
+				s.cancel()
+			}
+			return s, core.SetStatusAndLog("aborting…")
+		}
+		if s.done && (core.MatchKey(k, core.Keys.Back) || core.MatchKey(k, core.Keys.Select)) {
+			// An aborted task (any kind) and a finished stay-task both linger on the
+			// log until dismissed. Aborted tasks fall back to a plain Pop when the
+			// caller supplied no onDismiss (non-stay tasks).
+			if s.aborting && s.onDismiss == nil {
+				return s, core.Pop()
+			}
+			if s.aborting || s.stay {
 				return s, s.onDismiss(sh)
 			}
 		}
@@ -84,17 +118,25 @@ func (s *TaskScreen) View(sh *core.Shared) string {
 		glyph = "•"
 	}
 	label := s.label
-	if s.stay && s.done {
+	switch {
+	case s.aborting && s.done:
+		label = "aborted — esc to go back"
+	case s.aborting:
+		label = "aborting…"
+	case s.stay && s.done:
 		label = s.doneLabel
 	}
 	return fmt.Sprintf("\n  %s %s", glyph, label)
 }
 
 func (s *TaskScreen) HelpView(sh *core.Shared) string {
-	if s.stay && s.done {
+	if s.done && (s.aborting || s.stay) {
 		return sh.BindingHelp([]key.Binding{core.Hint("back", core.Keys.Back)})
 	}
-	return sh.NoteHelp("non-interactive · working…")
+	if s.aborting {
+		return sh.NoteHelp("aborting…")
+	}
+	return sh.BindingHelp([]key.Binding{core.Hint("abort", core.Keys.Back)})
 }
 
 func (s *TaskScreen) SetSize(sh *core.Shared, width, bodyHeight int) {}
@@ -104,14 +146,14 @@ func (s *TaskScreen) SetSize(sh *core.Shared, width, bodyHeight int) {}
 // startTask spawns run in the background, piping report() lines into the output
 // log via the shared events channel, and returns the spinner tick + the wait for
 // the first event.
-func startTask(sh *core.Shared, run RunFunc) tea.Cmd {
+func startTask(ctx context.Context, sh *core.Shared, run RunFunc) tea.Cmd {
 	sh.Events = make(chan core.TaskEvent)
 	ch := sh.Events
 	go func() {
 		report := func(format string, args ...any) {
 			ch <- core.TaskEvent{Line: fmt.Sprintf(format, args...)}
 		}
-		run(sh, report, ch)
+		run(ctx, sh, report, ch)
 	}()
 	return tea.Batch(sh.Spinner.Tick, waitForEvent(ch))
 }

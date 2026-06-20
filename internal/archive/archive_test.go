@@ -1,6 +1,7 @@
 package archive
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -226,7 +227,7 @@ func TestArchiveDownloads(t *testing.T) {
 
 	const repoID = "github.com/owner/repo"
 	asset := source.Asset{Name: "thing.zip", URL: srv.URL + "/thing.zip"}
-	if err := Archive(repoID, "v2.0.0", asset); err != nil {
+	if err := Archive(context.Background(), repoID, "v2.0.0", asset); err != nil {
 		t.Fatal(err)
 	}
 
@@ -240,7 +241,7 @@ func TestArchiveDownloads(t *testing.T) {
 	}
 
 	// A local-url asset is a no-op (nothing to fetch).
-	if err := Archive(repoID, "v2.0.0", source.Asset{Name: "x.zip", URL: "/already/local.zip"}); err != nil {
+	if err := Archive(context.Background(), repoID, "v2.0.0", source.Asset{Name: "x.zip", URL: "/already/local.zip"}); err != nil {
 		t.Errorf("local asset archive should be a no-op, got %v", err)
 	}
 }

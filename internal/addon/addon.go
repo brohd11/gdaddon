@@ -5,6 +5,7 @@
 package addon
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -142,7 +143,7 @@ func statusFor(a Addon, baseDir string) Status {
 // unversioned-present entries are skipped, mismatches are updated. After a
 // successful install it pins the resolved path + version back into the manifest
 // (entries start url-only; this records where they landed).
-func InstallAll(manifestPath string, statuses []Status, baseDir string, report Reporter) error {
+func InstallAll(ctx context.Context, manifestPath string, statuses []Status, baseDir string, report Reporter) error {
 	for _, s := range statuses {
 		a := s.Addon
 		switch s.State {
@@ -163,7 +164,7 @@ func InstallAll(manifestPath string, statuses []Status, baseDir string, report R
 			report("[%s] Version mismatch! Local is %s, YAML wants %s. Updating...", a.Name, old, a.Version)
 		}
 
-		res, err := Install(a, baseDir, report)
+		res, err := Install(ctx, a, baseDir, report)
 		if err != nil {
 			report("[%s] Error: %v", a.Name, err)
 			continue
@@ -188,12 +189,12 @@ type InstallResult struct {
 // is the entry's explicit path when set, otherwise it's derived from the
 // package's plugin.cfg layout (see resolveInstall). Existing folders at each
 // destination are replaced.
-func Install(a Addon, baseDir string, report Reporter) (InstallResult, error) {
+func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	if a.URL == "" {
 		return InstallResult{}, fmt.Errorf("missing 'url'")
 	}
 
-	stagingRoot, cleanup, err := fetchToStaging(a.URL, a.Name, report)
+	stagingRoot, cleanup, err := fetchToStaging(ctx, a.URL, a.Name, report)
 	if err != nil {
 		return InstallResult{}, err
 	}

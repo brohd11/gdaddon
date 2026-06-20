@@ -3,6 +3,7 @@ package addon
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -44,7 +45,7 @@ func TestInstallZipEndToEnd(t *testing.T) {
 	project := t.TempDir()
 	a := Addon{Name: "Whatever", URL: srv.URL + "/archive.zip"}
 
-	res, err := Install(a, project, func(string, ...any) {})
+	res, err := Install(context.Background(), a, project, func(string, ...any) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ func TestInstallLocalZip(t *testing.T) {
 	}
 
 	project := t.TempDir()
-	res, err := Install(Addon{Name: "Whatever", URL: zipPath}, project, func(string, ...any) {})
+	res, err := Install(context.Background(), Addon{Name: "Whatever", URL: zipPath}, project, func(string, ...any) {})
 	if err != nil {
 		t.Fatal(err)
 	}

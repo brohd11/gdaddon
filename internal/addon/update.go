@@ -144,7 +144,7 @@ func resolveUpdateAsset(currentURL string, releases []source.Release, latest sou
 // url/path/version back into the manifest, reporting progress per addon. Plans
 // come from ResolveUpdate; an empty slice is a no-op. A single addon's failure is
 // reported and skipped so the rest still update.
-func UpdateAll(manifestPath string, plans []UpdatePlan, baseDir string, report Reporter) error {
+func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, baseDir string, report Reporter) error {
 	for _, p := range plans {
 		a := p.Addon
 		old := p.OldVersion
@@ -154,7 +154,7 @@ func UpdateAll(manifestPath string, plans []UpdatePlan, baseDir string, report R
 		report("[%s] Updating %s → %s...", a.Name, old, p.NewTag)
 
 		target := Addon{Name: a.Name, URL: p.Asset.URL, Path: a.Path}
-		res, err := Install(target, baseDir, report)
+		res, err := Install(ctx, target, baseDir, report)
 		if err != nil {
 			report("[%s] Error: %v", a.Name, err)
 			continue

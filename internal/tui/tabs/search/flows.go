@@ -91,9 +91,11 @@ func newSourcePicker(dst *searchpkg.Source) *components.PickerScreen {
 // ---------- search loading + results ----------
 
 func newSearchLoading(src searchpkg.Source, query, godotVer string, page int) *components.LoadingScreen {
-	cmd := func() tea.Msg {
-		res, err := src.Search(context.Background(), query, godotVer, page)
-		return searchResultMsg{res: res, err: err}
+	cmd := func(ctx context.Context) tea.Cmd {
+		return func() tea.Msg {
+			res, err := src.Search(ctx, query, godotVer, page)
+			return searchResultMsg{res: res, err: err}
+		}
 	}
 	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
 		m, ok := msg.(searchResultMsg)
@@ -174,9 +176,11 @@ func resultDesc(r searchpkg.Summary) string {
 // repo/download URLs) and opens an install submenu built from whichever URLs the
 // detail resolved.
 func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen {
-	cmd := func() tea.Msg {
-		d, err := src.Detail(context.Background(), id)
-		return detailMsg{detail: d, err: err}
+	cmd := func(ctx context.Context) tea.Cmd {
+		return func() tea.Msg {
+			d, err := src.Detail(ctx, id)
+			return detailMsg{detail: d, err: err}
+		}
 	}
 	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
 		m, ok := msg.(detailMsg)

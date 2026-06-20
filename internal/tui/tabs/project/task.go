@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"fmt"
 
 	"gdaddon/internal/addon"
@@ -20,8 +21,8 @@ type installResult struct{ Path, Version string }
 
 func newInstallTask(selected addon.Addon, local string, pick versionItem) *components.TaskScreen {
 	target := addon.Addon{Name: selected.Name, URL: pick.asset.URL, Path: selected.Path}
-	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
-		res, err := addon.Install(target, appctx.Of(sh).ProjectRoot, report)
+	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
+		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
 		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {

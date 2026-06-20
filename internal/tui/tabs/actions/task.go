@@ -1,6 +1,8 @@
 package actions
 
 import (
+	"context"
+
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
 	"github.com/brohd11/bubblestack/components"
@@ -10,13 +12,13 @@ import (
 // newInstallAllTask runs a batch install of everything in the manifest, then lands
 // the result on the Browse tab (a Project refresh reloads it from the manifest).
 func newInstallAllTask() *components.TaskScreen {
-	run := func(sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
+	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		c := appctx.Of(sh)
 		statuses, err := addon.Inspect(c.ManifestPath, c.ProjectRoot)
 		if err != nil {
 			report("error: %v", err)
 		} else {
-			_ = addon.InstallAll(c.ManifestPath, statuses, c.ProjectRoot, report)
+			_ = addon.InstallAll(ctx, c.ManifestPath, statuses, c.ProjectRoot, report)
 		}
 		done <- core.TaskEvent{Done: true}
 	}

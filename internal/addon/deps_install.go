@@ -22,17 +22,17 @@ const maxDepRounds = 10
 // dependencies declared by installed addons and installs them, until a round adds
 // nothing new (or the round cap is hit). Dependency assets are resolved over the
 // network automatically; each step is reported.
-func InstallAllDeps(manifestPath, baseDir string, report Reporter) error {
+func InstallAllDeps(ctx context.Context, manifestPath, baseDir string, report Reporter) error {
 	for round := 1; round <= maxDepRounds; round++ {
 		statuses, err := Inspect(manifestPath, baseDir)
 		if err != nil {
 			return err
 		}
-		if err := InstallAll(manifestPath, statuses, baseDir, report); err != nil {
+		if err := InstallAll(ctx, manifestPath, statuses, baseDir, report); err != nil {
 			return err
 		}
 
-		added := importDeps(manifestPath, baseDir, report)
+		added := importDeps(ctx, manifestPath, baseDir, report)
 		if added == 0 {
 			return nil
 		}
@@ -46,7 +46,7 @@ func InstallAllDeps(manifestPath, baseDir string, report Reporter) error {
 // not yet satisfy, resolves each (tagless → repo-only, tagged → release asset), and
 // appends it to the manifest. It writes nothing it can't resolve. It returns the
 // number of entries added so the caller knows whether another install round is due.
-func importDeps(manifestPath, baseDir string, report Reporter) int {
+func importDeps(parent context.Context, manifestPath, baseDir string, report Reporter) int {
 	statuses, err := Inspect(manifestPath, baseDir)
 	if err != nil {
 		return 0
@@ -77,7 +77,7 @@ func importDeps(manifestPath, baseDir string, report Reporter) int {
 		return 0
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), depsResolveTimeout)
+	ctx, cancel := context.WithTimeout(parent, depsResolveTimeout)
 	defer cancel()
 
 	added := 0
