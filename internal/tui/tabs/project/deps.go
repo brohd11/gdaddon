@@ -106,7 +106,7 @@ func resolveDepsCmd(manifestPath, addonDir string) tea.Cmd {
 				}
 				continue
 			}
-			asset, ok := resolveDepAsset(ctx, d)
+			asset, ok := addon.ResolveDepAsset(ctx, d)
 			if !ok {
 				plan.skipped = append(plan.skipped, d.RepoID+" (no asset for "+d.Tag+")")
 				continue
@@ -184,28 +184,6 @@ func commitDeps(name, manifestPath string, plan depPlan) core.Action {
 		core.PropagateAll(appctx.ProjectDirty{}),
 		core.ShowTab(appctx.TitleProject),
 	)
-}
-
-// resolveDepAsset finds the dependency's required release and picks its install
-// asset (source.DependencyAsset: the single uploaded build, or the generated source
-// archive when none was uploaded; ambiguous multi-upload releases yield ok=false).
-func resolveDepAsset(ctx context.Context, d addon.Dependency) (source.Asset, bool) {
-	listing, err := source.AvailableVersions(ctx, d.RepoURL)
-	if err != nil || listing == nil {
-		return source.Asset{}, false
-	}
-	for _, rel := range listing.Releases {
-		if tagEqual(rel.Tag, d.Tag) {
-			return source.DependencyAsset(rel)
-		}
-	}
-	return source.Asset{}, false
-}
-
-// tagEqual matches a required tag against a release tag, tolerating a leading "v"
-// on either side (e.g. "1.2.0" matches "v1.2.0").
-func tagEqual(a, b string) bool {
-	return a == b || strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
 }
 
 func tagOrNone(tag string) string {
