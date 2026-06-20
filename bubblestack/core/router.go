@@ -195,12 +195,14 @@ func (r *Router) applyCtrl(m tea.Msg, cmds *[]tea.Cmd) (follows []tea.Msg) {
 		}
 
 	case propagateMsg:
-		// Broadcast the opaque payload to every tab root plus the active tab's deeper
-		// screens; each Receiver claims what it recognizes. The router never interprets
-		// the payload (no per-notification case). A Receiver may return an Action (e.g.
-		// ShowTab to grab focus), resolved in this same tick.
-		notify := func(s Screen) {
-			if rc, ok := s.(Receiver); ok {
+		// Broadcast the opaque payload to every tab root, the active tab's deeper
+		// screens, and the consumer's App — each Receiver claims what it recognizes.
+		// The router never interprets the payload (no per-notification case). A Receiver
+		// may return an Action (e.g. ShowTab to grab focus, or RefreshRoots after a theme
+		// change), resolved in this same tick. The App is notified last so a follow-up it
+		// returns lands after every live screen has seen the payload.
+		notify := func(v any) {
+			if rc, ok := v.(Receiver); ok {
 				act := rc.Receive(r.sh, m.payload)
 				if act.Msg != nil {
 					follows = append(follows, act.Msg)
@@ -214,13 +216,14 @@ func (r *Router) applyCtrl(m tea.Msg, cmds *[]tea.Cmd) (follows []tea.Msg) {
 		for _, s := range r.stack[1:] { // the active root is already covered via r.roots[active]
 			notify(s)
 		}
+		notify(r.sh.App)
 
-	case MsgThemeChanged:
-		// A theme switch repaints the package-level styles (SetTheme), but the
-		// cached tab roots baked their delegate/list styles at construction. Rebuild
-		// each root from its constructor so the new palette takes; deeper live
-		// screens are transient (rebuilt on reopen) and the router-drawn chrome
-		// already repaints from the refreshed style vars.
+	case refreshRootsMsg:
+		// Rebuild every cached tab root from its constructor so each re-bakes its
+		// delegate/list styles from the current palette (the consumer's reaction to a
+		// theme change, via App.Receive → RefreshRoots). Deeper live screens are
+		// transient (rebuilt on reopen) and the router-drawn chrome already repaints
+		// from the refreshed style vars.
 		for i := range r.roots {
 			r.roots[i] = r.tabs[i].New(r.sh)
 		}

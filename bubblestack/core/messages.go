@@ -8,10 +8,9 @@ package core
 // recognize them when they arrive via the queue (an async cmd's result, Init, a batch).
 type ctrlMsg interface{ isCtrl() }
 
-func (propagateMsg) isCtrl()    {}
-func (MsgThemeChanged) isCtrl() {}
-func (statusSetMsg) isCtrl()    {}
-func (statusClearMsg) isCtrl()  {}
+func (propagateMsg) isCtrl()   {}
+func (statusSetMsg) isCtrl()   {}
+func (statusClearMsg) isCtrl() {}
 
 // statusSetMsg used to set the status, will automatically append a timer to the outgoing cmds
 type statusSetMsg struct {
@@ -53,7 +52,9 @@ type TaskEvent struct {
 // on payloads it recognizes — so no new router case is needed per notification kind.
 type propagateMsg struct{ payload any }
 
-// MsgThemeChanged tells the router the active theme changed (after SetTheme), so it
-// rebuilds every cached tab root from its constructor to pick up the new palette.
-// Raised by ApplyTheme; the router handles it centrally, so no screen interprets it.
+// MsgThemeChanged is the broadcast payload announcing the active theme changed (after
+// SetTheme). ApplyTheme raises it via PropagateAll, so the router only routes it — it's
+// not a control message. A consumer's App (or any Receiver) recognizes it and typically
+// returns RefreshRoots() to rebuild the cached tab roots with the new palette, so the
+// consumer owns that policy rather than the framework hard-coding it.
 type MsgThemeChanged struct{}

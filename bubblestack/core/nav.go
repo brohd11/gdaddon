@@ -7,22 +7,24 @@ package core
 // an Action as its result message, and the router resolves it when it arrives (see the
 // router's Update / resolveCtrl).
 type (
-	pushMsg        struct{ s Screen }      // push a new screen on top
-	popMsg         struct{ n int }         // pop n screens (back / cancel)
-	popToMsg       struct{}                // pop to the nearest PopStopper, or the root
-	replaceMsg     struct{ s Screen }      // pop current + push (e.g. fetching -> versions)
-	resetToRootMsg struct{}                // unwind to the root (browse) screen
-	showTabMsg     struct{ title string }  // make the tab with this title active, at its root
-	seqMsg         struct{ acts []Action } // a sequence of Actions applied in order
+	pushMsg         struct{ s Screen }      // push a new screen on top
+	popMsg          struct{ n int }         // pop n screens (back / cancel)
+	popToMsg        struct{}                // pop to the nearest PopStopper, or the root
+	replaceMsg      struct{ s Screen }      // pop current + push (e.g. fetching -> versions)
+	resetToRootMsg  struct{}                // unwind to the root (browse) screen
+	showTabMsg      struct{ title string }  // make the tab with this title active, at its root
+	seqMsg          struct{ acts []Action } // a sequence of Actions applied in order
+	refreshRootsMsg struct{}                // rebuild every cached tab root from its constructor
 )
 
-func (pushMsg) isCtrl()        {}
-func (popMsg) isCtrl()         {}
-func (popToMsg) isCtrl()       {}
-func (replaceMsg) isCtrl()     {}
-func (resetToRootMsg) isCtrl() {}
-func (showTabMsg) isCtrl()     {}
-func (seqMsg) isCtrl()         {}
+func (pushMsg) isCtrl()         {}
+func (popMsg) isCtrl()          {}
+func (popToMsg) isCtrl()        {}
+func (replaceMsg) isCtrl()      {}
+func (resetToRootMsg) isCtrl()  {}
+func (showTabMsg) isCtrl()      {}
+func (seqMsg) isCtrl()          {}
+func (refreshRootsMsg) isCtrl() {}
 
 // The nav constructors each return an Action whose control-message lane (Msg) carries
 // the navigation; the async lane (Cmd) is left nil. A screen returns one directly from
@@ -46,12 +48,21 @@ func PopTo() Action { return Action{Msg: popToMsg{}} }
 func Replace(s Screen) Action { return Action{Msg: replaceMsg{s}} }
 func ResetToRoot() Action     { return Action{Msg: resetToRootMsg{}} }
 
-// PropagateAll broadcasts payload to every tab root and the active stack's screens.
-// Each Receiver reacts to payloads it recognizes; the framework never interprets the
-// payload (it's opaque any), so no router case is added per notification kind. Works
-// from any tab — e.g. a refresh after an out-of-band change, where each root reloads
-// itself and (optionally) returns a ShowTab Action to grab focus.
+// PropagateAll broadcasts payload to every tab root, the active stack's deeper screens,
+// and the consumer's App (when each implements Receiver). Each reacts to payloads it
+// recognizes; the framework never interprets the payload (it's opaque any), so no router
+// case is added per notification kind. Works from any tab — e.g. a refresh after an
+// out-of-band change, where each root reloads itself and (optionally) returns a ShowTab
+// Action to grab focus, or a theme change the App turns into a RefreshRoots.
 func PropagateAll(payload any) Action { return Action{Msg: propagateMsg{payload}} }
+
+// RefreshRoots rebuilds every cached tab root from its TabEntry constructor, so each
+// root re-bakes its delegate/list styles from the current package-level palette. It's
+// the mechanical half of a theme change: ApplyTheme broadcasts MsgThemeChanged, and a
+// consumer's App Receive returns this to repaint the cached roots (deeper live screens
+// are transient and the chrome repaints from the style vars). Generic, so it also
+// serves any future "reconstruct all roots" need.
+func RefreshRoots() Action { return Action{Msg: refreshRootsMsg{}} }
 
 // ShowTab makes the tab whose Title == title active and unwinds its stack to its root.
 // A no-op when no tab matches. Lets a reacting screen (or a menu) jump to a tab by name

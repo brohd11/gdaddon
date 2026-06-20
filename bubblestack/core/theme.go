@@ -62,11 +62,13 @@ func SetTheme(name string) bool {
 func CurrentTheme() string { return current.Name }
 
 // ApplyTheme is the in-TUI form of SetTheme: it switches the theme (synchronously) and
-// returns an Action carrying MsgThemeChanged so the router rebuilds the cached tab roots
-// with the new palette. A picker's row returns this Action on select.
+// broadcasts MsgThemeChanged via PropagateAll. The router only routes the payload; a
+// consumer's App Receive recognizes it and returns RefreshRoots() to rebuild the cached
+// tab roots with the new palette — so the framework no longer hard-codes that policy. A
+// picker's row returns this Action on select.
 func ApplyTheme(name string) Action {
 	SetTheme(name)
-	return Action{Msg: MsgThemeChanged{}}
+	return PropagateAll(MsgThemeChanged{})
 }
 
 // ThemeNames returns the registered preset names, sorted, for a picker/listing.

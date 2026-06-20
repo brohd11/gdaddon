@@ -1,6 +1,8 @@
 package actions
 
 import (
+	"gdaddon/internal/config"
+
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
@@ -28,6 +30,9 @@ func newThemePicker() core.Screen {
 			Name: name,
 			Desc: desc,
 			Pick: func(sh *core.Shared) core.Action {
+				// Persist the choice so it loads at next startup; a write failure
+				// must never block the live switch, so the error is dropped.
+				_ = config.SaveTheme(name)
 				return core.Seq(
 					core.ApplyTheme(name),
 					core.Replace(newThemePicker()),

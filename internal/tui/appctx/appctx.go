@@ -19,11 +19,11 @@ import (
 
 // Ctx is the consumer context stored on core.Shared.App. Tabs recover it with Of.
 type Ctx struct {
-	ManifestPath string
-	ProjectRoot  string
-	ManifestRel  string // ManifestPath relative to ProjectRoot, for display
-	ProjectName  string
-	HasProject   bool
+	ManifestPath  string
+	ProjectRoot   string
+	ManifestRel   string // ManifestPath relative to ProjectRoot, for display
+	ProjectName   string
+	HasProject    bool
 	GlobalAddons  []addon.Addon // cached from ~/.gdaddon/plugins.yml
 	ArchivedIDs   []string      // cached repo IDs from archive.Repos()
 	ProjectAddons []addon.Addon // cached from the project manifest
@@ -131,6 +131,19 @@ func (c *Ctx) Scan() {
 // Of recovers the gdaddon context from a Shared. Tabs call c := appctx.Of(sh) to
 // reach ManifestPath/ProjectRoot.
 func Of(sh *core.Shared) *Ctx { return core.App[Ctx](sh) }
+
+// Receive handles App-level broadcasts (the router notifies App on every PropagateAll).
+// A theme change rebuilds the cached tab roots so each re-bakes its delegate/list styles
+// with the new palette — gdaddon is fine reinstancing roots (they reflect on-disk state,
+// see RefreshProject/RefreshGlobal/RefreshArchive). Other payloads (the Dirty markers)
+// are handled by the individual tab roots, so App ignores them.
+func (c *Ctx) Receive(sh *core.Shared, payload any) core.Action {
+	switch payload.(type) {
+	case core.MsgThemeChanged:
+		return core.RefreshRoots()
+	}
+	return core.Action{}
+}
 
 // Tab titles, shared between the TabEntry wiring (in Run) and the ShowTab callers,
 // so the focus-grab in a Receive never duplicates a raw title literal that a rename

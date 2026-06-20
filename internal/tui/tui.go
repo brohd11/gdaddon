@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"gdaddon/internal/config"
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/archive"
@@ -17,12 +18,16 @@ import (
 // the router (after the theme is applied), so each tab reads its own state when
 // constructed; nothing is inspected here.
 func Run(projectRoot string) error {
+	theme := "mono"
+	if cfg, err := config.Load(); err == nil && cfg.CurrentTheme != "" {
+		theme = cfg.CurrentTheme
+	}
 	return bubblestack.Run(bubblestack.Config{
 		App:    appctx.New(projectRoot),
 		Header: appctx.Header,
 		Output: components.NewLogPane(),
 		Status: components.NewStatusLine(),
-		Theme:  "mono",
+		Theme:  theme,
 		Tabs: []bubblestack.TabEntry{
 			{Title: appctx.TitleProject, New: func(sh *bubblestack.Shared) bubblestack.Screen { return project.NewProjectScreen(sh) }},
 			{Title: appctx.TitleGlobal, New: func(sh *bubblestack.Shared) bubblestack.Screen { return global.NewGlobalScreen(sh) }},

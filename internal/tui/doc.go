@@ -29,14 +29,17 @@
 //	             round-trip) and a genuine async tea.Cmd for bubbletea (Async wraps a
 //	             cmd-only Action; the zero Action does nothing).
 //	             Router-handled messages include the PropagateAll broadcast — one message
-//	             whose opaque payload the router only routes to every Receiver, never
-//	             interprets —, MsgThemeChanged, and the streaming TaskEvent with an opaque
-//	             Payload. Themes (SetTheme/
+//	             whose opaque payload the router only routes to every Receiver (tab roots,
+//	             deeper screens, and the consumer's App), never interprets — and the
+//	             streaming TaskEvent with an opaque Payload. A theme switch rides this
+//	             broadcast: ApplyTheme raises PropagateAll(MsgThemeChanged{}), the App's
+//	             Receive returns RefreshRoots(), and the router rebuilds the cached roots.
+//	             Themes (SetTheme/
 //	             ApplyTheme/ThemeNames/CurrentTheme), and generic list/help/style
 //	             helpers (NewSelectList, ShortHelp, RenderTitleBar, HeaderBox,
 //	             TruncLeft, …). A TabEntry is {Title, New func(*Shared) Screen}: the
 //	             router builds each root via New after the theme is applied (so it bakes
-//	             the right palette) and re-invokes New on MsgThemeChanged to repaint.
+//	             the right palette) and re-invokes New on RefreshRoots to repaint.
 //	bubblestack/components/  reusable, context-agnostic pieces configured by closures
 //	             — they name no domain type: the Item list row (carries its own Pick
 //	             closure), the screens PickerScreen, ConfirmScreen, LoadingScreen,

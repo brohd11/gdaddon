@@ -17,8 +17,9 @@ import (
 // value, so every field is optional. omitempty keeps the dumped default file
 // (see Ensure) free of blank knobs.
 type Config struct {
-	ArchiveDir string         `yaml:"archive_dir,omitempty"`
-	Sources    []SourceConfig `yaml:"sources,omitempty"` // search sources; the source of truth once dumped
+	ArchiveDir   string         `yaml:"archive_dir,omitempty"`
+	CurrentTheme string         `yaml:"current_theme,omitempty"` // last-selected TUI theme; loaded at startup, saved on change
+	Sources      []SourceConfig `yaml:"sources,omitempty"`       // search sources; the source of truth once dumped
 }
 
 // SourceConfig is a declarative provider entry. It may carry a search rule
@@ -159,8 +160,9 @@ func Ensure() (created bool, path string, err error) {
 // the built-in search sources. Add future defaults here so Ensure picks them up.
 func DefaultConfig() *Config {
 	return &Config{
-		ArchiveDir: "~/.gdaddon/archive",
-		Sources:    DefaultSources(),
+		ArchiveDir:   "~/.gdaddon/archive",
+		CurrentTheme: "mono",
+		Sources:      DefaultSources(),
 	}
 }
 
@@ -314,6 +316,73 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+// SaveTheme persists name as current_theme in ~/.gdaddon/config.yml. It edits the
+// file surgically — only the current_theme key's value is set (or the key appended)
+// — so the user's archive_dir, sources block, and any comments survive untouched. A
+// missing file is created from DefaultConfig (with the theme overridden), matching
+// Ensure's first-run shape.
+func SaveTheme(name string) error {
+	base, err := Dir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(base, "config.yml")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.MkdirAll(base, 0o755); err != nil {
+			return err
+		}
+		def := DefaultConfig()
+		def.CurrentTheme = name
+		out, err := yaml.Marshal(def)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, out, 0o644)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return err
+	}
+	setMappingScalar(&doc, "current_theme", name)
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0o644)
+}
+
+// setMappingScalar sets key=value on the top-level mapping of a parsed YAML
+// document, overwriting an existing key's value or appending the pair when absent.
+// An empty document is initialized to a mapping first.
+func setMappingScalar(doc *yaml.Node, key, value string) {
+	if len(doc.Content) == 0 {
+		doc.Kind = yaml.DocumentNode
+		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode}}
+	}
+	m := doc.Content[0]
+	if m.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			m.Content[i+1].Kind = yaml.ScalarNode
+			m.Content[i+1].Tag = "!!str"
+			m.Content[i+1].Value = value
+			return
+		}
+	}
+	m.Content = append(m.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value},
+	)
 }
 
 // ResolvedArchiveDir returns archive_dir (with a leading "~" expanded) if set,
