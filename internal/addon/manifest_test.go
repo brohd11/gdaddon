@@ -57,6 +57,59 @@ func TestUpdateEntryPreservesFormatting(t *testing.T) {
 	}
 }
 
+func TestSetCloneFlag(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert clone: true.
+	if err := SetCloneFlag(path, "Terrain3D", true); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(path)
+	if !strings.Contains(string(got), "\n    clone: true") {
+		t.Fatalf("clone line not inserted with indentation; got:\n%s", got)
+	}
+	// Untouched entry survives.
+	if !strings.Contains(string(got), `version: "0.1.0"`) {
+		t.Errorf("other entry mutated; got:\n%s", got)
+	}
+
+	// Parse reads it back as a bool.
+	addons, err := Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range addons {
+		if a.Name == "Terrain3D" && !a.Clone {
+			t.Errorf("Clone not parsed as true")
+		}
+		if a.Name == "PluginDevTools" && a.Clone {
+			t.Errorf("Clone leaked onto another entry")
+		}
+	}
+
+	// Idempotent: setting true again does not duplicate the line.
+	if err := SetCloneFlag(path, "Terrain3D", true); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(path)
+	if strings.Count(string(got), "clone: true") != 1 {
+		t.Errorf("clone line duplicated; got:\n%s", got)
+	}
+
+	// Clearing removes the line.
+	if err := SetCloneFlag(path, "Terrain3D", false); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(path)
+	if strings.Contains(string(got), "clone:") {
+		t.Errorf("clone line not removed; got:\n%s", got)
+	}
+}
+
 func TestUpdateEntryEmptyURLPreservesURL(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")

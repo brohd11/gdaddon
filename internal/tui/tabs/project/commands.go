@@ -23,19 +23,33 @@ func finishInstallCmd(sh *core.Shared, selected addon.Addon, pick versionItem, i
 		url = ""
 	}
 	version := instVersion
-	if version == "" {
+	// Fall back to the picked tag as the version only for release installs; a clone
+	// tracks a branch, so leave version empty when the checkout has no plugin.cfg
+	// version rather than recording the branch name as a version.
+	if version == "" && !pick.clone {
 		version = strings.TrimPrefix(pick.tag, "v")
 	}
 	// Branch-HEAD installs carry the branch name in pick.tag but have no release
-	// tag; pick.branch marks them so we don't record a bogus tag.
+	// tag; pick.branch marks them so we don't record a bogus tag. A clone install
+	// is the exception: it keeps the branch as tag and records the canonical .git
+	// url so a re-clone targets the right branch.
 	tag := pick.tag
-	if pick.branch {
+	if pick.branch && !pick.clone {
 		tag = ""
+	}
+	if pick.clone {
+		url = "https://" + pick.repoID + ".git"
 	}
 
 	status := "updated " + name + " → " + version
+	if pick.clone {
+		status = "cloned " + name + " (" + pick.tag + ")"
+	}
 	return func() tea.Msg {
 		_ = addon.UpdateEntry(manifestPath, name, url, instPath, version, tag)
+		if pick.clone {
+			_ = addon.SetCloneFlag(manifestPath, name, true)
+		}
 		return core.Seq(
 			core.SetStatus(status),
 			core.PropagateAll(appctx.ProjectDirty{}),

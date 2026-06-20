@@ -30,6 +30,11 @@ type Addon struct {
 	Path    string `yaml:"path"`
 	Version string `yaml:"version"`
 	Tag     string `yaml:"tag"`
+	// Clone marks a branch-HEAD entry installed as a live git working copy (a
+	// "sub-repo" for development) rather than an unzipped package: Install clones
+	// the repo with its .git kept and never overwrites an existing checkout. Tag
+	// holds the branch that was cloned.
+	Clone bool `yaml:"clone"`
 }
 
 // State describes an addon's local install relative to the manifest.
@@ -128,6 +133,14 @@ func statusFor(a Addon, baseDir string) Status {
 	local := getLocalPluginVersion(fullPath)
 	s.LocalVersion = local
 
+	// A clone entry is a live git working copy managed by the user; once present
+	// it's never overwritten, so report it as unversioned (which InstallAll skips)
+	// regardless of any version match.
+	if a.Clone {
+		s.State = StateUnversioned
+		return s
+	}
+
 	switch {
 	case a.Version == "":
 		s.State = StateUnversioned
@@ -194,13 +207,17 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 		return InstallResult{}, fmt.Errorf("missing 'url'")
 	}
 
-	stagingRoot, cleanup, err := fetchToStaging(ctx, a.URL, a.Name, report)
+	if a.Clone {
+		return cloneInstall(ctx, a, baseDir, report)
+	}
+
+	stagingRoot, pkgName, cleanup, err := fetchToStaging(ctx, a.URL, a.Name, report)
 	if err != nil {
 		return InstallResult{}, err
 	}
 	defer cleanup()
 
-	placements := resolveInstall(stagingRoot, a.Name, a.Path)
+	placements := resolveInstall(stagingRoot, a.Name, a.Path, pkgName)
 	for _, p := range placements {
 		dest, err := filepath.Abs(filepath.Join(baseDir, p.destRel))
 		if err != nil {
@@ -222,6 +239,33 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 		return InstallResult{Path: placements[0].destRel, Version: getLocalPluginVersion(dest)}, nil
 	}
 	return InstallResult{}, nil
+}
+
+// cloneInstall installs a clone entry: it git-clones the repo (full history, the
+// branch named in a.Tag, .git kept) to the entry's path so it's a live working
+// copy. The whole repo is placed at the path, so it suits repos whose root is the
+// addon itself. An already-present checkout is left untouched — never overwritten —
+// so uncommitted development work is safe across re-runs.
+func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
+	destRel := a.Path
+	if destRel == "" {
+		destRel = DefaultPath(a.Name)
+	}
+	dest, err := filepath.Abs(filepath.Join(baseDir, destRel))
+	if err != nil {
+		return InstallResult{}, fmt.Errorf("could not resolve path: %w", err)
+	}
+
+	if _, err := os.Stat(dest); err == nil {
+		report("[%s] Already cloned at %s. Skipping (manage updates with git).", a.Name, destRel)
+		return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
+	}
+
+	if err := gitCloneBranch(ctx, a.URL, a.Tag, dest, a.Name, report); err != nil {
+		return InstallResult{}, err
+	}
+	report("  -> Successfully cloned to %s", destRel)
+	return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
 }
 
 // Uninstall deletes an addon's installed files under baseDir, symmetric with

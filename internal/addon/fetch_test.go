@@ -36,7 +36,7 @@ func TestResolveInstall(t *testing.T) {
 	t.Run("addon under addons/", func(t *testing.T) {
 		root := t.TempDir()
 		mkPlugin(t, root, "addons/my_addon")
-		ps := resolveInstall(root, "Whatever", "")
+		ps := resolveInstall(root, "Whatever", "", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
 			t.Fatalf("got %+v", ps)
 		}
@@ -49,7 +49,7 @@ func TestResolveInstall(t *testing.T) {
 		root := t.TempDir()
 		mkPlugin(t, root, "addons/my_addon")
 		mkPlugin(t, root, "addons/my_addon/sub")
-		ps := resolveInstall(root, "Whatever", "")
+		ps := resolveInstall(root, "Whatever", "", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
 			t.Fatalf("nested sub-addon should be pruned; got %+v", ps)
 		}
@@ -58,7 +58,7 @@ func TestResolveInstall(t *testing.T) {
 	t.Run("version.cfg library detected", func(t *testing.T) {
 		root := t.TempDir()
 		mkCfg(t, root, "addons/my_lib", "version.cfg")
-		ps := resolveInstall(root, "Whatever", "")
+		ps := resolveInstall(root, "Whatever", "", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/my_lib" {
 			t.Fatalf("version.cfg folder not detected; got %+v", ps)
 		}
@@ -68,7 +68,7 @@ func TestResolveInstall(t *testing.T) {
 		root := t.TempDir()
 		mkPlugin(t, root, "addons/my_addon")
 		mkCfg(t, root, "addons/my_addon/lib", "version.cfg")
-		ps := resolveInstall(root, "Whatever", "")
+		ps := resolveInstall(root, "Whatever", "", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
 			t.Fatalf("nested version.cfg should be pruned; got %+v", ps)
 		}
@@ -78,7 +78,7 @@ func TestResolveInstall(t *testing.T) {
 		root := t.TempDir()
 		mkPlugin(t, root, "addons/a")
 		mkPlugin(t, root, "addons/b")
-		ps := resolveInstall(root, "Whatever", "")
+		ps := resolveInstall(root, "Whatever", "", "")
 		got := destSet(ps)
 		if len(got) != 2 || got[0] != "addons/a" || got[1] != "addons/b" {
 			t.Fatalf("got %v", got)
@@ -88,7 +88,7 @@ func TestResolveInstall(t *testing.T) {
 	t.Run("plugin.cfg at staging root -> use name", func(t *testing.T) {
 		root := t.TempDir()
 		os.WriteFile(filepath.Join(root, "plugin.cfg"), []byte("[plugin]\n"), 0o644)
-		ps := resolveInstall(root, "CoolPlugin", "")
+		ps := resolveInstall(root, "CoolPlugin", "", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/CoolPlugin" || ps[0].src != root {
 			t.Fatalf("got %+v", ps)
 		}
@@ -97,8 +97,38 @@ func TestResolveInstall(t *testing.T) {
 	t.Run("no plugin.cfg -> name fallback", func(t *testing.T) {
 		root := t.TempDir()
 		os.WriteFile(filepath.Join(root, "README.md"), []byte("hi"), 0o644)
-		ps := resolveInstall(root, "Mystery", "")
+		ps := resolveInstall(root, "Mystery", "", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/Mystery" || ps[0].src != root {
+			t.Fatalf("got %+v", ps)
+		}
+	})
+
+	t.Run("plugin.cfg at staging root -> use pkgName", func(t *testing.T) {
+		// An uploaded asset whose zip is the plugin folder (script_tabs/plugin.cfg):
+		// the unwrapped folder name wins over the manifest entry name.
+		root := t.TempDir()
+		os.WriteFile(filepath.Join(root, "plugin.cfg"), []byte("[plugin]\n"), 0o644)
+		ps := resolveInstall(root, "EntryName", "", "script_tabs")
+		if len(ps) != 1 || ps[0].destRel != "addons/script_tabs" || ps[0].src != root {
+			t.Fatalf("got %+v", ps)
+		}
+	})
+
+	t.Run("nested addon ignores pkgName", func(t *testing.T) {
+		// A real addons/<name>/ layout derives from the nested folder, not pkgName.
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/my_addon")
+		ps := resolveInstall(root, "EntryName", "", "ignored_wrapper")
+		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
+			t.Fatalf("got %+v", ps)
+		}
+	})
+
+	t.Run("empty pkgName at root -> name fallback (suppressed source archive)", func(t *testing.T) {
+		root := t.TempDir()
+		os.WriteFile(filepath.Join(root, "plugin.cfg"), []byte("[plugin]\n"), 0o644)
+		ps := resolveInstall(root, "CoolPlugin", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/CoolPlugin" {
 			t.Fatalf("got %+v", ps)
 		}
 	})
@@ -106,7 +136,7 @@ func TestResolveInstall(t *testing.T) {
 	t.Run("explicit path wins", func(t *testing.T) {
 		root := t.TempDir()
 		mkPlugin(t, root, "addons/my_addon")
-		ps := resolveInstall(root, "Whatever", "addons/addon_lib/my_addon")
+		ps := resolveInstall(root, "Whatever", "addons/addon_lib/my_addon", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/addon_lib/my_addon" {
 			t.Fatalf("got %+v", ps)
 		}
@@ -114,6 +144,26 @@ func TestResolveInstall(t *testing.T) {
 			t.Errorf("src should be the detected plugin folder, got %s", ps[0].src)
 		}
 	})
+}
+
+func TestIsSourceArchiveURL(t *testing.T) {
+	cases := []struct {
+		url  string
+		want bool
+	}{
+		{"https://github.com/o/r/archive/refs/tags/v1.0.0.zip", true},
+		{"https://github.com/o/r/archive/refs/heads/main.zip", true},
+		{"https://codeberg.org/o/r/archive/v1.0.0.zip", true},
+		{"https://github.com/o/r/releases/download/v1.0.0/script-tabs-1.0.0.zip", false},
+		// A local archived copy installs from a file path under .../archive/ — must
+		// not be mistaken for a remote source archive.
+		{"/home/u/.gdaddon/archive/github.com/o/r/v1.0.0/script-tabs.zip", false},
+	}
+	for _, c := range cases {
+		if got := isSourceArchiveURL(c.url); got != c.want {
+			t.Errorf("isSourceArchiveURL(%q) = %v, want %v", c.url, got, c.want)
+		}
+	}
 }
 
 func TestInspectURLOnlyIsMissing(t *testing.T) {

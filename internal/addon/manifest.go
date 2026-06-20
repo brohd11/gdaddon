@@ -119,6 +119,69 @@ func AddEntryWithVersion(manifestPath, name, url, path, version, tag string) err
 	return UpdateEntry(manifestPath, name, "", "", version, tag)
 }
 
+// SetCloneFlag sets (or clears) the boolean `clone:` line on an entry, in place,
+// using the same flat-shape block scan as UpdateEntry. When clone is true it
+// inserts/updates `clone: true`; when false it removes any existing clone line.
+// Kept separate from UpdateEntry so its string-field "empty means leave untouched"
+// convention isn't muddied by a bool.
+func SetCloneFlag(manifestPath, name string, clone bool) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	keyIdx := -1
+	for i, ln := range lines {
+		if isEntryKey(ln, name) {
+			keyIdx = i
+			break
+		}
+	}
+	if keyIdx == -1 {
+		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+	}
+
+	end := len(lines)
+	for i := keyIdx + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		if !startsWithSpace(lines[i]) {
+			end = i
+			break
+		}
+	}
+
+	indent := "    "
+	cloneIdx := -1
+	for i := keyIdx + 1; i < end; i++ {
+		ind, key, ok := splitField(lines[i])
+		if !ok {
+			continue
+		}
+		indent = ind
+		if key == "clone" {
+			cloneIdx = i
+		}
+	}
+
+	switch {
+	case !clone:
+		if cloneIdx != -1 {
+			lines = append(lines[:cloneIdx], lines[cloneIdx+1:]...)
+		}
+	case cloneIdx != -1:
+		lines[cloneIdx] = indent + "clone: true"
+	default:
+		tail := append([]string{indent + "clone: true"}, lines[keyIdx+1:]...)
+		lines = append(lines[:keyIdx+1], tail...)
+	}
+
+	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
 // RemoveEntry deletes a manifest entry — its key line and the indented block
 // beneath it — in place, leaving every other entry byte-for-byte intact. It uses
 // the same flat-shape block detection as UpdateEntry, so it works on the project

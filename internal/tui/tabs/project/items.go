@@ -18,6 +18,18 @@ import (
 
 // addonDesc renders an addon row's status line from its inspected state.
 func addonDesc(s addon.Status) string {
+	// Clone entries are git working copies, not version-pinned packages: describe
+	// them by their tracked branch and whether the checkout is present.
+	if s.Addon.Clone {
+		branch := s.Addon.Tag
+		if branch == "" {
+			branch = "HEAD"
+		}
+		if s.Present() {
+			return "⎇ cloned (dev) · " + branch
+		}
+		return "⎇ not cloned · branch " + branch
+	}
 	switch s.State {
 	case addon.StateInvalid:
 		return "✗ invalid — missing url or path"
@@ -92,8 +104,10 @@ type versionItem struct {
 	tag           string
 	asset         source.Asset
 	archivedAsset source.Asset // local archived copy of this version, if any (enables the install source toggle); zero = none
+	repoID        string       // canonical host/owner/repo, used to build the .git url for a clone install
 	branch        bool
 	archived      bool // asset comes from the local archive (local-file URL)
+	clone         bool // install the branch as a live git working copy (keeps .git) instead of an unzipped package
 }
 
 // pickSection describes the chosen asset for the confirm screen's title, e.g.

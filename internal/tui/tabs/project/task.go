@@ -21,6 +21,13 @@ type installResult struct{ Path, Version string }
 
 func newInstallTask(selected addon.Addon, local string, pick versionItem) *components.TaskScreen {
 	target := addon.Addon{Name: selected.Name, URL: pick.asset.URL, Path: selected.Path}
+	if pick.clone {
+		// Clone the canonical repo (.git url from the repo id), checking out the
+		// chosen branch, instead of unzipping the branch archive.
+		target.URL = "https://" + pick.repoID + ".git"
+		target.Tag = pick.tag
+		target.Clone = true
+	}
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
 		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
@@ -39,4 +46,3 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 	}
 	return components.NewTask("installing "+selected.Name+"…", run, onDone)
 }
-
