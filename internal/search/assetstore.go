@@ -2,81 +2,95 @@ package search
 
 import (
 	"context"
-	"fmt"
-	"html"
-	"io"
-	"net/http"
 	"net/url"
-	"regexp"
-	"strings"
-	"time"
+	"strconv"
 )
 
 // assetStoreBase is the root of the new Godot Asset Store
-// (https://store.godotengine.org), the eventual replacement for the legacy
-// Asset Library.
+// (https://store.godotengine.org), the replacement for the legacy Asset Library.
 const assetStoreBase = "https://store.godotengine.org"
+
+// storePerPage is the page size the store's search API returns (the hit count per
+// /api/v1/search/query/ response); used to derive the page count from the total.
+const storePerPage = 24
 
 // assetStore is the new Godot Asset Store backend.
 //
-// The store has no JSON search endpoint yet (its /api/v1/assets/ ignores text
-// filters), so Search scrapes the server-rendered /search/ HTML — that's the only
-// surface that actually ranks/filters by query. Detail uses the clean JSON
-// /api/v1/assets/<publisher>/<slug>/ endpoint. The HTML parsing below is the
-// fragile part and is intentionally contained to this file; if the store ships a
-// real search API, only Search changes.
+// It speaks the store's JSON API (the same one the in-editor AssetLib browser uses,
+// see godot's editor/asset_library/asset_library_editor_plugin.cpp):
+//   - Search:  /api/v1/search/query/ — ranks/filters by query, honors page and the
+//     engine-version filter (compatibility).
+//   - Detail:  /api/v1/assets/<publisher>/<slug>/ — name, description, repo source.
+//   - Release: /api/v1/releases/<publisher>/<slug>/ — the store-hosted .zip + version.
 type assetStore struct{}
 
 func (assetStore) Name() string { return "Asset Store" }
 
-// Card structure (stable as of 2026-06): each result is
-//
-//	<div class="item"> … <h3 class="name"><a href="/asset/<pub>/<slug>/">Title</a>
-//	  <span class="rating">…<span class="number">N</span></span></h3>
-//	  <p class="details">by <a href="/publisher/<pub>/">Author</a> | LICENSE</p> …
-var (
-	storeAssetAnchorRe = regexp.MustCompile(`<a href="/asset/([^"/]+)/([^"/]+)/">([^<]*)</a>`)
-	storePubAnchorRe   = regexp.MustCompile(`<a href="/publisher/[^"]*">([^<]*)</a>`)
-	storeLicenseRe     = regexp.MustCompile(`\|\s*([^<|]+?)\s*</p>`)
-)
+// Search queries /api/v1/search/query/. type=0 selects addons (1 is templates). The
+// API is 1-based and omits page on the first page, so page (0-indexed from the
+// caller) is sent as page+1 only when paging past the first. godotVersion, when set,
+// becomes the compatibility filter.
+func (assetStore) Search(ctx context.Context, query, godotVersion string, page int) (*Page, error) {
+	endpoint := assetStoreBase + "/api/v1/search/query/?query=" + url.QueryEscape(query) + "&type=0"
+	if page > 0 {
+		endpoint += "&page=" + strconv.Itoa(page+1)
+	}
+	if godotVersion != "" {
+		endpoint += "&compatibility=" + url.QueryEscape(godotVersion)
+	}
 
-// Search scrapes /search/?query=<q>. The store doesn't filter by engine version
-// and its HTML pagination is JS-driven, so godotVersion and page are ignored and a
-// single page (~24 results) is returned.
-func (assetStore) Search(ctx context.Context, query, _ string, _ int) (*Page, error) {
-	body, err := getText(ctx, assetStoreBase+"/search/?query="+url.QueryEscape(query))
-	if err != nil {
+	var raw struct {
+		Count string `json:"count"`
+		Hits  []struct {
+			Asset struct {
+				Name        string `json:"name"`
+				Slug        string `json:"slug"`
+				LicenseType string `json:"license_type"`
+				PriceCent   int    `json:"price_cent"`
+				Publisher   struct {
+					Name string `json:"name"`
+					Slug string `json:"slug"`
+				} `json:"publisher"`
+				Tags []struct {
+					DisplayName string `json:"display_name"`
+				} `json:"tags"`
+			} `json:"asset"`
+		} `json:"hits"`
+	}
+	if err := getJSON(ctx, endpoint, &raw); err != nil {
 		return nil, err
 	}
 
-	out := &Page{Pages: 1}
-	// Split on item boundaries so author/license are read from the right card.
-	for _, card := range strings.Split(body, `class="item"`)[1:] {
-		m := storeAssetAnchorRe.FindStringSubmatch(card)
-		if m == nil {
-			continue
-		}
+	out := &Page{Page: page}
+	for _, h := range raw.Hits {
+		a := h.Asset
 		s := Summary{
-			ID:    m[1] + "/" + m[2], // "<publisher>/<slug>" — the detail-endpoint key
-			Title: cleanText(m[3]),
+			ID:     a.Publisher.Slug + "/" + a.Slug, // the detail-endpoint key
+			Title:  a.Name,
+			Author: a.Publisher.Name,
+			Cost:   a.LicenseType,
 		}
-		if a := storePubAnchorRe.FindStringSubmatch(card); a != nil {
-			s.Author = cleanText(a[1])
-		}
-		if l := storeLicenseRe.FindStringSubmatch(card); l != nil {
-			s.Cost = cleanText(l[1])
+		if len(a.Tags) > 0 {
+			s.Category = a.Tags[0].DisplayName
 		}
 		out.Results = append(out.Results, s)
 	}
-	out.TotalItems = len(out.Results)
+
+	out.TotalItems, _ = strconv.Atoi(raw.Count)
+	out.Pages = (out.TotalItems + storePerPage - 1) / storePerPage
+	if out.Pages < 1 {
+		out.Pages = 1
+	}
 	return out, nil
 }
 
-// Detail resolves the asset's repo URL via the clean JSON endpoint. id is the
-// "<publisher>/<slug>" produced by Search. source may be empty (paid/direct-download
-// assets); the caller handles that.
+// Detail resolves the asset's repo URL (its source) and latest stable release. id is
+// the "<publisher>/<slug>" produced by Search. BrowseURL may be empty (paid/direct
+// assets with no repo); DownloadURL is the store-hosted release .zip when a release
+// exists. A failed/empty releases fetch is non-fatal — DownloadURL is just left
+// blank. The caller decides what to do when both are empty.
 func (assetStore) Detail(ctx context.Context, id string) (*Detail, error) {
-	var raw struct {
+	var asset struct {
 		Name        string `json:"name"`
 		Description string `json:"description"`
 		Source      string `json:"source"`
@@ -85,47 +99,39 @@ func (assetStore) Detail(ctx context.Context, id string) (*Detail, error) {
 			Name string `json:"name"`
 		} `json:"publisher"`
 	}
-	if err := getJSON(ctx, assetStoreBase+"/api/v1/assets/"+id+"/", &raw); err != nil {
+	if err := getJSON(ctx, assetStoreBase+"/api/v1/assets/"+id+"/", &asset); err != nil {
 		return nil, err
 	}
-	return &Detail{
+
+	d := &Detail{
 		Summary: Summary{
 			ID:     id,
-			Title:  raw.Name,
-			Author: raw.Publisher.Name,
-			Cost:   raw.LicenseType,
+			Title:  asset.Name,
+			Author: asset.Publisher.Name,
+			Cost:   asset.LicenseType,
 		},
-		BrowseURL:   raw.Source,
-		Description: raw.Description,
-	}, nil
-}
-
-// cleanText unescapes HTML entities and trims whitespace from a scraped fragment.
-func cleanText(s string) string {
-	return strings.TrimSpace(html.UnescapeString(s))
-}
-
-// getText performs a GET and returns the response body as a string (for the
-// server-rendered search page). Mirrors getJSON's timeout/User-Agent.
-func getText(ctx context.Context, endpoint string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return "", err
+		BrowseURL:   asset.Source,
+		Description: asset.Description,
 	}
-	req.Header.Set("User-Agent", "gdaddon")
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
+	var releases []struct {
+		Version         string `json:"version"`
+		Stable          bool   `json:"stable"`
+		MinGodotVersion string `json:"min_godot_version"`
+		DownloadURL     string `json:"download_url"`
 	}
-	defer resp.Body.Close()
+	if err := getJSON(ctx, assetStoreBase+"/api/v1/releases/"+id+"/", &releases); err == nil && len(releases) > 0 {
+		rel := releases[0]
+		for _, r := range releases {
+			if r.Stable {
+				rel = r
+				break
+			}
+		}
+		d.DownloadURL = rel.DownloadURL
+		d.VersionString = rel.Version
+		d.GodotVersion = rel.MinGodotVersion
+	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("asset store returned %s", resp.Status)
-	}
-	b, err := io.ReadAll(resp.Body)
-	return string(b), err
+	return d, nil
 }

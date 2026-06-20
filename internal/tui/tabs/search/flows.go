@@ -171,7 +171,8 @@ func resultDesc(r searchpkg.Summary) string {
 // ---------- asset detail → New Plugin handoff ----------
 
 // newDetailLoading fetches the chosen asset's detail (the search list omits the
-// repo URL) and hands its browse_url to the shared New Plugin form, prefilled.
+// repo/download URLs) and opens an install submenu built from whichever URLs the
+// detail resolved.
 func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen {
 	cmd := func() tea.Msg {
 		d, err := src.Detail(context.Background(), id)
@@ -188,13 +189,45 @@ func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen
 				core.Pop(),
 			)
 		}
-		if m.detail.BrowseURL == "" {
-			return core.Seq(
-				core.SetStatusAndLog("asset has no repository url"),
-				core.Pop(),
-			)
-		}
-		return core.Replace(newplugin.NewWithURL(m.detail.BrowseURL))
+		return newInstallMenu(m.detail)
 	}
 	return components.NewLoadingScreen("Asset", "fetching asset…", cmd, onResult)
+}
+
+// newInstallMenu builds the install submenu for a resolved asset. Rows are
+// conditional on which URLs the detail carries (source-agnostic): "Add repository"
+// when there's a repo URL, "Install store zip" when there's a release download. With
+// neither, there's nothing installable — report and pop back to the results.
+func newInstallMenu(d *searchpkg.Detail) core.Action {
+	var items []list.Item
+	if d.BrowseURL != "" {
+		// Add repository handles any repo URL (not just GitHub); newplugin
+		// normalizes it and resolves versions via the source resolver.
+		items = append(items, components.Item{
+			Name: "Add repository",
+			Desc: d.BrowseURL,
+			Pick: func(sh *core.Shared) core.Action { return core.Replace(newplugin.NewWithURL(d.BrowseURL)) },
+		})
+	}
+	if d.DownloadURL != "" {
+		// TODO: install the store-hosted .zip (d.DownloadURL) once store-style
+		// version tracking is designed; no-op for now.
+		items = append(items, components.Item{
+			Name: "Install store zip",
+			Desc: "release " + d.VersionString,
+			Pick: func(sh *core.Shared) core.Action { return core.SetStatusAndLog("store zip install not yet supported") },
+		})
+	}
+	if len(items) == 0 {
+		return core.Seq(
+			core.SetStatusAndLog("asset has nothing installable (no repository or release)"),
+			core.Pop(),
+		)
+	}
+
+	title := d.Title
+	if d.VersionString != "" {
+		title += " · v" + d.VersionString
+	}
+	return core.Replace(components.NewPicker(items, components.PickerOpts{Crumb: "Install", Title: title}))
 }

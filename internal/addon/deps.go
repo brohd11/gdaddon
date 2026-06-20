@@ -31,7 +31,7 @@ type Dependency struct {
 
 // Dependencies reads the dependencies an installed addon declares in its
 // plugin.cfg/version.cfg under addonDir. A missing config or absent/empty
-// `dependencies` key yields nil with no error.
+// `deps` key yields nil with no error.
 func Dependencies(addonDir string) ([]Dependency, error) {
 	cfgPath := pluginCfgPath(addonDir)
 	if cfgPath == "" {
@@ -41,7 +41,7 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %w", cfgPath, err)
 	}
-	raw := cfg.Section("plugin").Key("dependencies").String()
+	raw := cfg.Section("plugin").Key("deps").String()
 	return parseDependencyList(raw), nil
 }
 
