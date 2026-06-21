@@ -58,6 +58,13 @@ installing; `Install All` then installs them. `version` (the author-controlled
 plugin.cfg version) can diverge from `tag` (the release identity), so dependency
 matching uses `tag` with semver `>=`.
 
+An addon may also declare an installer-specific `dir="addons/x"` key in its
+`plugin.cfg`/`version.cfg` (project-root-relative). The manifest stays the source of
+truth: an explicit manifest `path` always wins, but when `path` is empty and the
+install dir is being *derived*, a `dir=` key overrides the default `addons/<name>`
+derivation (see `installDir` in deps.go, applied by `resolveInstall` in fetch.go).
+The derived path is then recorded back into the manifest on install.
+
 ## Architecture
 
 ```

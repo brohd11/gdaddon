@@ -35,9 +35,6 @@ func NewShared(app any) *Shared {
 	sp.Spinner = spinner.Points
 
 	h := help.New()
-	h.Styles.ShortKey = h.Styles.ShortKey.Foreground(MutedColor)
-	h.Styles.ShortDesc = h.Styles.ShortDesc.Foreground(MutedColor)
-	h.Styles.ShortSeparator = h.Styles.ShortSeparator.Foreground(MutedColor)
 
 	return &Shared{
 		App:     app,
@@ -344,14 +341,26 @@ func ShortHelp(l list.Model, mode HelpMode) string {
 	return l.Styles.HelpStyle.Render(l.Help.ShortHelpView(short))
 }
 
+// styleHelp re-styles the static help model from the live MutedColor so static help
+// bars track the active theme after a SetTheme switch. Built per call (not baked in
+// at NewShared) for the same reason StyleList / fieldLabel restyle per call rather
+// than caching a color that goes stale on the next theme change.
+func (s *Shared) styleHelp() {
+	s.help.Styles.ShortKey = s.help.Styles.ShortKey.Foreground(MutedColor)
+	s.help.Styles.ShortDesc = s.help.Styles.ShortDesc.Foreground(MutedColor)
+	s.help.Styles.ShortSeparator = s.help.Styles.ShortSeparator.Foreground(MutedColor)
+}
+
 // bindingHelp renders a set of key bindings as a static help bar aligned with
 // the real list help bars (used by confirm / form / task screens).
 func (s *Shared) BindingHelp(bindings []key.Binding) string {
+	s.styleHelp()
 	return listStyles.HelpStyle.Render(s.help.ShortHelpView(bindings))
 }
 
 // noteHelp renders a plain (non-interactive) note in the help bar position.
 func (s *Shared) NoteHelp(text string) string {
+	s.styleHelp()
 	return listStyles.HelpStyle.Render(s.help.Styles.ShortDesc.Render(text))
 }
 

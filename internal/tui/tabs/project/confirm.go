@@ -218,7 +218,8 @@ func cloneModeWarning(selected addon.Addon) string {
 
 // remove modes (also the vertical option order).
 const (
-	removeProject      = iota // remove the manifest entry only
+	removeLocal        = iota // delete installed files only, keep manifest entry
+	removeProject             // remove the manifest entry only
 	removeProjectLocal        // also delete the installed files
 )
 
@@ -232,14 +233,15 @@ var removeConfirmHelp = []key.Binding{
 // removing just the manifest entry or that plus the installed files. ↑/↓ move the
 // selection (via the confirm's OnKey), enter commits the chosen mode.
 func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
-	mode := removeProject // local copy the selector mutates; default = non-destructive
+	mode := removeLocal // local copy the selector mutates
 	return &components.ConfirmScreen{
-		Crumb:  "Remove",
+		Crumb: "Remove",
+
 		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
 		OnKey: func(sh *core.Shared, k string) core.Action {
 			switch {
 			case core.MatchKey(k, core.Keys.Up):
-				if mode > removeProject {
+				if mode > removeLocal {
 					mode--
 				}
 			case core.MatchKey(k, core.Keys.Down):
@@ -268,6 +270,7 @@ func removeOptions(mode int) string {
 	active := lipgloss.NewStyle().Foreground(core.FocusedColor).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(core.MutedColor)
 	opts := []struct{ label, desc string }{
+		{"Local files", "delete installed files, keep the manifest entry"},
 		{"Project", "remove from the project manifest only"},
 		{"Project + local files", "also delete the installed files"},
 	}

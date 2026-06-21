@@ -26,6 +26,10 @@ type SetListScreen struct{ list list.Model }
 
 var _ core.Filterer = (*SetListScreen)(nil)
 var _ core.Receiver = (*SetListScreen)(nil)
+var _ core.Crumber = (*ActionsScreen)(nil)
+
+// CrumbLabel anchors the breadcrumb at the Actions root.
+func (s *SetListScreen) CrumbLabel(bool) string { return "Sets" } // s.list.Title }
 
 func newSetListScreen() *SetListScreen {
 	return &SetListScreen{list: core.NewSelectList(setListItems(), "Sets")}

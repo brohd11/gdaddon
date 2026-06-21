@@ -39,7 +39,7 @@ var themes = map[string]Theme{
 }
 
 // current is the active theme; applyTheme keeps it and the color vars in sync.
-var current = themes["default"]
+var current = themes["mono"]
 
 // RegisterTheme adds or overrides a preset (keyed by t.Name). This is the entry
 // point a config file uses to define custom themes; it does not switch to the

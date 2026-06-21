@@ -23,6 +23,20 @@ func mkCfg(t *testing.T, root, dir, cfgName string) {
 // mkPlugin creates dir (relative to root) with a minimal plugin.cfg inside it.
 func mkPlugin(t *testing.T, root, dir string) { mkCfg(t, root, dir, "plugin.cfg") }
 
+// mkCfgWith creates dir (relative to root) with a config file (cfgName) carrying an
+// extra [plugin] line (e.g. `dir="addons/x"`) alongside the version.
+func mkCfgWith(t *testing.T, root, dir, cfgName, extra string) {
+	t.Helper()
+	full := filepath.Join(root, dir)
+	if err := os.MkdirAll(full, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "[plugin]\nversion=\"1.0.0\"\n" + extra + "\n"
+	if err := os.WriteFile(filepath.Join(full, cfgName), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func destSet(ps []placement) []string {
 	out := make([]string, len(ps))
 	for i, p := range ps {
@@ -142,6 +156,36 @@ func TestResolveInstall(t *testing.T) {
 		}
 		if filepath.Base(ps[0].src) != "my_addon" {
 			t.Errorf("src should be the detected plugin folder, got %s", ps[0].src)
+		}
+	})
+
+	t.Run("dir= in config overrides derivation", func(t *testing.T) {
+		root := t.TempDir()
+		mkCfgWith(t, root, "addons/my_addon", "plugin.cfg", `dir="addons/custom/place"`)
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/custom/place" {
+			t.Fatalf("dir= override not honored; got %+v", ps)
+		}
+		if filepath.Base(ps[0].src) != "my_addon" {
+			t.Errorf("src should be the detected plugin folder, got %s", ps[0].src)
+		}
+	})
+
+	t.Run("dir= in version.cfg overrides derivation", func(t *testing.T) {
+		root := t.TempDir()
+		mkCfgWith(t, root, "addons/my_lib", "version.cfg", `dir="addons/custom_lib"`)
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/custom_lib" {
+			t.Fatalf("dir= in version.cfg not honored; got %+v", ps)
+		}
+	})
+
+	t.Run("explicit manifest path still wins over dir=", func(t *testing.T) {
+		root := t.TempDir()
+		mkCfgWith(t, root, "addons/my_addon", "plugin.cfg", `dir="addons/custom/place"`)
+		ps := resolveInstall(root, "Whatever", "addons/manifest_pinned", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/manifest_pinned" {
+			t.Fatalf("manifest path should win over dir=; got %+v", ps)
 		}
 	})
 }

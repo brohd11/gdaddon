@@ -50,12 +50,13 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 	return "updated " + name + " → " + version
 }
 
-// commitRemove removes the addon from the project: the installed files too when
-// the chosen mode is "project + local", then the manifest entry. On success it
+// commitRemove removes the addon from the project according to the chosen mode:
+// "local" deletes the installed files but keeps the manifest entry, "project"
+// removes the manifest entry only, "project + local" does both. On success it
 // broadcasts ProjectDirty, which reloads the browse list from the manifest and focuses it.
 func commitRemove(sh *core.Shared, st addon.Status, mode int) core.Action {
 	c := appctx.Of(sh)
-	if mode == removeProjectLocal {
+	if mode == removeLocal || mode == removeProjectLocal {
 		if err := addon.Uninstall(st.Addon, c.ProjectRoot); err != nil {
 			return core.Seq(
 				core.SetStatusAndLog("error: "+err.Error()),
@@ -63,14 +64,20 @@ func commitRemove(sh *core.Shared, st addon.Status, mode int) core.Action {
 			)
 		}
 	}
-	if err := addon.RemoveEntry(c.ManifestPath, st.Addon.Name); err != nil {
-		return core.Seq(
-			core.SetStatusAndLog("error: "+err.Error()),
-			core.ResetToRoot(),
-		)
+	if mode != removeLocal {
+		if err := addon.RemoveEntry(c.ManifestPath, st.Addon.Name); err != nil {
+			return core.Seq(
+				core.SetStatusAndLog("error: "+err.Error()),
+				core.ResetToRoot(),
+			)
+		}
+	}
+	msg := "removed " + st.Addon.Name
+	if mode == removeLocal {
+		msg = "deleted files for " + st.Addon.Name
 	}
 	return core.Seq(
-		core.SetStatus("removed "+st.Addon.Name),
+		core.SetStatus(msg),
 		core.PropagateAll(appctx.ProjectDirty{}),
 		core.ShowTab(appctx.TitleProject),
 	)

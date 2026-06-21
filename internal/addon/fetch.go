@@ -227,16 +227,26 @@ func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement 
 		return []placement{{src: stagingRoot, destRel: DefaultPath(rootName)}}
 	case 1:
 		if dirs[0] == stagingRoot {
-			return []placement{{src: stagingRoot, destRel: DefaultPath(rootName)}}
+			return []placement{{src: stagingRoot, destRel: destFor(stagingRoot, DefaultPath(rootName))}}
 		}
-		return []placement{{src: dirs[0], destRel: DefaultPath(filepath.Base(dirs[0]))}}
+		return []placement{{src: dirs[0], destRel: destFor(dirs[0], DefaultPath(filepath.Base(dirs[0])))}}
 	default:
 		out := make([]placement, 0, len(dirs))
 		for _, d := range dirs {
-			out = append(out, placement{src: d, destRel: DefaultPath(filepath.Base(d))})
+			out = append(out, placement{src: d, destRel: destFor(d, DefaultPath(filepath.Base(d)))})
 		}
 		return out
 	}
+}
+
+// destFor returns a staged config dir's install destination: the addon's own
+// `dir=` override declared in its config (see installDir) when present, else the
+// derived fallback. An explicit manifest path still wins upstream in resolveInstall.
+func destFor(dir, fallback string) string {
+	if d := installDir(dir); d != "" {
+		return d
+	}
+	return fallback
 }
 
 func unzip(src, dest string) error {

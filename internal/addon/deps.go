@@ -45,6 +45,23 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 	return parseDependencyList(raw), nil
 }
 
+// installDir reads the installer-specific `dir` key an addon may declare in its
+// plugin.cfg/version.cfg under addonDir — a project-root-relative install path the
+// author can pin (like the custom `deps` key). Returns "" when there's no config or
+// no dir key. Used by resolveInstall when the manifest pins no explicit path.
+func installDir(addonDir string) string {
+	cfgPath := pluginCfgPath(addonDir)
+	if cfgPath == "" {
+		return ""
+	}
+	cfg, err := ini.Load(cfgPath)
+	if err != nil {
+		return ""
+	}
+	raw := cfg.Section("plugin").Key("dir").String()
+	return strings.Trim(strings.TrimSpace(raw), `'"`)
+}
+
 // parseDependencyList parses a Godot-style bracketed, comma-separated,
 // optionally-quoted list of `owner/repo@tag` items. Malformed items (missing @tag
 // or owner/repo) are skipped rather than failing the whole parse.
