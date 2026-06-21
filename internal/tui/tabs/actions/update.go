@@ -92,7 +92,7 @@ func resolveUpdatePlansCmd(manifestPath, projectRoot string) func(context.Contex
 
 // newUpdateAllConfirm lists the pending updates ("name old → new") and, on confirm,
 // runs the batch update task.
-func newUpdateAllConfirm(plans []addon.UpdatePlan) *components.ConfirmScreen {
+func newUpdateAllConfirm(plans []addon.UpdatePlan) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Update All",
 		Text:  updateAllBody(plans),

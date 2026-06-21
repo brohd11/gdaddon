@@ -26,7 +26,7 @@ var removeConfirmHelp = []key.Binding{
 // newRemoveConfirm builds the global Remove confirm: a vertical selector between
 // removing just the global-list entry or that plus the repo's archived packages.
 // ↑/↓ move the selection (via the confirm's OnKey), enter commits the chosen mode.
-func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
+func newRemoveConfirm(g globalItem) *components.DialogScreen {
 	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 		Crumb:  g.name + " — Remove",
 		Count:  2,

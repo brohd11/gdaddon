@@ -36,7 +36,7 @@ func newInstallUpdatePicker(sh *core.Shared) core.Screen {
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Install/Update"})
 }
 
-func newInstallAllDepsConfirm(sh *core.Shared) *components.ConfirmScreen {
+func newInstallAllDepsConfirm(sh *core.Shared) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Install + Deps",
 		Text:  "Install all packages and resolve their dependencies?",

@@ -35,9 +35,9 @@ func addonDesc(s addon.Status) string {
 		return "✗ invalid — missing url or path"
 	case addon.StateMissing:
 		if s.Addon.Version != "" {
-			return "• not installed — target v" + s.Addon.Version
+			return "• not installed — target " + s.Addon.Version
 		} else if s.Addon.Tag != "" {
-			return "• not installed — target v" + strings.TrimPrefix(s.Addon.Tag, "v") // just in case tag is something not starting with v
+			return "• not installed — target " + s.Addon.Tag
 		}
 		return "• not installed"
 	case addon.StateInstalled:

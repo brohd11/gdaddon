@@ -129,7 +129,7 @@ func (p depPlan) nothingToAdd(name string) string {
 
 // newGetDepsConfirm lists the dependencies that will be added (and notes how many
 // are already satisfied / skipped), committing them only on confirm.
-func newGetDepsConfirm(name, manifestPath string, plan depPlan) *components.ConfirmScreen {
+func newGetDepsConfirm(name, manifestPath string, plan depPlan) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Get Dependencies",
 		Text:  depsConfirmBody(name, plan),

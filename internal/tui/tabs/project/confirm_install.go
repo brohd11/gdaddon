@@ -49,7 +49,7 @@ var installCloneToggleHelp = []key.Binding{
 	core.Hint("cancel", core.Keys.No),
 }
 
-func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *components.ConfirmScreen {
+func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *components.DialogScreen {
 	// Branch (HEAD) installs offer a Package/Clone mode toggle: clone installs the
 	// branch as a live git working copy for development (see cloneModeOptions).
 	if pick.branch {
@@ -79,7 +79,7 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 			Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
 			OnYes:  core.Replace(newInstallTask(selected, local, pick)),
 		})
-		// return &components.ConfirmScreen{
+		// return &components.DialogScreen{
 		// 	Title:  pickSection(pick),
 		// 	Crumb:  "Install",
 		// 	Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },

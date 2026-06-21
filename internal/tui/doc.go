@@ -42,8 +42,9 @@
 //	             the right palette) and re-invokes New on RefreshRoots to repaint.
 //	bubblestack/components/  reusable, context-agnostic pieces configured by closures
 //	             — they name no domain type: the Item list row (carries its own Pick
-//	             closure), the screens PickerScreen, ConfirmScreen, LoadingScreen,
-//	             PopupScreen (the modal overlay, see "Overlays" below), and the generic
+//	             closure), the screens PickerScreen, DialogScreen (a confirm box, or a
+//	             modal overlay when its Overlay flag is set — see "Overlays" below),
+//	             LoadingScreen, and the generic
 //	             streaming TaskScreen, and LogPane (the default core.Output chrome). A tab
 //	             supplies the closures. The two screens that run background work —
 //	             TaskScreen (a streaming task) and LoadingScreen (a fetch spinner) — each
@@ -106,11 +107,13 @@
 // Composite is display-cell aware (it slices via x/ansi, bracketing the box with
 // resets) so it doesn't corrupt the background's ANSI styling. Input is unchanged:
 // the router still dispatches only to the top screen, so an overlay is naturally
-// modal, and the background is kept sized (for resize) while it shows through.
-// components.PopupScreen is the ready-made one — a ConfirmScreen-shaped, closure-
-// configured box (core.PopupBox renders it in the theme accent) that renders its own
-// key hints inside the box, since the router keeps showing the background's help bar.
-// See actions.newImportDonePopup for a worked example.
+// modal, and the background is kept sized (for resize) while it shows through. The
+// router honors core.Overlayer's bool each frame, so a screen can opt in yet still
+// render full-screen by returning false. components.DialogScreen does exactly that:
+// the same closure-configured box serves a full-screen confirm and, when its Overlay
+// flag is set, a modal (core.PopupBox renders it in the theme accent, with its key
+// hints inside the box since the router keeps the background's help bar).
+// See actions.newImportDonePopup for a worked overlay example.
 //
 // # Adding a tab
 //

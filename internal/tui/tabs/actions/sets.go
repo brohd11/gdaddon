@@ -202,8 +202,8 @@ func newSetOptions(sh *core.Shared, setName string) *components.PickerScreen {
 
 // newSetDeleteConfirm confirms deleting the set file, then returns to the (reloaded)
 // set list.
-func newSetDeleteConfirm(setName string) *components.ConfirmScreen {
-	return &components.ConfirmScreen{
+func newSetDeleteConfirm(setName string) *components.DialogScreen {
+	return &components.DialogScreen{
 		Crumb: "Delete",
 		Render: func(sh *core.Shared) string {
 			return sh.Box("Delete set: " + setName + "\n\n  Removes the set file. Installed plugins are not touched.")

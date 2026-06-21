@@ -44,7 +44,7 @@ func ArchiveEndpoint(sel Selection) core.Screen {
 // ok=false (with a status line) when there is nothing to archive — already-archived
 // (local) assets are dropped first. name labels the package in the confirm/crumb.
 // Shared by the project Archive command and the Global "Add to archive" flow.
-func NewArchiveConfirm(name, repoID, tag string, assets []source.Asset) (*components.ConfirmScreen, string, bool) {
+func NewArchiveConfirm(name, repoID, tag string, assets []source.Asset) (*components.DialogScreen, string, bool) {
 	// Drop already-archived (local) assets; nothing to fetch for those.
 	var remote []source.Asset
 	for _, a := range assets {

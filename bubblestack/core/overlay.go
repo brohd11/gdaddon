@@ -67,8 +67,8 @@ func popupBox(width int) lipgloss.Style {
 
 // PopupBox renders body inside a themed, bordered popup box, with an optional accent
 // title line above it. width is the inner content width (0 ⇒ size to content). It is
-// the default renderer for components.PopupScreen, mirroring (*Shared).Box for the
-// layered case so popups follow the active theme.
+// the default renderer for an overlay components.DialogScreen, mirroring (*Shared).Box
+// for the layered case so popups follow the active theme.
 func PopupBox(title, body string, width int) string {
 	content := body
 	if title != "" {

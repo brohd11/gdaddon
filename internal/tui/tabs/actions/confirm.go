@@ -6,7 +6,7 @@ import (
 	// "github.com/charmbracelet/bubbles/key"
 )
 
-func newInstallAllConfirm(sh *core.Shared) *components.ConfirmScreen {
+func newInstallAllConfirm(sh *core.Shared) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Text:  "Do you want to install all packages in project?",
 		OnYes: core.Push(newInstallAllTask()),

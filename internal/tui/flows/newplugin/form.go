@@ -87,9 +87,9 @@ var newPluginConfirmHelp = []key.Binding{
 	core.Hint("back", core.Keys.Back),
 }
 
-func newNewPluginConfirm(name, url, path string, addTarget int) *components.ConfirmScreen {
+func newNewPluginConfirm(name, url, path string, addTarget int) *components.DialogScreen {
 	target := addTarget // local copy the toggle mutates
-	return &components.ConfirmScreen{
+	return &components.DialogScreen{
 		Render: func(sh *core.Shared) string { return sh.Box(newPluginConfirmBody(sh, name, url, path, target)) },
 		OnKey: func(sh *core.Shared, k string) core.Action {
 			if core.MatchKey(k, core.Keys.Left) || core.MatchKey(k, core.Keys.Right) {

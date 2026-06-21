@@ -35,8 +35,8 @@ func newPackageSubmenu(sel pck.Selection) core.Screen {
 }
 
 // newRemoveConfirm confirms deleting one archived package, then refreshes the tab.
-func newRemoveConfirm(repoID string, asset source.Asset) *components.ConfirmScreen {
-	return &components.ConfirmScreen{
+func newRemoveConfirm(repoID string, asset source.Asset) *components.DialogScreen {
+	return &components.DialogScreen{
 		// Crumb: repoID + " — Remove",
 		Crumb: "Remove",
 		Render: func(sh *core.Shared) string {

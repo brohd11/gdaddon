@@ -65,7 +65,7 @@ func TestNewPluginFormToConfirm(t *testing.T) {
 
 	form.SetValue("url", "https://github.com/owner/repo")
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
-	if _, ok := tm.(core.Router).Top().(*components.ConfirmScreen); !ok {
+	if _, ok := tm.(core.Router).Top().(*components.DialogScreen); !ok {
 		t.Fatalf("filled URL should push confirm, got %T", tm.(core.Router).Top())
 	}
 	if !strings.Contains(tm.View(), "owner/repo") {

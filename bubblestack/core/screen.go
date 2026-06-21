@@ -97,6 +97,7 @@ type Crumber interface{ CrumbLabel(short bool) string }
 // composites this screen's View() box centered over it (see Composite), so the
 // screen underneath stays visible around the box. Input is unaffected — only the
 // top screen receives Update — so an overlay is naturally modal. Optional; a screen
-// opts in by implementing it (the marker's bool return is reserved for future
-// "temporarily non-overlay" toggling and is currently ignored).
+// opts in by implementing it. The router honors the bool return each frame, so a
+// screen can implement Overlayer and still render full-screen by returning false
+// (DialogScreen does this — one type serves both confirm and popup).
 type Overlayer interface{ IsOverlay() bool }

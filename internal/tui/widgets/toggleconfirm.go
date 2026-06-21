@@ -19,13 +19,13 @@ type ToggleConfirm struct {
 	Help   []key.Binding
 }
 
-// NewToggleConfirm wires a components.ConfirmScreen whose ↑/↓ move a selected index
+// NewToggleConfirm wires a components.DialogScreen whose ↑/↓ move a selected index
 // within [0, Count-1] (no wrap); Render draws the box for the current index and OnPick
 // commits it. It owns only the selector state + clamp, so every site keeps full control
 // of its rendered body and commit action.
-func NewToggleConfirm(tc ToggleConfirm) *components.ConfirmScreen {
+func NewToggleConfirm(tc ToggleConfirm) *components.DialogScreen {
 	mode := tc.Start
-	return &components.ConfirmScreen{
+	return &components.DialogScreen{
 		Crumb:  tc.Crumb,
 		Render: func(sh *core.Shared) string { return tc.Render(sh, mode) },
 		OnKey: func(sh *core.Shared, k string) core.Action {

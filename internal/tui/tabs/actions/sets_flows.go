@@ -188,7 +188,7 @@ func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.Pick
 	return components.NewPicker(items, components.PickerOpts{Title: e.Name})
 }
 
-func newRemovePluginConf(setName, setPath string, e addon.Addon) *components.ConfirmScreen {
+func newRemovePluginConf(setName, setPath string, e addon.Addon) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Text: fmt.Sprintf("Remove %s from %s?", e.Name, setName),
 		OnYesLamda: func(sh *core.Shared) core.Action {
@@ -237,9 +237,10 @@ func importSetToProject(sh *core.Shared, setName string) core.Action {
 
 // newImportDonePopup is the "job done" acknowledgement shown after an import: a small
 // box summarizing the result; pressing done reloads and shows the Project tab.
-func newImportDonePopup(setName string, added, skipped int) *components.PopupScreen {
-	return &components.PopupScreen{
-		Title: "Import complete",
+func newImportDonePopup(setName string, added, skipped int) *components.DialogScreen {
+	return &components.DialogScreen{
+		Overlay: true, // a centered modal over the Set submenu
+		Title:   "Import complete",
 		Render: func(*core.Shared) string {
 			return fmt.Sprintf("✓ %s\n\n%d added, %d skipped", setName, added, skipped)
 		},

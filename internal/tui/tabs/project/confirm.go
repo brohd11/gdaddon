@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 )
 
-// The confirm box mechanism lives in components.ConfirmScreen; the builders below
+// The confirm box mechanism lives in components.DialogScreen; the builders below
 // supply its crumb/render/onYes closures for each feature. The install confirm (with
 // its source/clone-mode toggles) lives in confirm_install.go; the remove and archive
 // confirms are below.
@@ -42,7 +42,7 @@ var removeConfirmHelp = []key.Binding{
 // newRemoveConfirm builds the project Remove confirm: a vertical selector between
 // removing just the manifest entry or that plus the installed files. ↑/↓ move the
 // selection (via the confirm's OnKey), enter commits the chosen mode.
-func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
+func newRemoveConfirm(st addon.Status) *components.DialogScreen {
 	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 		Crumb:  "Remove",
 		Count:  3,
@@ -77,7 +77,7 @@ func removeOptions(mode int) string {
 // the shared packages.NewArchiveConfirm (which owns the confirm body, already-archived
 // check, and download task). It returns ok=false (with a status line) when there is
 // nothing to archive: an error or an already-archived selection.
-func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (*components.ConfirmScreen, string, bool) {
+func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (*components.DialogScreen, string, bool) {
 	repoID, err := source.RepoID(selected.URL)
 	if err != nil {
 		return nil, "cannot archive: " + err.Error(), false

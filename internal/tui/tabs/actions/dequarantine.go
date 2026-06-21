@@ -16,7 +16,7 @@ import (
 // compiled plugins arrive tagged with com.apple.quarantine, which Gatekeeper uses to
 // block their native binaries from loading. Clearing it is destructive-free but
 // deliberate, so it sits behind a confirm before the task runs xattr.
-func newDequarantineConfirm(sh *core.Shared) *components.ConfirmScreen {
+func newDequarantineConfirm(sh *core.Shared) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Dequarantine",
 		Text:  "Remove com.apple.quarantine from the addons folder?",
