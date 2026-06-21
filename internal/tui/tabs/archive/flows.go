@@ -26,12 +26,12 @@ var removeConfirmHelp = []key.Binding{
 func newPackageSubmenu(sel pck.Selection) core.Screen {
 	items := []list.Item{
 		components.Item{
-			Name: "✗ Remove from archive",
+			Name: fmt.Sprintf("✗ Remove from archive - %s", sel.Asset.Name),
 			Desc: "delete this archived package",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(sel.RepoID, sel.Asset)) },
 		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Crumb: "Package", Title: sel.RepoID + " - " + sel.Asset.Name})
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Package", Title: sel.RepoID})
 }
 
 // newRemoveConfirm confirms deleting one archived package, then refreshes the tab.

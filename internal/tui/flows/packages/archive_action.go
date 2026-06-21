@@ -22,7 +22,7 @@ import (
 func ArchiveEndpoint(sel Selection) core.Screen {
 	items := []list.Item{
 		components.Item{
-			Name: "⬇ Add to archive",
+			Name: fmt.Sprintf("⬇ Add to archive - %s", sel.Asset.Name),
 			Desc: "save a local copy of this package",
 			Pick: func(sh *core.Shared) core.Action {
 				cs, status, ok := NewArchiveConfirm(sel.RepoID, sel.RepoID, sel.Tag, []source.Asset{sel.Asset})
@@ -35,7 +35,7 @@ func ArchiveEndpoint(sel Selection) core.Screen {
 	}
 	return components.NewPicker(items, components.PickerOpts{
 		Crumb: "Package",
-		Title: sel.RepoID + " - " + stripSuffix(sel.Asset.Name),
+		Title: sel.RepoID,
 	})
 }
 
