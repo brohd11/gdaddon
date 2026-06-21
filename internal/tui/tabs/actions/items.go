@@ -56,11 +56,19 @@ func actionItems(sh *core.Shared) []list.Item {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newDequarantineConfirm(sh)) },
 		})
 	}
-	return append(items,
-		components.Item{
-			Name: "◑ Theme",
-			Desc: "change the color theme",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newThemePicker()) },
-		},
+
+	items = append(items, components.Item{
+		Name: "◑ Theme",
+		Desc: "change the color theme",
+		Pick: func(sh *core.Shared) core.Action { return core.Push(newThemePicker()) },
+	},
 	)
+
+	items = append(items, components.Item{
+		Name: "Refresh",
+		Desc: "manually refresh lists",
+		Pick: func(sh *core.Shared) core.Action { return refreshAll() },
+	})
+
+	return items
 }
