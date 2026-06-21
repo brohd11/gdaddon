@@ -6,6 +6,7 @@ import (
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/editmanifest"
 	"gdaddon/internal/tui/flows/packages"
+	"gdaddon/internal/tui/sysopen"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -54,6 +55,13 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return exportToGlobal(sh, a) },
 		})
 	}
+	if st.Present() || a.URL != "" {
+		items = append(items, components.Item{
+			Name: "📂 Open",
+			Desc: "open the plugin's install path or source url",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newOpenSubmenu(st)) },
+		})
+	}
 	items = append(items, components.Item{
 		Name: "⛃ Archive",
 		Desc: "browse the repo's versions and save a local copy",
@@ -76,6 +84,33 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 		// Crumb:   "Plugin",
 		Title:   a.Name,
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
+	})
+}
+
+// newOpenSubmenu builds the Open command submenu: reveal the installed plugin
+// directory in the OS file manager (only when installed) and/or open the source
+// url in the default browser (only when a url is set). Selecting a row fires the
+// open asynchronously and leaves the submenu open.
+func newOpenSubmenu(st addon.Status) *components.PickerScreen {
+	items := []list.Item{}
+	if st.Present() {
+		items = append(items, components.Item{
+			Name: "Path",
+			Desc: st.FullPath,
+			Pick: func(sh *core.Shared) core.Action { return sysopen.Path(st.FullPath, false) },
+		})
+	}
+	if st.Addon.URL != "" {
+		items = append(items, components.Item{
+			Name: "Source",
+			Desc: st.Addon.URL,
+			Pick: func(sh *core.Shared) core.Action { return sysopen.URL(st.Addon.URL) },
+		})
+	}
+	return components.NewPicker(items, components.PickerOpts{
+		Crumb:   "Open",
+		Title:   st.Addon.Name,
+		PopStop: true,
 	})
 }
 

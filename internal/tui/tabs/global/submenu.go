@@ -6,6 +6,7 @@ import (
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/editmanifest"
 	pck "gdaddon/internal/tui/flows/packages"
+	"gdaddon/internal/tui/sysopen"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -41,6 +42,11 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 			Pick: func(sh *core.Shared) core.Action { return importToProject(sh, g) },
 		})
 	}
+	items = append(items, components.Item{
+		Name: "🌐 Open Source",
+		Desc: "open the source URL in your browser",
+		Pick: func(sh *core.Shared) core.Action { return sysopen.URL(g.url) },
+	})
 	items = append(items, components.Item{
 		Name: "⛃ Archive",
 		Desc: "browse the repo's versions and save a local copy",
