@@ -46,6 +46,22 @@ const (
 	StateUnversioned              // installed, present, manifest pins no version
 )
 
+// String renders a State as a short lowercase label for non-interactive output.
+func (s State) String() string {
+	switch s {
+	case StateMissing:
+		return "missing"
+	case StateInstalled:
+		return "installed"
+	case StateMismatch:
+		return "mismatch"
+	case StateUnversioned:
+		return "unversioned"
+	default:
+		return "invalid"
+	}
+}
+
 // Status pairs an addon with its computed local state.
 type Status struct {
 	Addon        Addon

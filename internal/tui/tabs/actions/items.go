@@ -48,6 +48,13 @@ func actionItems(sh *core.Shared) []list.Item {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newPathsPicker(sh)) },
 		},
 	)
+	if appctx.Of(sh).ProjectRoot != "" {
+		items = append(items, components.Item{
+			Name: "⌕ Scan installed",
+			Desc: "find installed plugins not in the manifest and track them",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newScanPicker(sh)) },
+		})
+	}
 	// macOS quarantines compiled plugins' native binaries; offer a manual clear.
 	if runtime.GOOS == "darwin" && appctx.Of(sh).ProjectRoot != "" {
 		items = append(items, components.Item{

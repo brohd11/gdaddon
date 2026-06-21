@@ -3,9 +3,7 @@ package actions
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"gdaddon/internal/addon"
@@ -51,40 +49,19 @@ func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 	return components.NewLoadingScreen("Update All", "checking for updates…", cmd, onResult)
 }
 
-// resolveUpdatePlansCmd inspects the manifest and, concurrently, resolves an
-// update plan for each installed addon that has a newer release than the one
-// installed. Not-installed or url-less entries are skipped (nothing to compare).
-// The plans are name-sorted so the confirm list is deterministic.
+// resolveUpdatePlansCmd resolves the update plans off the UI thread via
+// addon.ResolveUpdatePlans, capping the whole batch of release-listing fetches
+// with updateResolveTimeout so a slow or unreachable host can't hang the loading
+// screen.
 func resolveUpdatePlansCmd(manifestPath, projectRoot string) func(context.Context) tea.Cmd {
 	return func(parent context.Context) tea.Cmd {
 		return func() tea.Msg {
-			statuses, err := addon.Inspect(manifestPath, projectRoot)
+			ctx, cancel := context.WithTimeout(parent, updateResolveTimeout)
+			defer cancel()
+			plans, err := addon.ResolveUpdatePlans(ctx, manifestPath, projectRoot)
 			if err != nil {
 				return updatePlansMsg{}
 			}
-
-			ctx, cancel := context.WithTimeout(parent, updateResolveTimeout)
-			defer cancel()
-
-			var mu sync.Mutex
-			var wg sync.WaitGroup
-			plans := make([]addon.UpdatePlan, 0)
-			for _, s := range statuses {
-				if !s.Present() || s.Addon.URL == "" {
-					continue
-				}
-				wg.Add(1)
-				go func(a addon.Addon, local string) {
-					defer wg.Done()
-					if plan, ok := addon.ResolveUpdate(ctx, a, local); ok {
-						mu.Lock()
-						plans = append(plans, plan)
-						mu.Unlock()
-					}
-				}(s.Addon, s.LocalVersion)
-			}
-			wg.Wait()
-			sort.Slice(plans, func(i, j int) bool { return plans[i].Addon.Name < plans[j].Addon.Name })
 			return updatePlansMsg{plans: plans}
 		}
 	}

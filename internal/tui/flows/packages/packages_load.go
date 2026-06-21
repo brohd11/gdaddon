@@ -5,6 +5,7 @@ import (
 
 	arch "gdaddon/internal/archive"
 	"gdaddon/internal/source"
+	"gdaddon/internal/store"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -19,6 +20,9 @@ import (
 // they return a loading screen that resolves into the picker.
 func BrowseRepo(repoURL string, opts BrowseOpts) core.Screen {
 	repoID, _ := source.RepoID(repoURL)
+	if store.IsStoreURL(repoURL) {
+		opts.IncludeHEAD = false // store assets have no branches → no HEAD/"git clone"
+	}
 	if opts.Source == SourceArchive {
 		opts.IncludeHEAD = false // local archive has no fetchable branches
 		releases, _ := arch.List(repoID)
@@ -95,6 +99,10 @@ func archiveOnly(remote, archived []source.Release) []source.Release {
 func fetchReleases(url string) func(context.Context) tea.Cmd {
 	return func(ctx context.Context) tea.Cmd {
 		return func() tea.Msg {
+			if store.IsStoreURL(url) {
+				listing, err := store.Listing(ctx, url)
+				return releasesMsg{listing: listing, err: err}
+			}
 			listing, err := source.AvailableVersions(ctx, url)
 			return releasesMsg{listing: listing, err: err}
 		}

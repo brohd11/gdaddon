@@ -61,3 +61,42 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 	}
 	return components.NewTask("installing "+selected.Name+"…", run, onDone)
 }
+
+// newStoreInstallTask installs the chosen Asset Store version. Store assets have no
+// git asset/clone variants: the target carries the canonical store url + the picked
+// version, and addon.Install (→ storeInstall) resolves that release's download and
+// unzips it. On success it pins the chosen store version + resolved path (url left
+// untouched) and lands on Project, handing off to the location form when the
+// resolved path differs, exactly like newInstallTask.
+func newStoreInstallTask(selected addon.Addon, local, version string) *components.TaskScreen {
+	target := selected
+	target.Version = version
+	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
+		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
+		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
+	}
+	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
+		if ev.Err != nil {
+			return core.Seq(
+				core.SetStatusAndLog(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err)),
+				core.SetStatusAndLog("install failed", true),
+				core.ResetToRoot(),
+			)
+		}
+		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
+		res, _ := ev.Payload.(installResult)
+		// Pin the chosen store version (the release identity) + resolved path; leave
+		// url empty so the canonical store url is untouched.
+		_ = addon.UpdateEntry(appctx.Of(sh).ManifestPath, selected.Name, "", res.Path, version, "")
+		if res.Path != "" && res.Path != selected.Path {
+			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: version}
+			return core.Replace(postinstall.New(sh, []postinstall.Target{t}))
+		}
+		return core.Seq(
+			core.SetStatus("installed "+selected.Name),
+			core.PropagateAll(appctx.ProjectDirty{}),
+			core.ShowTab(appctx.TitleProject),
+		)
+	}
+	return components.NewTask("installing "+selected.Name+"…", run, onDone)
+}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"gdaddon/internal/store"
 )
 
 // InstallOutcome records one addon that was actually installed in a batch run, so a
@@ -84,34 +86,100 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 		return cloneInstall(ctx, a, baseDir, report)
 	}
 
+	// Asset Store entries pin a canonical store URL, not a git/zip url; resolve the
+	// store-hosted download and install it (see storeInstall).
+	if store.IsStoreURL(a.URL) {
+		return storeInstall(ctx, a, baseDir, report)
+	}
+
 	stagingRoot, pkgName, cleanup, err := fetchToStaging(ctx, a.URL, a.Name, report)
 	if err != nil {
 		return InstallResult{}, err
 	}
 	defer cleanup()
 
-	placements := resolveInstall(stagingRoot, a.Name, a.Path, pkgName)
-	for _, p := range placements {
-		dest, err := filepath.Abs(filepath.Join(baseDir, p.destRel))
-		if err != nil {
-			return InstallResult{}, fmt.Errorf("could not resolve path: %w", err)
-		}
-		os.RemoveAll(dest)
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return InstallResult{}, err
-		}
-		if err := copyDir(p.src, dest); err != nil {
-			return InstallResult{}, err
-		}
-		report("  -> Successfully installed to %s", p.destRel)
-	}
+	return installStaged(stagingRoot, pkgName, a, baseDir, report)
+}
 
-	// Only a single-folder install can be pinned to a path/version.
+// installStaged places staged content under baseDir, derived from the package
+// layout (resolveInstall, unless the entry pins an explicit path). A single-folder
+// install overwrites its destination and is pinned to a path/version. A package that
+// unpacks to several plugin folders (a bundle, e.g. cogito shipping other addons) is
+// handled carefully: only the primary folder (the one matching the entry) is
+// overwritten and pinned; every other folder is written only when absent, so a
+// bundled copy never clobbers a plugin the user manages separately. Shared by the
+// generic and store install branches.
+func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report Reporter) (InstallResult, error) {
+	placements := resolveInstall(stagingRoot, a.Name, a.Path, pkgName)
+
 	if len(placements) == 1 {
+		if err := writePlacement(placements[0], baseDir, report); err != nil {
+			return InstallResult{}, err
+		}
 		dest := filepath.Join(baseDir, placements[0].destRel)
 		return InstallResult{Path: placements[0].destRel, Version: getLocalPluginVersion(dest)}, nil
 	}
-	return InstallResult{}, nil
+
+	primary := primaryPlacement(placements, a)
+	var res InstallResult
+	for i, p := range placements {
+		if i == primary {
+			if err := writePlacement(p, baseDir, report); err != nil {
+				return InstallResult{}, err
+			}
+			dest := filepath.Join(baseDir, p.destRel)
+			res = InstallResult{Path: p.destRel, Version: getLocalPluginVersion(dest)}
+			continue
+		}
+		// Bundled extra: never overwrite an existing folder (it may be a plugin the
+		// user installs/manages on its own); only write it when absent.
+		if _, err := os.Stat(filepath.Join(baseDir, p.destRel)); err == nil {
+			report("  -> skipped %s (already present; manage separately)", p.destRel)
+			continue
+		}
+		if err := writePlacement(p, baseDir, report); err != nil {
+			return InstallResult{}, err
+		}
+	}
+	return res, nil
+}
+
+// writePlacement replaces the folder at p.destRel (under baseDir) with p.src.
+func writePlacement(p placement, baseDir string, report Reporter) error {
+	dest, err := filepath.Abs(filepath.Join(baseDir, p.destRel))
+	if err != nil {
+		return fmt.Errorf("could not resolve path: %w", err)
+	}
+	os.RemoveAll(dest)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return err
+	}
+	if err := copyDir(p.src, dest); err != nil {
+		return err
+	}
+	report("  -> Successfully installed to %s", p.destRel)
+	return nil
+}
+
+// primaryPlacement returns the index of the placement that is the entry's own addon
+// (so a bundle's other folders can be treated as extras), matched by the install
+// folder's basename against the entry's name or its pinned path. Returns -1 when no
+// placement matches — a genuinely ambiguous multi-addon package, where nothing is
+// pinned and every folder is written only if absent.
+func primaryPlacement(placements []placement, a Addon) int {
+	want := map[string]bool{}
+	if a.Name != "" {
+		want[a.Name] = true
+	}
+	if a.Path != "" {
+		want[filepath.Base(a.Path)] = true
+	}
+	for i, p := range placements {
+		if want[filepath.Base(p.destRel)] {
+			return i
+		}
+	}
+	return -1
 }
 
 // cloneInstall installs a clone entry: it git-clones the repo (full history, the

@@ -26,6 +26,9 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Name: "↧ Install / update",
 			Desc: "pick a version, branch, or asset to install",
 			Pick: func(sh *core.Shared) core.Action {
+				// BrowseRepo lists store releases for a store url and git versions
+				// otherwise; installEndpoint branches on the same to build the right
+				// confirm/task.
 				return core.Push(packages.BrowseRepo(a.URL, packages.BrowseOpts{
 					Source:         packages.SourceAll,
 					IncludeHEAD:    true,

@@ -193,16 +193,17 @@ func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen
 				core.Pop(),
 			)
 		}
-		return newInstallMenu(m.detail)
+		return newInstallMenu(src, m.detail)
 	}
 	return components.NewLoadingScreen("Asset", "fetching asset…", cmd, onResult)
 }
 
 // newInstallMenu builds the install submenu for a resolved asset. Rows are
-// conditional on which URLs the detail carries (source-agnostic): "Add repository"
-// when there's a repo URL, "Install store zip" when there's a release download. With
-// neither, there's nothing installable — report and pop back to the results.
-func newInstallMenu(d *searchpkg.Detail) core.Action {
+// conditional on what the detail and source offer: "Add repository" when there's a
+// repo URL, and — for a store source (AssetURLer) with a release — "Add store
+// asset", which pins the canonical store URL + version (installed via the normal
+// flow). With neither, there's nothing installable — report and pop back.
+func newInstallMenu(src searchpkg.Source, d *searchpkg.Detail) core.Action {
 	var items []list.Item
 	if d.BrowseURL != "" {
 		// Add repository handles any repo URL (not just GitHub); newplugin
@@ -213,13 +214,13 @@ func newInstallMenu(d *searchpkg.Detail) core.Action {
 			Pick: func(sh *core.Shared) core.Action { return core.Replace(newplugin.NewWithURL(d.BrowseURL)) },
 		})
 	}
-	if d.DownloadURL != "" {
-		// TODO: install the store-hosted .zip (d.DownloadURL) once store-style
-		// version tracking is designed; no-op for now.
+	if storeSrc, ok := src.(searchpkg.AssetURLer); ok && d.DownloadURL != "" {
+		url := storeSrc.AssetURL(d.ID)
+		version := d.VersionString
 		items = append(items, components.Item{
-			Name: "Install store zip",
+			Name: "Add store asset",
 			Desc: "release " + d.VersionString,
-			Pick: func(sh *core.Shared) core.Action { return core.SetStatusAndLog("store zip install not yet supported") },
+			Pick: func(sh *core.Shared) core.Action { return core.Replace(newplugin.NewStoreForm(url, version)) },
 		})
 	}
 	if len(items) == 0 {

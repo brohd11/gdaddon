@@ -52,6 +52,15 @@ type Source interface {
 	Detail(ctx context.Context, id string) (*Detail, error) // resolves the repo URL for prefill
 }
 
+// AssetURLer is the optional interface a Source implements when its assets install
+// as a store asset (a canonical store URL pinned in the manifest) rather than a git
+// repo. AssetURL maps a result/detail id to that canonical URL. Only the Asset
+// Store implements it; the search flow shows the "Add store asset" action only for
+// such sources.
+type AssetURLer interface {
+	AssetURL(id string) string
+}
+
 // Sources is the registry of available backends, in display order: the
 // config-defined JSON sources from ~/.gdaddon/config.yml (the source of truth,
 // dumped with defaults on first run — see config.Ensure), then the hard-coded

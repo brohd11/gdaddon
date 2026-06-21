@@ -7,6 +7,7 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"gdaddon/internal/addon"
+	"gdaddon/internal/store"
 	"gdaddon/internal/tui/flows/packages"
 	"gdaddon/internal/tui/widgets"
 
@@ -19,9 +20,31 @@ import (
 // release/branch/asset the shared browse flow hands back.
 func installEndpoint(selected addon.Addon, local string) packages.Endpoint {
 	return func(sel packages.Selection) core.Screen {
+		// Store assets have no git asset/clone/branch variants — confirm the chosen
+		// version and install it via the store path (resolved by version at install).
+		if store.IsStoreURL(selected.URL) {
+			return newStoreInstallConfirm(selected, local, sel.Tag)
+		}
 		pick := versionItem{tag: sel.Tag, asset: sel.Asset, archivedAsset: sel.ArchivedAsset, repoID: sel.RepoID, branch: sel.Branch, archived: sel.Archived}
 		return newInstallConfirm(selected, local, pick)
 	}
+}
+
+// newStoreInstallConfirm confirms installing a chosen Asset Store version, then runs
+// the store install task pinned to that version.
+func newStoreInstallConfirm(selected addon.Addon, local, version string) *components.DialogScreen {
+	return components.CreateConfirmScreen(components.ConfirmSimple{
+		Render: func(sh *core.Shared) string {
+			path := selected.Path
+			if path == "" {
+				path = "(derived on install)"
+			}
+			return sh.Box(fmt.Sprintf(
+				"Install %s\n\n  version:  %s\n  path:     %s",
+				selected.Name, version, path))
+		},
+		OnYes: core.Replace(newStoreInstallTask(selected, local, version)),
+	})
 }
 
 // install source modes (also the vertical option order); shown only when the picked

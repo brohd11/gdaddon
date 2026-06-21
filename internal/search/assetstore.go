@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/url"
 	"strconv"
+
+	"gdaddon/internal/store"
 )
 
 // assetStoreBase is the root of the new Godot Asset Store
@@ -25,6 +27,12 @@ const storePerPage = 24
 type assetStore struct{}
 
 func (assetStore) Name() string { return "Asset Store" }
+
+// AssetURL returns the canonical store URL for an asset id ("<publisher>/<slug>"),
+// the stable identity pinned in the manifest for a store install (see
+// store.IsStoreURL). Implementing AssetURLer marks this source as installable as a
+// store asset rather than a git repo.
+func (assetStore) AssetURL(id string) string { return store.AssetURL(id) }
 
 // Search queries /api/v1/search/query/. type=0 selects addons (1 is templates). The
 // API is 1-based and omits page on the first page, so page (0-indexed from the
@@ -114,23 +122,12 @@ func (assetStore) Detail(ctx context.Context, id string) (*Detail, error) {
 		Description: asset.Description,
 	}
 
-	var releases []struct {
-		Version         string `json:"version"`
-		Stable          bool   `json:"stable"`
-		MinGodotVersion string `json:"min_godot_version"`
-		DownloadURL     string `json:"download_url"`
-	}
-	if err := getJSON(ctx, assetStoreBase+"/api/v1/releases/"+id+"/", &releases); err == nil && len(releases) > 0 {
-		rel := releases[0]
-		for _, r := range releases {
-			if r.Stable {
-				rel = r
-				break
-			}
+	if releases, err := store.Releases(ctx, id); err == nil {
+		if rel, ok := store.PickStable(releases); ok {
+			d.DownloadURL = rel.DownloadURL
+			d.VersionString = rel.Version
+			d.GodotVersion = rel.MinGodotVersion
 		}
-		d.DownloadURL = rel.DownloadURL
-		d.VersionString = rel.Version
-		d.GodotVersion = rel.MinGodotVersion
 	}
 
 	return d, nil

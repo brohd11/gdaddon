@@ -2,7 +2,9 @@ package addon
 
 import (
 	"context"
+	"sort"
 	"strings"
+	"sync"
 
 	"gdaddon/internal/source"
 )
@@ -143,6 +145,39 @@ func resolveUpdateAsset(currentURL string, releases []source.Release, latest sou
 		return source.Asset{}, false
 	}
 	return latest.Assets[len(latest.Assets)-1], true
+}
+
+// ResolveUpdatePlans inspects the manifest and resolves an update plan for every
+// installed addon that has a newer release than the one installed. Not-installed
+// or url-less entries are skipped (nothing to compare). Fetches run concurrently
+// and honor ctx (cancel/deadline) so a slow host can't stall the caller. The
+// returned plans are name-sorted for deterministic output.
+func ResolveUpdatePlans(ctx context.Context, manifestPath, baseDir string) ([]UpdatePlan, error) {
+	statuses, err := Inspect(manifestPath, baseDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	plans := make([]UpdatePlan, 0)
+	for _, s := range statuses {
+		if !s.Present() || s.Addon.URL == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(a Addon, local string) {
+			defer wg.Done()
+			if plan, ok := ResolveUpdate(ctx, a, local); ok {
+				mu.Lock()
+				plans = append(plans, plan)
+				mu.Unlock()
+			}
+		}(s.Addon, s.LocalVersion)
+	}
+	wg.Wait()
+	sort.Slice(plans, func(i, j int) bool { return plans[i].Addon.Name < plans[j].Addon.Name })
+	return plans, nil
 }
 
 // UpdateAll installs each plan's target asset under baseDir and pins the new
