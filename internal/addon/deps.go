@@ -3,7 +3,6 @@ package addon
 import (
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"gdaddon/internal/source"
@@ -43,65 +42,6 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 	}
 	raw := cfg.Section("plugin").Key("deps").String()
 	return parseDependencyList(raw), nil
-}
-
-// installDir reads the installer-specific `dir` key an addon may declare in its
-// plugin.cfg/version.cfg under addonDir — a project-root-relative install path the
-// author can pin (like the custom `deps` key). Returns "" when there's no config or
-// no dir key. Used by resolveInstall when the manifest pins no explicit path.
-func installDir(addonDir string) string {
-	return readPluginCfgKey(addonDir, "dir")
-}
-
-// SourceURL reads the installer-specific `source` key an addon may declare in its
-// plugin.cfg/version.cfg under addonDir — the upstream repo it was installed from —
-// and returns a canonical repo url, or "" when there's no config, no source key, or
-// the value is unparseable. Stamped by stampVersion on install and read back by the
-// Scan action to prefill the Track form's url (see Installed.SuggestedURL).
-func SourceURL(addonDir string) string {
-	return normalizeSource(readPluginCfgKey(addonDir, "source"))
-}
-
-// normalizeSource turns a `source` value into a canonical repo url. It accepts a full
-// url (https://host/owner/repo[.git], validated and normalized) or owner/repo /
-// host/owner/repo shorthand (github.com assumed). Returns "" on anything malformed.
-func normalizeSource(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if strings.Contains(raw, "://") {
-		if _, err := source.RepoID(raw); err != nil {
-			return ""
-		}
-		return NormalizeRepoURL(raw)
-	}
-
-	var host, owner, repo string
-	switch parts := strings.Split(strings.Trim(raw, "/"), "/"); len(parts) {
-	case 2:
-		host, owner, repo = defaultDepHost, parts[0], parts[1]
-	case 3:
-		host, owner, repo = parts[0], parts[1], parts[2]
-	default:
-		return ""
-	}
-	if owner == "" || repo == "" {
-		return ""
-	}
-	return fmt.Sprintf("https://%s/%s/%s", host, owner, repo)
-}
-
-// canonicalRepoURL reduces an install url to its canonical https://host/owner/repo
-// form (dropping any .git/.zip/release-asset path), or "" when rawURL isn't a
-// recognized repo (a store url or local archive path). Used to stamp `source` into a
-// generated version.cfg from the manifest url an addon was installed from.
-func canonicalRepoURL(rawURL string) string {
-	id, err := source.RepoID(rawURL)
-	if err != nil {
-		return ""
-	}
-	return "https://" + id
 }
 
 // parseDependencyList parses a Godot-style bracketed, comma-separated,
@@ -199,64 +139,4 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 		}
 	}
 	return missing, nil
-}
-
-// SatisfiedByTag reports whether an installed entry on installedTag meets this
-// dependency's required tag. verified is false when either tag isn't a comparable
-// dotted-numeric version (a date stamp, a branch-HEAD entry with no tag, …), so the
-// caller can surface it as "can't verify" rather than a definite miss.
-func (d Dependency) SatisfiedByTag(installedTag string) (satisfied, verified bool) {
-	ge, ok := semverGE(installedTag, d.Tag)
-	if !ok {
-		return false, false
-	}
-	return ge, true
-}
-
-// semverGE reports whether version a is >= version b, treating both as dotted
-// numeric versions. A leading "v" and any pre-release/build suffix (after "-"/"+")
-// are ignored. ok is false when either side has no comparable numeric components.
-func semverGE(a, b string) (ge, ok bool) {
-	na, oka := numericParts(a)
-	nb, okb := numericParts(b)
-	if !oka || !okb {
-		return false, false
-	}
-	for i := 0; i < len(na) || i < len(nb); i++ {
-		var x, y int
-		if i < len(na) {
-			x = na[i]
-		}
-		if i < len(nb) {
-			y = nb[i]
-		}
-		if x != y {
-			return x > y, true
-		}
-	}
-	return true, true
-}
-
-func numericParts(v string) ([]int, bool) {
-	v = strings.TrimSpace(v)
-	v = strings.TrimPrefix(strings.TrimPrefix(v, "v"), "V")
-	// Strip a semver pre-release/build suffix, but only when the part before it
-	// looks like a dotted version — so a date stamp like "2024-01-02" stays
-	// non-numeric (uncomparable) rather than truncating to its first field.
-	if i := strings.IndexAny(v, "-+"); i >= 0 && strings.Contains(v[:i], ".") {
-		v = v[:i]
-	}
-	if v == "" {
-		return nil, false
-	}
-	parts := strings.Split(v, ".")
-	nums := make([]int, 0, len(parts))
-	for _, p := range parts {
-		n, err := strconv.Atoi(strings.TrimSpace(p))
-		if err != nil {
-			return nil, false
-		}
-		nums = append(nums, n)
-	}
-	return nums, true
 }
