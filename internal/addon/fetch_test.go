@@ -189,6 +189,54 @@ func TestResolveInstall(t *testing.T) {
 		}
 	})
 
+	t.Run("addons/ with no plugin.cfg (icon pack)", func(t *testing.T) {
+		// at-icons case: a config-less package whose plugin folder lives under addons/
+		// alongside repo junk. Derive from addons/, not the whole tree.
+		root := t.TempDir()
+		os.MkdirAll(filepath.Join(root, "addons/at_icons/node"), 0o755)
+		os.WriteFile(filepath.Join(root, "addons/at_icons/LICENSE.txt"), []byte("x"), 0o644)
+		os.MkdirAll(filepath.Join(root, "docs"), 0o755)
+		os.MkdirAll(filepath.Join(root, ".github"), 0o755)
+		os.WriteFile(filepath.Join(root, "README.md"), []byte("hi"), 0o644)
+		ps := resolveInstall(root, "at-icons", "", "at-icons-main")
+		if len(ps) != 1 || ps[0].destRel != "addons/at_icons" {
+			t.Fatalf("got %+v", ps)
+		}
+		if filepath.Base(ps[0].src) != "at_icons" {
+			t.Errorf("src should be the addons/ child folder, got %s", ps[0].src)
+		}
+	})
+
+	t.Run("addons/ with a loose file beside the plugin folder", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/my_addon")
+		os.WriteFile(filepath.Join(root, "addons", "README.md"), []byte("hi"), 0o644)
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/my_addon" {
+			t.Fatalf("loose file should be ignored; got %+v", ps)
+		}
+	})
+
+	t.Run("addons/ chosen over a stray plugin.cfg elsewhere", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/real")
+		mkPlugin(t, root, "tools/stray")
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/real" {
+			t.Fatalf("should resolve from addons/, not the stray; got %+v", ps)
+		}
+	})
+
+	t.Run("submodule root plugin.cfg wins over a bundled addons/", func(t *testing.T) {
+		root := t.TempDir()
+		os.WriteFile(filepath.Join(root, "plugin.cfg"), []byte("[plugin]\n"), 0o644)
+		mkPlugin(t, root, "addons/bundled")
+		ps := resolveInstall(root, "CoolPlugin", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/CoolPlugin" || ps[0].src != root {
+			t.Fatalf("root plugin.cfg should win; got %+v", ps)
+		}
+	})
+
 	t.Run("multi-folder bundle with pinned path does not collapse", func(t *testing.T) {
 		// A bundle (cogito shipping another addon) with the entry's path already
 		// pinned must derive each folder, not copy the whole staging tree into the

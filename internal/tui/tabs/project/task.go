@@ -22,6 +22,11 @@ type installResult struct{ Path, Version string }
 
 func newInstallTask(selected addon.Addon, local string, pick versionItem) *components.TaskScreen {
 	target := addon.Addon{Name: selected.Name, URL: pick.asset.URL, Path: selected.Path}
+	if !pick.branch {
+		// A real release tag (branch-HEAD archives have none): carry it so a
+		// config-less package is stamped with a version.cfg on install.
+		target.Tag = pick.tag
+	}
 	if pick.clone {
 		// Clone the canonical repo (.git url from the repo id), checking out the
 		// chosen branch, instead of unzipping the branch archive.

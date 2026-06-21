@@ -194,7 +194,7 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 		}
 		report("[%s] Updating %s → %s...", a.Name, old, p.NewTag)
 
-		target := Addon{Name: a.Name, URL: p.Asset.URL, Path: a.Path}
+		target := Addon{Name: a.Name, URL: p.Asset.URL, Path: a.Path, Tag: p.NewTag}
 		res, err := Install(ctx, target, baseDir, report)
 		if err != nil {
 			report("[%s] Error: %v", a.Name, err)
