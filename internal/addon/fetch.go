@@ -198,22 +198,15 @@ func isUnder(path, base string) bool {
 }
 
 // resolveInstall decides where the staged content should land, relative to the
-// project root. An explicit definedPath always wins (a user-set or
-// previously-recorded path is the source of truth); otherwise the destination is
-// derived from the addon's own config folder name. When the addon sits at the
-// staging root (or carries no config), the destination falls back to pkgName —
-// the unwrapped package folder name — and then the manifest name.
+// project root. The manifest path is authoritative only for a *submodule-style*
+// package — one whose plugin.cfg sits at the staging root, so the whole tree is the
+// addon ("path is king"). Otherwise the package is a container of one or more plugin
+// folders and destinations are *derived* by walking those folders: a pinned path
+// still applies to a single nested plugin (so a relocation is honored), but it can
+// no longer collapse a multi-folder bundle into one folder (which previously dumped
+// the entire tree into the pinned path). Precedence stays definedPath > a dir=
+// override (destFor) > addons/<name>.
 func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement {
-	dirs := pluginDirs(stagingRoot)
-
-	if definedPath != "" {
-		src := stagingRoot
-		if len(dirs) == 1 && dirs[0] != stagingRoot {
-			src = dirs[0]
-		}
-		return []placement{{src: src, destRel: definedPath}}
-	}
-
 	// rootName is the install dir basename when the package is installed whole (no
 	// config, or its config is at the staging root): the author's package folder
 	// name when known, else the manifest name.
@@ -222,21 +215,39 @@ func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement 
 		rootName = pkgName
 	}
 
+	// Submodule-style: the package root itself is the addon. Install the whole tree
+	// to the pinned path, else addons/<name> (honoring a dir= override).
+	if hasPluginCfg(stagingRoot) {
+		return []placement{{src: stagingRoot, destRel: pathOr(definedPath, destFor(stagingRoot, DefaultPath(rootName)))}}
+	}
+
+	dirs := pluginDirs(stagingRoot)
 	switch len(dirs) {
 	case 0:
-		return []placement{{src: stagingRoot, destRel: DefaultPath(rootName)}}
+		// No config anywhere: install the whole tree (pinned path, else addons/<name>).
+		return []placement{{src: stagingRoot, destRel: pathOr(definedPath, DefaultPath(rootName))}}
 	case 1:
-		if dirs[0] == stagingRoot {
-			return []placement{{src: stagingRoot, destRel: destFor(stagingRoot, DefaultPath(rootName))}}
-		}
-		return []placement{{src: dirs[0], destRel: destFor(dirs[0], DefaultPath(filepath.Base(dirs[0])))}}
+		// One nested plugin: derive from its folder, but a pinned/relocated path wins.
+		return []placement{{src: dirs[0], destRel: pathOr(definedPath, destFor(dirs[0], DefaultPath(filepath.Base(dirs[0]))))}}
 	default:
+		// A bundle of plugin folders: each derives its own addons/<folder>; the pinned
+		// path can't collapse them. installStaged overwrites only the entry's own
+		// folder and leaves bundled siblings (see primaryPlacement).
 		out := make([]placement, 0, len(dirs))
 		for _, d := range dirs {
 			out = append(out, placement{src: d, destRel: destFor(d, DefaultPath(filepath.Base(d)))})
 		}
 		return out
 	}
+}
+
+// pathOr returns p when set, else the fallback — used to express the "explicit
+// manifest path wins, otherwise derive" precedence in resolveInstall.
+func pathOr(p, fallback string) string {
+	if p != "" {
+		return p
+	}
+	return fallback
 }
 
 // destFor returns a staged config dir's install destination: the addon's own

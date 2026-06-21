@@ -188,6 +188,24 @@ func TestResolveInstall(t *testing.T) {
 			t.Fatalf("manifest path should win over dir=; got %+v", ps)
 		}
 	})
+
+	t.Run("multi-folder bundle with pinned path does not collapse", func(t *testing.T) {
+		// A bundle (cogito shipping another addon) with the entry's path already
+		// pinned must derive each folder, not copy the whole staging tree into the
+		// pinned path (the old bug).
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/cogito")
+		mkPlugin(t, root, "addons/quest_system")
+		ps := resolveInstall(root, "cogito", "addons/cogito", "")
+		if got := destSet(ps); len(got) != 2 || got[0] != "addons/cogito" || got[1] != "addons/quest_system" {
+			t.Fatalf("got %v", got)
+		}
+		for _, p := range ps {
+			if p.destRel == "addons/cogito" && filepath.Base(p.src) != "cogito" {
+				t.Errorf("cogito src should be the cogito folder, not the staging root: %s", p.src)
+			}
+		}
+	})
 }
 
 func TestIsSourceArchiveURL(t *testing.T) {
