@@ -53,6 +53,57 @@ func installDir(addonDir string) string {
 	return readPluginCfgKey(addonDir, "dir")
 }
 
+// SourceURL reads the installer-specific `source` key an addon may declare in its
+// plugin.cfg/version.cfg under addonDir — the upstream repo it was installed from —
+// and returns a canonical repo url, or "" when there's no config, no source key, or
+// the value is unparseable. Stamped by stampVersion on install and read back by the
+// Scan action to prefill the Track form's url (see Installed.SuggestedURL).
+func SourceURL(addonDir string) string {
+	return normalizeSource(readPluginCfgKey(addonDir, "source"))
+}
+
+// normalizeSource turns a `source` value into a canonical repo url. It accepts a full
+// url (https://host/owner/repo[.git], validated and normalized) or owner/repo /
+// host/owner/repo shorthand (github.com assumed). Returns "" on anything malformed.
+func normalizeSource(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if strings.Contains(raw, "://") {
+		if _, err := source.RepoID(raw); err != nil {
+			return ""
+		}
+		return NormalizeRepoURL(raw)
+	}
+
+	var host, owner, repo string
+	switch parts := strings.Split(strings.Trim(raw, "/"), "/"); len(parts) {
+	case 2:
+		host, owner, repo = defaultDepHost, parts[0], parts[1]
+	case 3:
+		host, owner, repo = parts[0], parts[1], parts[2]
+	default:
+		return ""
+	}
+	if owner == "" || repo == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://%s/%s/%s", host, owner, repo)
+}
+
+// canonicalRepoURL reduces an install url to its canonical https://host/owner/repo
+// form (dropping any .git/.zip/release-asset path), or "" when rawURL isn't a
+// recognized repo (a store url or local archive path). Used to stamp `source` into a
+// generated version.cfg from the manifest url an addon was installed from.
+func canonicalRepoURL(rawURL string) string {
+	id, err := source.RepoID(rawURL)
+	if err != nil {
+		return ""
+	}
+	return "https://" + id
+}
+
 // parseDependencyList parses a Godot-style bracketed, comma-separated,
 // optionally-quoted list of `owner/repo@tag` items. Malformed items (missing @tag
 // or owner/repo) are skipped rather than failing the whole parse.

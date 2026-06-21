@@ -159,18 +159,24 @@ var trackConfirmHelp = []key.Binding{
 
 // NewFromInstall builds the form for tracking an already-installed plugin found by
 // the Scan action: name and path are prefilled from disk and url is prefilled with a
-// suggestion (a pathless manifest entry that looks like this folder, if any), with
-// focus on the url field so the user pastes/confirms it. On submit it upserts the
-// project entry — backfilling path/version on a matching pathless entry (the cogito
-// case) or adding a new one — so a bundled/sideloaded plugin starts being tracked.
-func NewFromInstall(path, name, version, suggestedURL string) *components.FormScreen {
+// suggestion (a git checkout's origin remote, a `source=` cfg key, or a matching
+// pathless manifest entry), with focus on the url field so the user confirms it. The
+// clone toggle is pre-set when the folder is a standalone git repo (and branch is its
+// checked-out branch, recorded as the entry's tag). On submit it upserts the project
+// entry — backfilling path/version on a matching pathless entry (the cogito case) or
+// adding a new one — so a bundled/sideloaded plugin starts being tracked.
+func NewFromInstall(path, name, version, suggestedURL string, clone bool, branch string) *components.FormScreen {
 	urlF := components.NewTextField("url", "URL:     ", "https://github.com/owner/repo")
 	nameF := components.NewTextField("name", "Name:    ", "(optional — derived from url)")
 	pathF := components.NewTextField("path", "Path:    ", "(optional — derived on install)")
+	cloneF := components.NewToggleField("clone", "Clone:   ", []string{"no", "yes"}, "|")
 
 	urlF.SetValue(suggestedURL)
 	nameF.SetValue(name)
 	pathF.SetValue(path)
+	if clone {
+		cloneF.SetIndex(1)
+	}
 
 	return components.NewForm(components.FormOpts{
 		Crumb: "Track Plugin",
@@ -179,11 +185,13 @@ func NewFromInstall(path, name, version, suggestedURL string) *components.FormSc
 			components.NewSpacer(),
 			urlF, nameF, pathF,
 			components.NewSpacer(),
+			cloneF,
 			components.NewNote("  installed " + versionLabel(version)),
 		},
 		Focus: "url",
 		Help: []key.Binding{
 			core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
+			core.Hint("clone", core.Keys.Left, core.Keys.Right),
 			core.Hint("next", core.Keys.Select),
 			core.Hint("cancel", core.Keys.Back),
 		},
@@ -200,44 +208,63 @@ func NewFromInstall(path, name, version, suggestedURL string) *components.FormSc
 				name = addon.DeriveName(url)
 			}
 			path := strings.TrimSpace(f.Value("path"))
-			return core.Push(newTrackConfirm(name, url, path, version))
+			cloneSel := cloneF.Value() == "yes"
+			return core.Push(newTrackConfirm(name, url, path, version, cloneSel, branch))
 		},
 	})
 }
 
-func newTrackConfirm(name, url, path, version string) *components.DialogScreen {
+func newTrackConfirm(name, url, path, version string, clone bool, branch string) *components.DialogScreen {
 	return &components.DialogScreen{
-		Render: func(sh *core.Shared) string { return sh.Box(trackConfirmBody(sh, name, url, path, version)) },
-		OnYes:  func(sh *core.Shared) core.Action { return commitTrack(sh, name, url, path, version) },
-		Help:   trackConfirmHelp,
+		Render: func(sh *core.Shared) string {
+			return sh.Box(trackConfirmBody(sh, name, url, path, version, clone, branch))
+		},
+		OnYes: func(sh *core.Shared) core.Action { return commitTrack(sh, name, url, path, version, clone, branch) },
+		Help:  trackConfirmHelp,
 	}
 }
 
-func trackConfirmBody(sh *core.Shared, name, url, path, version string) string {
+func trackConfirmBody(sh *core.Shared, name, url, path, version string, clone bool, branch string) string {
 	urlBlock := core.IndentLines(core.HardWrap(url, sh.ConfirmWidth()-4), "    ")
 	if path == "" {
 		path = "(derived on install)"
 	}
-	return fmt.Sprintf(
+	body := fmt.Sprintf(
 		"Track plugin\n\n  name:     %s\n  version:  %s\n  url:\n%s\n  path:     %s",
 		name, versionLabel(version), urlBlock, path)
+	if clone {
+		cloneLine := "\n  clone:    true"
+		if branch != "" {
+			cloneLine += " (branch " + branch + ")"
+		}
+		body += cloneLine
+	}
+	return body
 }
 
 // commitTrack upserts the installed plugin into the project manifest: UpsertEntry
 // matches by repo identity, so it backfills path+version on an existing pathless
-// entry or appends a new one.
-func commitTrack(sh *core.Shared, name, url, path, version string) core.Action {
-	if err := addon.UpsertEntry(appctx.Of(sh).ManifestPath, name, url, path, version, ""); err != nil {
+// entry or appends a new one. For a clone-tracked repo it records the branch as the
+// entry's tag (what cloneInstall clones) and sets the clone flag.
+func commitTrack(sh *core.Shared, name, url, path, version string, clone bool, branch string) core.Action {
+	manifestPath := appctx.Of(sh).ManifestPath
+	tag := ""
+	if clone {
+		tag = branch
+	}
+	if err := addon.UpsertEntry(manifestPath, name, url, path, version, tag); err != nil {
 		return core.Seq(
 			core.SetStatus("error: "+err.Error()),
-			core.ResetToRoot(),
+			core.PopTo(),
 		)
 	}
+	if clone {
+		_ = addon.SetCloneFlag(manifestPath, name, true)
+	}
 	return core.Seq(
-		core.ResetToRoot(),
 		core.SetStatus("tracking "+name),
 		core.PropagateAll(appctx.ProjectDirty{}),
-		core.ShowTab(appctx.TitleProject),
+		core.PopTo(),
 	)
 }
 

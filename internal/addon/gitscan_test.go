@@ -1,0 +1,130 @@
+package addon
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+)
+
+func TestNormalizeGitRemote(t *testing.T) {
+	cases := []struct{ raw, want string }{
+		{"https://github.com/owner/repo.git", "https://github.com/owner/repo.git"},
+		{"https://github.com/owner/repo", "https://github.com/owner/repo"},
+		{"git@github.com:owner/repo.git", "https://github.com/owner/repo.git"},
+		{"git@codeberg.org:owner/repo", "https://codeberg.org/owner/repo"},
+		{"  https://github.com/owner/repo.git  ", "https://github.com/owner/repo.git"},
+		{"", ""},
+		{"ssh://git@github.com/owner/repo.git", ""}, // not the scp shorthand we handle
+		{"garbage", ""},
+	}
+	for _, c := range cases {
+		if got := normalizeGitRemote(c.raw); got != c.want {
+			t.Errorf("normalizeGitRemote(%q) = %q, want %q", c.raw, got, c.want)
+		}
+	}
+}
+
+// initRepo creates a git repo at dir with an origin remote and a branch, so gitProbe
+// has something real to read. Skips the test when git isn't available.
+func initRepo(t *testing.T, dir, origin, branch string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q", "-b", branch)
+	run("remote", "add", "origin", origin)
+	os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644)
+	run("add", ".")
+	run("commit", "-q", "-m", "init")
+}
+
+func TestGitProbe(t *testing.T) {
+	t.Run("non-checkout folder", func(t *testing.T) {
+		dir := t.TempDir()
+		if kind, remote, branch := gitProbe(dir); kind != gitNone || remote != "" || branch != "" {
+			t.Errorf("got (%d, %q, %q), want gitNone", kind, remote, branch)
+		}
+	})
+
+	t.Run("submodule (.git file) needs no git", func(t *testing.T) {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: ../.git/modules/x\n"), 0o644)
+		kind, remote, branch := gitProbe(dir)
+		if kind != gitSubmodule || remote != "" || branch != "" {
+			t.Errorf("got (%d, %q, %q), want gitSubmodule", kind, remote, branch)
+		}
+	})
+
+	t.Run("standalone repo reports remote and branch", func(t *testing.T) {
+		dir := t.TempDir()
+		initRepo(t, dir, "git@github.com:owner/repo.git", "trunk")
+		kind, remote, branch := gitProbe(dir)
+		if kind != gitRepo {
+			t.Fatalf("kind = %d, want gitRepo", kind)
+		}
+		if remote != "https://github.com/owner/repo.git" {
+			t.Errorf("remote = %q, want normalized https", remote)
+		}
+		if branch != "trunk" {
+			t.Errorf("branch = %q, want trunk", branch)
+		}
+	})
+}
+
+func TestScanInstalledGit(t *testing.T) {
+	root := t.TempDir()
+
+	// A standalone-repo addon: its own .git dir, an origin remote, a plugin.cfg.
+	repo := filepath.Join(root, "addons", "repoaddon")
+	os.MkdirAll(repo, 0o755)
+	os.WriteFile(filepath.Join(repo, "plugin.cfg"), []byte("[plugin]\nname=\"RepoAddon\"\nversion=\"1.0.0\"\n"), 0o644)
+	initRepo(t, repo, "https://github.com/owner/repoaddon.git", "main")
+
+	// A submodule addon: .git is a file → must be omitted from the scan.
+	sub := filepath.Join(root, "addons", "subaddon")
+	os.MkdirAll(sub, 0o755)
+	os.WriteFile(filepath.Join(sub, "plugin.cfg"), []byte("[plugin]\nname=\"SubAddon\"\n"), 0o644)
+	os.WriteFile(filepath.Join(sub, ".git"), []byte("gitdir: ../../.git/modules/subaddon\n"), 0o644)
+
+	found, err := ScanInstalled(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+	var repoAddon *Installed
+	for i := range found {
+		names = append(names, found[i].Name)
+		if found[i].Name == "RepoAddon" {
+			repoAddon = &found[i]
+		}
+	}
+	for _, n := range names {
+		if n == "SubAddon" {
+			t.Errorf("submodule should be omitted; got %v", names)
+		}
+	}
+	if repoAddon == nil {
+		t.Fatalf("RepoAddon not found; got %v", names)
+	}
+	if !repoAddon.Clone {
+		t.Error("standalone repo should set Clone")
+	}
+	if repoAddon.Branch != "main" {
+		t.Errorf("Branch = %q, want main", repoAddon.Branch)
+	}
+	if repoAddon.SuggestedURL != "https://github.com/owner/repoaddon.git" {
+		t.Errorf("SuggestedURL = %q, want the origin remote", repoAddon.SuggestedURL)
+	}
+}

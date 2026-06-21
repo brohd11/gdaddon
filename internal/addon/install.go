@@ -117,7 +117,7 @@ func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report 
 			return InstallResult{}, err
 		}
 		dest := filepath.Join(baseDir, placements[0].destRel)
-		stampVersion(dest, intendedVersion(a))
+		stampVersion(dest, intendedVersion(a), canonicalRepoURL(a.URL))
 		return InstallResult{Path: placements[0].destRel, Version: getLocalPluginVersion(dest)}, nil
 	}
 
@@ -129,7 +129,7 @@ func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report 
 				return InstallResult{}, err
 			}
 			dest := filepath.Join(baseDir, p.destRel)
-			stampVersion(dest, intendedVersion(a))
+			stampVersion(dest, intendedVersion(a), canonicalRepoURL(a.URL))
 			res = InstallResult{Path: p.destRel, Version: getLocalPluginVersion(dest)}
 			continue
 		}

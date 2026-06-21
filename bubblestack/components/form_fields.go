@@ -113,6 +113,14 @@ func (t *ToggleField) SetWidth(int)    {}
 func (t *ToggleField) Index() int      { return t.index }
 func (t *ToggleField) Value() string   { return t.options[t.index] }
 
+// SetIndex pre-selects an option (e.g. to seed a toggle from detected state). Out-of-
+// range values are ignored, so it's safe to call before options are known to match.
+func (t *ToggleField) SetIndex(i int) {
+	if i >= 0 && i < len(t.options) {
+		t.index = i
+	}
+}
+
 func (t *ToggleField) OnToggle(forward bool) {
 	n := len(t.options)
 	if forward {
