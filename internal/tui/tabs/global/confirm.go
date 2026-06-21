@@ -2,13 +2,13 @@ package global
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
+	"gdaddon/internal/tui/widgets"
+
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // remove modes (also the vertical option order).
@@ -60,20 +60,8 @@ func removeConfirmBody(sh *core.Shared, g globalItem, mode int) string {
 // removeOptions renders the two removal modes stacked vertically, the active one
 // marked and highlighted.
 func removeOptions(mode int) string {
-	active := lipgloss.NewStyle().Foreground(core.FocusedColor).Bold(true)
-	dim := lipgloss.NewStyle().Foreground(core.MutedColor)
-	opts := []struct{ label, desc string }{
-		{"Global", "remove from the global list only"},
-		{"Global + archive", "also delete the archived packages"},
-	}
-	lines := make([]string, len(opts))
-	for i, o := range opts {
-		text := o.label + " — " + o.desc
-		if i == mode {
-			lines[i] = "  ▸ " + active.Render(text)
-		} else {
-			lines[i] = "    " + dim.Render(text)
-		}
-	}
-	return strings.Join(lines, "\n")
+	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
+		{Label: "Global", Desc: "remove from the global list only"},
+		{Label: "Global + archive", Desc: "also delete the archived packages"},
+	})
 }

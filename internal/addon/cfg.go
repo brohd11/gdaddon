@@ -3,6 +3,9 @@ package addon
 import (
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gopkg.in/ini.v1"
 )
 
 // pluginCfgNames are the config filenames that mark an installable addon/library
@@ -26,3 +29,21 @@ func pluginCfgPath(dir string) string {
 
 // hasPluginCfg reports whether dir is an addon/library folder.
 func hasPluginCfg(dir string) bool { return pluginCfgPath(dir) != "" }
+
+// readPluginCfgKey reads one key from dir's plugin.cfg/version.cfg [plugin] section,
+// returning the unquoted, space-trimmed value or "" when the file/section/key is
+// absent or unreadable. The silent "" fallback is the behavior every caller relies on
+// (an unversioned or dir-less addon is normal, not an error). Callers that need to
+// distinguish a read error (e.g. Dependencies) load the config themselves.
+func readPluginCfgKey(dir, key string) string {
+	cfgPath := pluginCfgPath(dir)
+	if cfgPath == "" {
+		return ""
+	}
+	cfg, err := ini.Load(cfgPath)
+	if err != nil {
+		return ""
+	}
+	raw := cfg.Section("plugin").Key(key).String()
+	return strings.Trim(strings.TrimSpace(raw), `'"`)
+}

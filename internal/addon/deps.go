@@ -50,16 +50,7 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 // author can pin (like the custom `deps` key). Returns "" when there's no config or
 // no dir key. Used by resolveInstall when the manifest pins no explicit path.
 func installDir(addonDir string) string {
-	cfgPath := pluginCfgPath(addonDir)
-	if cfgPath == "" {
-		return ""
-	}
-	cfg, err := ini.Load(cfgPath)
-	if err != nil {
-		return ""
-	}
-	raw := cfg.Section("plugin").Key("dir").String()
-	return strings.Trim(strings.TrimSpace(raw), `'"`)
+	return readPluginCfgKey(addonDir, "dir")
 }
 
 // parseDependencyList parses a Godot-style bracketed, comma-separated,

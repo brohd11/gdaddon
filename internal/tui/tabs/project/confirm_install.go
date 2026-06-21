@@ -1,0 +1,179 @@
+package project
+
+import (
+	"fmt"
+
+	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
+
+	"gdaddon/internal/addon"
+	"gdaddon/internal/tui/flows/packages"
+	"gdaddon/internal/tui/widgets"
+
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/lipgloss"
+)
+
+// installEndpoint adapts the install confirm into a packages.Endpoint: it captures the
+// selected addon and its installed version, and builds the confirm for whichever
+// release/branch/asset the shared browse flow hands back.
+func installEndpoint(selected addon.Addon, local string) packages.Endpoint {
+	return func(sel packages.Selection) core.Screen {
+		pick := versionItem{tag: sel.Tag, asset: sel.Asset, archivedAsset: sel.ArchivedAsset, repoID: sel.RepoID, branch: sel.Branch, archived: sel.Archived}
+		return newInstallConfirm(selected, local, pick)
+	}
+}
+
+// install source modes (also the vertical option order); shown only when the picked
+// version has a local archived copy to install from.
+const (
+	installDownload = iota // fetch from the remote url
+	installArchive         // install from the local archived copy
+)
+
+var installToggleHelp = []key.Binding{
+	core.Hint("source", core.Keys.Up, core.Keys.Down),
+	core.Hint("confirm", core.Keys.Yes),
+	core.Hint("cancel", core.Keys.No),
+}
+
+// branch install modes (also the vertical option order).
+const (
+	installPackageMode = iota // download + unzip the branch archive (current behavior)
+	installCloneMode          // git clone the repo as a live working copy (keeps .git)
+)
+
+var installCloneToggleHelp = []key.Binding{
+	core.Hint("mode", core.Keys.Up, core.Keys.Down),
+	core.Hint("confirm", core.Keys.Yes),
+	core.Hint("cancel", core.Keys.No),
+}
+
+func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *components.ConfirmScreen {
+	// Branch (HEAD) installs offer a Package/Clone mode toggle: clone installs the
+	// branch as a live git working copy for development (see cloneModeOptions).
+	if pick.branch {
+		mode := installPackageMode
+		return &components.ConfirmScreen{
+			Crumb: "Install",
+			Render: func(sh *core.Shared) string {
+				body := confirmInstallBody(sh, selected, pick)
+				body += "\n\n  mode:\n" + cloneModeOptions(mode)
+				if mode == installCloneMode {
+					body += "\n\n" + cloneModeWarning(selected)
+				}
+				return sh.Box(body)
+			},
+			OnKey: func(sh *core.Shared, k string) core.Action {
+				switch {
+				case core.MatchKey(k, core.Keys.Up):
+					if mode > installPackageMode {
+						mode--
+					}
+				case core.MatchKey(k, core.Keys.Down):
+					if mode < installCloneMode {
+						mode++
+					}
+				}
+				return core.Action{}
+			},
+			OnYes: func(sh *core.Shared) core.Action {
+				p := pick
+				p.clone = mode == installCloneMode
+				return core.Replace(newInstallTask(selected, local, p))
+			},
+			Help: installCloneToggleHelp,
+		}
+	}
+	// No archived copy ⇒ the plain confirm (current behavior).
+	if pick.archivedAsset.URL == "" {
+		return components.CreateConfirmScreen(components.ConfirmSimple{
+			Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
+			OnYes:  core.Replace(newInstallTask(selected, local, pick)),
+		})
+		// return &components.ConfirmScreen{
+		// 	Title:  pickSection(pick),
+		// 	Crumb:  "Install",
+		// 	Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
+		// 	OnYes: func(sh *core.Shared) core.Action {
+		// 		return core.Replace(newInstallTask(selected, local, pick))
+		// 	},
+		// 	Help: confirmHelp,
+		// }
+	}
+	// Archived copy exists ⇒ offer a Download/Archive source toggle (default Download).
+	mode := installDownload
+	return &components.ConfirmScreen{
+		// Title: pickSection(pick),
+		Crumb: "Install",
+		Render: func(sh *core.Shared) string {
+			body := confirmInstallBody(sh, selected, effectivePick(pick, mode))
+			return sh.Box(body + "\n\n  source:\n" + installSourceOptions(mode))
+		},
+		OnKey: func(sh *core.Shared, k string) core.Action {
+			switch {
+			case core.MatchKey(k, core.Keys.Up):
+				if mode > installDownload {
+					mode--
+				}
+			case core.MatchKey(k, core.Keys.Down):
+				if mode < installArchive {
+					mode++
+				}
+			}
+			return core.Action{}
+		},
+		OnYes: func(sh *core.Shared) core.Action {
+			return core.Replace(newInstallTask(selected, local, effectivePick(pick, mode)))
+		},
+		Help: installToggleHelp,
+	}
+}
+
+// effectivePick resolves the source toggle: in archive mode it installs from the local
+// copy (swapping the url and flagging archived so pinInstall keeps the canonical
+// manifest url); the asset name stays the remote one for clean crumbs/labels.
+func effectivePick(pick versionItem, mode int) versionItem {
+	if mode == installArchive && pick.archivedAsset.URL != "" {
+		pick.asset.URL = pick.archivedAsset.URL
+		pick.archived = true
+	}
+	return pick
+}
+
+func confirmInstallBody(sh *core.Shared, selected addon.Addon, pick versionItem) string {
+	// Hard-wrap the (space-less) URL to fit inside the box.
+	urlBlock := core.IndentLines(core.HardWrap(pick.asset.URL, sh.ConfirmWidth()-4), "    ")
+	return fmt.Sprintf(
+		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s",
+		selected.Name, pick.tag, pick.asset.Name, selected.Path, urlBlock)
+}
+
+// installSourceOptions renders the two install sources stacked vertically, the active
+// one marked and highlighted (mirrors removeOptions).
+func installSourceOptions(mode int) string {
+	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
+		{Label: "Download", Desc: "fetch a fresh copy from the remote"},
+		{Label: "Archive", Desc: "install from the local archived copy"},
+	})
+}
+
+// cloneModeOptions renders the branch-install Package/Clone modes stacked
+// vertically, the active one marked and highlighted (mirrors installSourceOptions).
+func cloneModeOptions(mode int) string {
+	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
+		{Label: "Package", Desc: "download the branch and install as an unzipped package"},
+		{Label: "Clone", Desc: "git clone the repo as a live working copy (keeps .git)"},
+	})
+}
+
+// cloneModeWarning cautions that clone mode places the whole repo at the addon
+// path, so it only works for repos whose root is the addon itself.
+func cloneModeWarning(selected addon.Addon) string {
+	dest := selected.Path
+	if dest == "" {
+		dest = addon.DefaultPath(selected.Name)
+	}
+	warn := lipgloss.NewStyle().Foreground(core.MutedColor)
+	return warn.Render("  ⚠ clones the whole repo (with .git) to " + dest + ";\n    the repo root must be the addon itself or it won't load in Godot.")
+}

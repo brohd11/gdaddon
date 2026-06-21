@@ -19,7 +19,7 @@ import (
 // are self-dispatching components.Item values built in globalItems.
 type globalItem struct {
 	name, url, path, version, tag string
-	clone                        bool
+	clone                         bool
 }
 
 // GlobalScreen is the Global tab root.

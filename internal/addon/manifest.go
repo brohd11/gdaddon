@@ -6,12 +6,6 @@ import (
 	"strings"
 )
 
-// LocalVersion reports the version recorded in an installed addon's plugin.cfg,
-// or "" if absent. Used after an update to pin the real installed version.
-func LocalVersion(fullPath string) string {
-	return getLocalPluginVersion(fullPath)
-}
-
 // UpdateEntry rewrites a single manifest entry's url, path, version, and tag in
 // place. It edits only those lines (inserting them if absent), leaving every other
 // line — blank lines, comments, indentation, quoting — byte-for-byte intact. An
@@ -28,27 +22,9 @@ func UpdateEntry(manifestPath, name, url, path, version, tag string) error {
 
 	lines := strings.Split(string(data), "\n")
 
-	keyIdx := -1
-	for i, ln := range lines {
-		if isEntryKey(ln, name) {
-			keyIdx = i
-			break
-		}
-	}
-	if keyIdx == -1 {
+	keyIdx, end, ok := findEntryBlock(lines, name)
+	if !ok {
 		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
-	}
-
-	// The entry block runs until the next column-0 (non-indented) content line.
-	end := len(lines)
-	for i := keyIdx + 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "" {
-			continue
-		}
-		if !startsWithSpace(lines[i]) {
-			end = i
-			break
-		}
 	}
 
 	indent := "    "
@@ -120,27 +96,9 @@ func EditEntry(manifestPath, name, url, path, version, tag string) error {
 
 	lines := strings.Split(string(data), "\n")
 
-	keyIdx := -1
-	for i, ln := range lines {
-		if isEntryKey(ln, name) {
-			keyIdx = i
-			break
-		}
-	}
-	if keyIdx == -1 {
+	keyIdx, end, ok := findEntryBlock(lines, name)
+	if !ok {
 		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
-	}
-
-	// The entry block runs until the next column-0 (non-indented) content line.
-	end := len(lines)
-	for i := keyIdx + 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "" {
-			continue
-		}
-		if !startsWithSpace(lines[i]) {
-			end = i
-			break
-		}
 	}
 
 	// Desired rendered line for a field (empty value ⇒ no line).
@@ -253,26 +211,9 @@ func SetCloneFlag(manifestPath, name string, clone bool) error {
 
 	lines := strings.Split(string(data), "\n")
 
-	keyIdx := -1
-	for i, ln := range lines {
-		if isEntryKey(ln, name) {
-			keyIdx = i
-			break
-		}
-	}
-	if keyIdx == -1 {
+	keyIdx, end, ok := findEntryBlock(lines, name)
+	if !ok {
 		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
-	}
-
-	end := len(lines)
-	for i := keyIdx + 1; i < len(lines); i++ {
-		if strings.TrimSpace(lines[i]) == "" {
-			continue
-		}
-		if !startsWithSpace(lines[i]) {
-			end = i
-			break
-		}
 	}
 
 	indent := "    "
@@ -315,7 +256,21 @@ func RemoveEntry(manifestPath, name string) error {
 
 	lines := strings.Split(string(data), "\n")
 
-	keyIdx := -1
+	keyIdx, end, ok := findEntryBlock(lines, name)
+	if !ok {
+		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+	}
+
+	lines = append(lines[:keyIdx], lines[end:]...)
+	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+// findEntryBlock locates the entry named name in the flat manifest shape: it returns
+// the index of the column-0 key line and the exclusive end of the indented block
+// beneath it (the next column-0 content line, or len(lines)). ok is false when name
+// isn't present as a column-0 entry key. Shared by every in-place entry writer.
+func findEntryBlock(lines []string, name string) (keyIdx, end int, ok bool) {
+	keyIdx = -1
 	for i, ln := range lines {
 		if isEntryKey(ln, name) {
 			keyIdx = i
@@ -323,11 +278,10 @@ func RemoveEntry(manifestPath, name string) error {
 		}
 	}
 	if keyIdx == -1 {
-		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+		return 0, 0, false
 	}
 
-	// The entry block runs until the next column-0 (non-indented) content line.
-	end := len(lines)
+	end = len(lines)
 	for i := keyIdx + 1; i < len(lines); i++ {
 		if strings.TrimSpace(lines[i]) == "" {
 			continue
@@ -337,9 +291,7 @@ func RemoveEntry(manifestPath, name string) error {
 			break
 		}
 	}
-
-	lines = append(lines[:keyIdx], lines[end:]...)
-	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+	return keyIdx, end, true
 }
 
 // isEntryKey reports whether ln is the column-0 mapping key `<name>:`.
