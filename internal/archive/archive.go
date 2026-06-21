@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"gdaddon/internal/config"
+	"gdaddon/internal/gitcred"
 	"gdaddon/internal/source"
 
 	"gopkg.in/yaml.v3"
@@ -80,7 +81,7 @@ func Archive(ctx context.Context, repoID, tag string, asset source.Asset) error 
 		return err
 	}
 	req.Header.Set("User-Agent", "gdaddon")
-	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
+	if tok := gitcred.TokenForURL(ctx, asset.URL); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 

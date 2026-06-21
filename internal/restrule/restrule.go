@@ -10,16 +10,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"gdaddon/internal/gitcred"
 )
 
 // GetJSON performs a GET and decodes the JSON body into out, with a shared
-// timeout and User-Agent. auth == "github" adds Bearer $GITHUB_TOKEN (when set)
-// to raise GitHub's API rate limit. The body is decoded with UseNumber so numeric
-// ids and pagination fields coerce cleanly when out is an any.
+// timeout and User-Agent. auth == "github" adds a Bearer token for the host
+// (GITHUB_TOKEN, else the user's git credential helper — see gitcred), which
+// raises GitHub's API rate limit and reaches private repos. The body is decoded
+// with UseNumber so numeric ids and pagination fields coerce cleanly when out is
+// an any.
 func GetJSON(ctx context.Context, endpoint, auth string, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -31,7 +34,7 @@ func GetJSON(ctx context.Context, endpoint, auth string, out any) error {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "gdaddon")
 	if auth == "github" {
-		if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
+		if tok := gitcred.Token(ctx, req.URL.Hostname()); tok != "" {
 			req.Header.Set("Authorization", "Bearer "+tok)
 		}
 	}

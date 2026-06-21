@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"gdaddon/internal/gitcred"
 )
 
 // fetchToStaging downloads (.zip) or clones (.git) the addon into a temporary
@@ -91,6 +93,9 @@ func obtainZip(ctx context.Context, url, addonName string, report Reporter) (zip
 		return "", func() {}, err
 	}
 	req.Header.Set("User-Agent", "Mozilla/5.0")
+	if tok := gitcred.TokenForURL(ctx, url); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -121,6 +126,7 @@ func fetchGit(ctx context.Context, url, addonName string, report Reporter) (stri
 	cleanup := func() { os.RemoveAll(tempDir) }
 
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", url, tempDir)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		report("  -> Failed to clone %s:\n%s", addonName, string(out))
 		cleanup()
@@ -141,6 +147,7 @@ func gitCloneBranch(ctx context.Context, url, branch, dest, addonName string, re
 	}
 
 	cmd := exec.CommandContext(ctx, "git", "clone", "--branch", branch, url, dest)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		report("  -> Failed to clone %s:\n%s", addonName, string(out))
 		os.RemoveAll(dest)
