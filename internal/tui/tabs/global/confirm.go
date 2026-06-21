@@ -27,26 +27,14 @@ var removeConfirmHelp = []key.Binding{
 // removing just the global-list entry or that plus the repo's archived packages.
 // ↑/↓ move the selection (via the confirm's OnKey), enter commits the chosen mode.
 func newRemoveConfirm(g globalItem) *components.ConfirmScreen {
-	mode := removeGlobal // local copy the selector mutates; default = non-destructive
-	return &components.ConfirmScreen{
+	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 		Crumb:  g.name + " — Remove",
-		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, g, mode)) },
-		OnKey: func(sh *core.Shared, k string) core.Action {
-			switch {
-			case core.MatchKey(k, core.Keys.Up):
-				if mode > removeGlobal {
-					mode--
-				}
-			case core.MatchKey(k, core.Keys.Down):
-				if mode < removeGlobalArchive {
-					mode++
-				}
-			}
-			return core.Action{}
-		},
-		OnYes: func(sh *core.Shared) core.Action { return commitRemove(sh, g, mode) },
-		Help:  removeConfirmHelp,
-	}
+		Count:  2,
+		Start:  removeGlobal, // default = non-destructive
+		Render: func(sh *core.Shared, mode int) string { return sh.Box(removeConfirmBody(sh, g, mode)) },
+		OnPick: func(sh *core.Shared, mode int) core.Action { return commitRemove(sh, g, mode) },
+		Help:   removeConfirmHelp,
+	})
 }
 
 func removeConfirmBody(sh *core.Shared, g globalItem, mode int) string {

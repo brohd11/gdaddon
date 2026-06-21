@@ -53,10 +53,11 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 	// Branch (HEAD) installs offer a Package/Clone mode toggle: clone installs the
 	// branch as a live git working copy for development (see cloneModeOptions).
 	if pick.branch {
-		mode := installPackageMode
-		return &components.ConfirmScreen{
+		return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 			Crumb: "Install",
-			Render: func(sh *core.Shared) string {
+			Count: 2,
+			Start: installPackageMode,
+			Render: func(sh *core.Shared, mode int) string {
 				body := confirmInstallBody(sh, selected, pick)
 				body += "\n\n  mode:\n" + cloneModeOptions(mode)
 				if mode == installCloneMode {
@@ -64,26 +65,13 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 				}
 				return sh.Box(body)
 			},
-			OnKey: func(sh *core.Shared, k string) core.Action {
-				switch {
-				case core.MatchKey(k, core.Keys.Up):
-					if mode > installPackageMode {
-						mode--
-					}
-				case core.MatchKey(k, core.Keys.Down):
-					if mode < installCloneMode {
-						mode++
-					}
-				}
-				return core.Action{}
-			},
-			OnYes: func(sh *core.Shared) core.Action {
+			OnPick: func(sh *core.Shared, mode int) core.Action {
 				p := pick
 				p.clone = mode == installCloneMode
 				return core.Replace(newInstallTask(selected, local, p))
 			},
 			Help: installCloneToggleHelp,
-		}
+		})
 	}
 	// No archived copy ⇒ the plain confirm (current behavior).
 	if pick.archivedAsset.URL == "" {
@@ -102,32 +90,20 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 		// }
 	}
 	// Archived copy exists ⇒ offer a Download/Archive source toggle (default Download).
-	mode := installDownload
-	return &components.ConfirmScreen{
+	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 		// Title: pickSection(pick),
 		Crumb: "Install",
-		Render: func(sh *core.Shared) string {
+		Count: 2,
+		Start: installDownload,
+		Render: func(sh *core.Shared, mode int) string {
 			body := confirmInstallBody(sh, selected, effectivePick(pick, mode))
 			return sh.Box(body + "\n\n  source:\n" + installSourceOptions(mode))
 		},
-		OnKey: func(sh *core.Shared, k string) core.Action {
-			switch {
-			case core.MatchKey(k, core.Keys.Up):
-				if mode > installDownload {
-					mode--
-				}
-			case core.MatchKey(k, core.Keys.Down):
-				if mode < installArchive {
-					mode++
-				}
-			}
-			return core.Action{}
-		},
-		OnYes: func(sh *core.Shared) core.Action {
+		OnPick: func(sh *core.Shared, mode int) core.Action {
 			return core.Replace(newInstallTask(selected, local, effectivePick(pick, mode)))
 		},
 		Help: installToggleHelp,
-	}
+	})
 }
 
 // effectivePick resolves the source toggle: in archive mode it installs from the local

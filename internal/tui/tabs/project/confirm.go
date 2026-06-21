@@ -43,27 +43,14 @@ var removeConfirmHelp = []key.Binding{
 // removing just the manifest entry or that plus the installed files. ↑/↓ move the
 // selection (via the confirm's OnKey), enter commits the chosen mode.
 func newRemoveConfirm(st addon.Status) *components.ConfirmScreen {
-	mode := removeLocal // local copy the selector mutates
-	return &components.ConfirmScreen{
-		Crumb: "Remove",
-
-		Render: func(sh *core.Shared) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
-		OnKey: func(sh *core.Shared, k string) core.Action {
-			switch {
-			case core.MatchKey(k, core.Keys.Up):
-				if mode > removeLocal {
-					mode--
-				}
-			case core.MatchKey(k, core.Keys.Down):
-				if mode < removeProjectLocal {
-					mode++
-				}
-			}
-			return core.Action{}
-		},
-		OnYes: func(sh *core.Shared) core.Action { return commitRemove(sh, st, mode) },
-		Help:  removeConfirmHelp,
-	}
+	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
+		Crumb:  "Remove",
+		Count:  3,
+		Start:  removeLocal,
+		Render: func(sh *core.Shared, mode int) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
+		OnPick: func(sh *core.Shared, mode int) core.Action { return commitRemove(sh, st, mode) },
+		Help:   removeConfirmHelp,
+	})
 }
 
 func removeConfirmBody(sh *core.Shared, st addon.Status, mode int) string {
