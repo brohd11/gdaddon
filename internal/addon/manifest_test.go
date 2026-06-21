@@ -57,6 +57,39 @@ func TestUpdateEntryPreservesFormatting(t *testing.T) {
 	}
 }
 
+func TestEditEntrySetAndClear(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set tag (insert new line), keep url/path, and clear version (blank ⇒ remove).
+	if err := EditEntry(path, "Terrain3D",
+		"https://github.com/TokisanGames/Terrain3D/releases/download/v1.0.1/Terrain3D_v1.0.1.zip",
+		"addons/terrain_3d", "", "v1.0.1"); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := os.ReadFile(path)
+	got := string(out)
+	t.Logf("\n%s", got)
+
+	if strings.Contains(got, `version: "1.0.1"`) {
+		t.Errorf("cleared version line should be removed; got:\n%s", got)
+	}
+	if !strings.Contains(got, `tag: "v1.0.1"`) {
+		t.Errorf("tag not inserted; got:\n%s", got)
+	}
+	if !strings.Contains(got, "\n    path: addons/terrain_3d") {
+		t.Errorf("path should be untouched; got:\n%s", got)
+	}
+	// Other entry must survive verbatim.
+	if !strings.Contains(got, `version: "0.1.0"`) || !strings.Contains(got, "\n\nPluginDevTools:") {
+		t.Errorf("other entry mutated; got:\n%s", got)
+	}
+}
+
 func TestSetCloneFlag(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")

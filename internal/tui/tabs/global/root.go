@@ -17,7 +17,10 @@ import (
 // globalItem is one entry from the global plugin list, carried into the per-plugin
 // submenu commands (Import / Remove). It is a payload, not a list row — the rows
 // are self-dispatching components.Item values built in globalItems.
-type globalItem struct{ name, url, path string }
+type globalItem struct {
+	name, url, path, version, tag string
+	clone                        bool
+}
 
 // GlobalScreen is the Global tab root.
 type GlobalScreen struct{ list list.Model }
@@ -40,7 +43,7 @@ func globalItems(sh *core.Shared) []list.Item {
 	if path, err := addon.GlobalListPath(); err == nil {
 		if addons, err := addon.Parse(path); err == nil {
 			for _, a := range addons {
-				g := globalItem{name: a.Name, url: a.URL, path: a.Path}
+				g := globalItem{name: a.Name, url: a.URL, path: a.Path, version: a.Version, tag: a.Tag, clone: a.Clone}
 				items = append(items, components.Item{
 					Name: g.name,
 					Desc: g.url,

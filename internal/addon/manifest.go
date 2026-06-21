@@ -104,6 +104,127 @@ func UpdateEntry(manifestPath, name, url, path, version, tag string) error {
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
+// EditEntry rewrites a single manifest entry's url, path, version, and tag in place
+// with set-or-clear semantics: a non-empty value sets/inserts the line (like
+// UpdateEntry — url/path unquoted, version/tag quoted), while an empty value REMOVES
+// that field's line if present. This is the opposite of UpdateEntry's "empty leaves
+// the line untouched" rule, and is what the Edit Manifest form needs (a blanked
+// field means the user wants the field gone). Every other line — blank lines,
+// comments, the clone line, indentation — is left byte-for-byte intact. clone is a
+// bool and stays out of here; use SetCloneFlag for it.
+func EditEntry(manifestPath, name, url, path, version, tag string) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	keyIdx := -1
+	for i, ln := range lines {
+		if isEntryKey(ln, name) {
+			keyIdx = i
+			break
+		}
+	}
+	if keyIdx == -1 {
+		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+	}
+
+	// The entry block runs until the next column-0 (non-indented) content line.
+	end := len(lines)
+	for i := keyIdx + 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		if !startsWithSpace(lines[i]) {
+			end = i
+			break
+		}
+	}
+
+	// Desired rendered line for a field (empty value ⇒ no line).
+	render := func(ind, key, val string) string {
+		if val == "" {
+			return ""
+		}
+		switch key {
+		case "version", "tag":
+			return ind + key + `: "` + val + `"`
+		default:
+			return ind + key + ": " + val
+		}
+	}
+
+	indent := "    "
+	urlDone, pathDone, versionDone, tagDone := false, false, false, false
+	var drop []int // indices of field lines to remove (cleared values), descending-safe via later sort
+	for i := keyIdx + 1; i < end; i++ {
+		ind, key, ok := splitField(lines[i])
+		if !ok {
+			continue
+		}
+		indent = ind
+		val := ""
+		seen := true
+		switch key {
+		case "url":
+			val, urlDone = url, true
+		case "path":
+			val, pathDone = path, true
+		case "version":
+			val, versionDone = version, true
+		case "tag":
+			val, tagDone = tag, true
+		default:
+			seen = false
+		}
+		if !seen {
+			continue
+		}
+		if val == "" {
+			drop = append(drop, i)
+		} else {
+			lines[i] = render(ind, key, val)
+		}
+	}
+
+	// Remove cleared field lines (descending so earlier indices stay valid).
+	for j := len(drop) - 1; j >= 0; j-- {
+		i := drop[j]
+		lines = append(lines[:i], lines[i+1:]...)
+	}
+
+	// Insert any non-empty fields that weren't already present, after the key line.
+	var inserts []string
+	if !urlDone {
+		if s := render(indent, "url", url); s != "" {
+			inserts = append(inserts, s)
+		}
+	}
+	if !pathDone {
+		if s := render(indent, "path", path); s != "" {
+			inserts = append(inserts, s)
+		}
+	}
+	if !versionDone {
+		if s := render(indent, "version", version); s != "" {
+			inserts = append(inserts, s)
+		}
+	}
+	if !tagDone {
+		if s := render(indent, "tag", tag); s != "" {
+			inserts = append(inserts, s)
+		}
+	}
+	if len(inserts) > 0 {
+		tail := append(inserts, lines[keyIdx+1:]...)
+		lines = append(lines[:keyIdx+1], tail...)
+	}
+
+	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
 // AddEntryWithVersion appends an entry like AddEntry (deduped by repo identity,
 // creating the file if absent), then pins version and/or tag lines onto it when
 // non-empty. It composes the two existing writers so a versioned/tagged add (a set

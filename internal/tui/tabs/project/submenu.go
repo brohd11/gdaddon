@@ -4,6 +4,7 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/editmanifest"
 	"gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
@@ -54,6 +55,13 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 		Name: "⛃ Archive",
 		Desc: "browse the repo's versions and save a local copy",
 		Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st, sh)) },
+	})
+	items = append(items, components.Item{
+		Name: "✎ Edit Manifest",
+		Desc: "edit this plugin's manifest entry (url, path, version, tag, clone)",
+		Pick: func(sh *core.Shared) core.Action {
+			return core.Push(editmanifest.New(appctx.Of(sh).ManifestPath, a, appctx.ProjectDirty{}, false))
+		},
 	})
 	items = append(items, components.Item{
 		Name: "✗ Remove",

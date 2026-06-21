@@ -4,6 +4,7 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/editmanifest"
 	pck "gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
@@ -50,6 +51,18 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 				Endpoint:     pck.ArchiveEndpoint,
 				MarkArchived: true,
 			}))
+		},
+	})
+	items = append(items, components.Item{
+		Name: "✎ Edit Manifest",
+		Desc: "edit this plugin's global entry (url, path, version, tag, clone)",
+		Pick: func(sh *core.Shared) core.Action {
+			gp, err := addon.GlobalListPath()
+			if err != nil {
+				return core.SetStatusAndLog("error: " + err.Error())
+			}
+			a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Clone: g.clone}
+			return core.Push(editmanifest.New(gp, a, appctx.GlobalDirty{}, true))
 		},
 	})
 	items = append(items, components.Item{

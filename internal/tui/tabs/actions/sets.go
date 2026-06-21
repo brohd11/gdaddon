@@ -7,6 +7,7 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/editmanifest"
 	pck "gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
@@ -348,6 +349,13 @@ func newSetPluginsPicker(setName string) core.Screen {
 func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.PickerScreen {
 	items := []list.Item{
 		setAddVersionItem(setName, setPath, e.Name, e.URL, e.Path),
+		components.Item{
+			Name: "✎ Edit Manifest",
+			Desc: "edit this set entry (url, path, version, tag, clone)",
+			Pick: func(sh *core.Shared) core.Action {
+				return core.Push(editmanifest.New(setPath, e, appctx.SetsDirty{}, false))
+			},
+		},
 		components.Item{
 			Name: "✗ Remove plugin",
 			Desc: "remove this plugin from the set",
