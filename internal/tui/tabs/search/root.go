@@ -6,6 +6,7 @@
 package search
 
 import (
+	"gdaddon/internal/config"
 	searchpkg "gdaddon/internal/search"
 	"gdaddon/internal/tui/appctx"
 
@@ -38,14 +39,26 @@ func searchItems() []list.Item {
 			Name: "⌕ New search",
 			Desc: "search a Godot asset source for an addon to add",
 			Pick: func(sh *core.Shared) core.Action {
-				return core.Push(newQueryScreen(defaultSource(), detectGodotVersion(appctx.Of(sh).ProjectRoot)))
+				c := appctx.Of(sh)
+				return core.Push(newQueryScreen(defaultSource(), detectGodotVersion(c.ProjectRoot), c.LastSearchQuery))
 			},
 		},
 	}
 }
 
-// defaultSource is the first registered backend (today: the Asset Library).
-func defaultSource() searchpkg.Source { return searchpkg.Sources()[0] }
+// defaultSource is the saved last-used source (config.yml: last_search_source) when
+// it still matches a registered backend, otherwise the first registered backend.
+func defaultSource() searchpkg.Source {
+	srcs := searchpkg.Sources()
+	if cfg, err := config.Load(); err == nil && cfg.LastSearchSource != "" {
+		for _, s := range srcs {
+			if s.Name() == cfg.LastSearchSource {
+				return s
+			}
+		}
+	}
+	return srcs[0]
+}
 
 func (s *SearchScreen) Init(*core.Shared) tea.Cmd { return nil }
 

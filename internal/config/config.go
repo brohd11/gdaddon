@@ -17,9 +17,10 @@ import (
 // value, so every field is optional. omitempty keeps the dumped default file
 // (see Ensure) free of blank knobs.
 type Config struct {
-	ArchiveDir   string         `yaml:"archive_dir,omitempty"`
-	CurrentTheme string         `yaml:"current_theme,omitempty"` // last-selected TUI theme; loaded at startup, saved on change
-	Sources      []SourceConfig `yaml:"sources,omitempty"`       // search sources; the source of truth once dumped
+	ArchiveDir       string         `yaml:"archive_dir,omitempty"`
+	CurrentTheme     string         `yaml:"current_theme,omitempty"`      // last-selected TUI theme; loaded at startup, saved on change
+	LastSearchSource string         `yaml:"last_search_source,omitempty"` // last-selected Search tab source; loaded at startup, saved on search
+	Sources          []SourceConfig `yaml:"sources,omitempty"`            // search sources; the source of truth once dumped
 }
 
 // SourceConfig is a declarative provider entry. It may carry a search rule
@@ -352,6 +353,45 @@ func SaveTheme(name string) error {
 		return err
 	}
 	setMappingScalar(&doc, "current_theme", name)
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0o644)
+}
+
+// SaveLastSource persists name as last_search_source in ~/.gdaddon/config.yml,
+// editing the file surgically like SaveTheme so the user's other keys and comments
+// survive untouched. A missing file is created from DefaultConfig with the field set.
+func SaveLastSource(name string) error {
+	base, err := Dir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(base, "config.yml")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.MkdirAll(base, 0o755); err != nil {
+			return err
+		}
+		def := DefaultConfig()
+		def.LastSearchSource = name
+		out, err := yaml.Marshal(def)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, out, 0o644)
+	}
+
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return err
+	}
+	setMappingScalar(&doc, "last_search_source", name)
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
 		return err

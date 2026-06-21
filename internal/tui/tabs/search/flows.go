@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"gdaddon/internal/config"
 	searchpkg "gdaddon/internal/search"
+	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/newplugin"
 
 	"github.com/brohd11/bubblestack/components"
@@ -37,12 +39,13 @@ type detailMsg struct {
 // query text field, and a muted note showing the Godot version filter. The chosen
 // source is held in a captured variable that the sub-picker mutates and the
 // PickField/OnSubmit read back.
-func newQueryScreen(src searchpkg.Source, godotVer string) *components.FormScreen {
+func newQueryScreen(src searchpkg.Source, godotVer, lastQuery string) *components.FormScreen {
 	cur := src
 	source := components.NewPickField("source", "Source:  ",
 		func() string { return cur.Name() },
 		func(sh *core.Shared) (core.Action, bool) { return core.Push(newSourcePicker(&cur)), true })
 	query := components.NewTextField("query", "Query:   ", "search terms (e.g. dialogue)")
+	query.SetValue(lastQuery)
 
 	return components.NewForm(components.FormOpts{
 		Crumb: "Search",
@@ -65,6 +68,8 @@ func newQueryScreen(src searchpkg.Source, godotVer string) *components.FormScree
 			if q == "" {
 				return core.Action{}
 			}
+			appctx.Of(sh).LastSearchQuery = q
+			_ = config.SaveLastSource(cur.Name()) // best-effort, like SaveTheme
 			return core.Push(newSearchLoading(cur, q, godotVer, 0))
 		},
 	})

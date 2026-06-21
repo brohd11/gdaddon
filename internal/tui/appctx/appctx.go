@@ -28,6 +28,11 @@ type Ctx struct {
 	ArchivedIDs   []string      // cached repo IDs from archive.Repos()
 	ProjectAddons []addon.Addon // cached from the project manifest
 
+	// LastSearchQuery is the most recent Search tab query. Session-only (not
+	// persisted): it keeps the search form filled across tab navigation but resets
+	// on a fresh launch. The Search tab reads it to prefill and writes it on submit.
+	LastSearchQuery string
+
 	// UpdateChecks caches the project list's per-addon update-check results,
 	// keyed by addon name. It's populated asynchronously (network) by the Project
 	// tab and refreshed after a ProjectDirty/PathRefresh; the list reads it back
