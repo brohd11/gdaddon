@@ -75,3 +75,52 @@ func TestResolveUpdateAsset(t *testing.T) {
 		}
 	})
 }
+
+func TestURLInReleases(t *testing.T) {
+	releases := []source.Release{
+		{Tag: "v2.0.0", Assets: []source.Asset{{Name: "addon.zip", URL: "https://h/dl/v2.0.0/addon.zip"}}},
+		{Tag: "v1.0.0", Assets: []source.Asset{{Name: "addon.zip", URL: "https://h/dl/v1.0.0/addon.zip"}}},
+	}
+	cases := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"latest", "https://h/dl/v2.0.0/addon.zip", true},
+		{"older", "https://h/dl/v1.0.0/addon.zip", true},
+		{"bare/clone url", "https://github.com/owner/repo.git", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := urlInReleases(c.url, releases); got != c.want {
+				t.Errorf("urlInReleases(%q) = %v, want %v", c.url, got, c.want)
+			}
+		})
+	}
+}
+
+func TestCurrentByVersion(t *testing.T) {
+	cases := []struct {
+		name                string
+		addon               Addon
+		latestTag           string
+		wantCurrent, wantOK bool
+	}{
+		{"tag preferred over version", Addon{Tag: "v2.0.0", Version: "1.0.0"}, "v2.0.0", true, true},
+		{"version used when tag empty", Addon{Version: "1.2.3"}, "v1.2.3", true, true},
+		{"equal is current", Addon{Version: "1.0.0"}, "v1.0.0", true, true},
+		{"older is not current", Addon{Version: "1.0.0"}, "v2.0.0", false, true},
+		{"newer is current", Addon{Version: "2.1.0"}, "v2.0.0", true, true},
+		{"date stamp uncomparable", Addon{Version: "2024-01-02"}, "v2.0.0", false, false},
+		{"empty installed uncomparable", Addon{}, "v2.0.0", false, false},
+		{"uncomparable latest tag", Addon{Version: "1.0.0"}, "main", false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			current, ok := currentByVersion(c.addon, c.latestTag)
+			if current != c.wantCurrent || ok != c.wantOK {
+				t.Errorf("currentByVersion = (%v, %v), want (%v, %v)", current, ok, c.wantCurrent, c.wantOK)
+			}
+		})
+	}
+}

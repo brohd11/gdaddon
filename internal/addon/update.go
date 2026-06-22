@@ -60,14 +60,54 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	if !ok {
 		return UpdateInfo{}
 	}
-	info := UpdateInfo{State: UpdateAvailable, LatestTag: latest.Tag}
+	// On the latest release: its url is one of that release's assets.
 	for _, asset := range latest.Assets {
 		if asset.URL == a.URL {
-			info.State = UpdateCurrent
-			break
+			return UpdateInfo{State: UpdateCurrent, LatestTag: latest.Tag}
 		}
 	}
-	return info
+	// A precisely pinned asset from an older release: definitely outdated.
+	if urlInReleases(a.URL, listing.Releases) {
+		return UpdateInfo{State: UpdateAvailable, LatestTag: latest.Tag}
+	}
+	// Otherwise the url is a bare repo/clone url (e.g. a scanned install tracked
+	// from a `source=` key) that matches no asset — fall back to comparing the
+	// installed version/tag against the latest release tag. Uncomparable versions
+	// stay unknown so no false update is flagged.
+	if current, ok := currentByVersion(a, latest.Tag); ok {
+		if current {
+			return UpdateInfo{State: UpdateCurrent, LatestTag: latest.Tag}
+		}
+		return UpdateInfo{State: UpdateAvailable, LatestTag: latest.Tag}
+	}
+	return UpdateInfo{}
+}
+
+// urlInReleases reports whether url is one of the assets across any of the releases.
+func urlInReleases(url string, releases []source.Release) bool {
+	for _, rel := range releases {
+		for _, asset := range rel.Assets {
+			if asset.URL == url {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// currentByVersion compares the addon's installed identifier (prefer its tag, else
+// its plugin.cfg version) against latestTag with semver >=. ok is false when neither
+// side is a comparable dotted-numeric version (a date stamp, no version, …) so the
+// caller can leave the result unknown rather than flag a false update.
+func currentByVersion(a Addon, latestTag string) (current, ok bool) {
+	installed := a.Tag
+	if installed == "" {
+		installed = a.Version
+	}
+	if installed == "" {
+		return false, false
+	}
+	return semverGE(installed, latestTag)
 }
 
 // UpdatePlan is a resolved instruction to update one addon: the addon as it
@@ -108,6 +148,15 @@ func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePla
 	// Already on the latest release: its url is one of that release's assets.
 	for _, asset := range latest.Assets {
 		if asset.URL == a.URL {
+			return UpdatePlan{}, false
+		}
+	}
+	// A bare repo/clone url (a scanned install) matches no asset, so fall back to a
+	// version/tag comparison: don't plan an update when it's already current or the
+	// version can't be compared — only when it's verifiably older.
+	if !urlInReleases(a.URL, listing.Releases) {
+		current, ok := currentByVersion(a, latest.Tag)
+		if !ok || current {
 			return UpdatePlan{}, false
 		}
 	}
