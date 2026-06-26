@@ -15,8 +15,9 @@
 //	             spinner/help/task channel, and the optional *Chrome — header closure,
 //	             status line, and pluggable Output pane, each independently toggleable
 //	             and gateable per-screen), the Router (tea.Model) over a screen stack,
-//	             navigation commands that return a core.Action (Push/Pop/Replace/
-//	             ResetToRoot/ShowTab, plus Seq to issue several at once), the Screen
+//	             navigation commands that return a core.Action (Push/Pop/PopTo —
+//	             unwind to the nearest PopStopper — /Replace/ResetToRoot/ShowTab, plus
+//	             Seq to issue several at once), the Screen
 //	             interface plus the optional interfaces the router type-asserts
 //	             (Filterer, Receiver, PopStopper, ChromeMasker — a screen suppresses
 //	             chrome elements while on top, e.g. FullscreenMask; Crumber — a screen
@@ -44,7 +45,7 @@
 //	             — they name no domain type: the Item list row (carries its own Pick
 //	             closure), the screens PickerScreen, DialogScreen (a confirm box, or a
 //	             modal overlay when its Overlay flag is set — see "Overlays" below),
-//	             LoadingScreen, and the generic
+//	             LoadingScreen, the field-focused FormScreen, and the generic
 //	             streaming TaskScreen, and LogPane (the default core.Output chrome). A tab
 //	             supplies the closures. The two screens that run background work —
 //	             TaskScreen (a streaming task) and LoadingScreen (a fetch spinner) — each
