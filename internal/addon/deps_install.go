@@ -101,7 +101,7 @@ func importDeps(parent context.Context, manifestPath, baseDir string, report Rep
 			report("  -> Skipping %s: no asset for %s", d.RepoID, d.Tag)
 			continue
 		}
-		if err := AddEntryWithVersion(manifestPath, name, asset.URL, "", "", d.Tag); err != nil {
+		if err := AddEntryFull(manifestPath, Addon{Name: name, URL: asset.URL, Tag: d.Tag}); err != nil {
 			report("  -> Could not add %s: %v", d.RepoID, err)
 			continue
 		}

@@ -232,7 +232,7 @@ func TestAddEntryWithTagNoVersion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")
 	// A tagged dependency add: url + tag, no version line yet.
-	if err := AddEntryWithVersion(path, "Dep", "https://github.com/u/Dep/releases/download/v1.2.0/dep.zip", "", "", "v1.2.0"); err != nil {
+	if err := AddEntryFull(path, Addon{Name: "Dep", URL: "https://github.com/u/Dep/releases/download/v1.2.0/dep.zip", Tag: "v1.2.0"}); err != nil {
 		t.Fatal(err)
 	}
 	got := string(mustRead(t, path))

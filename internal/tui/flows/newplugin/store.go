@@ -108,7 +108,7 @@ func commitStoreAsset(sh *core.Shared, name, url, path, version string, addTarge
 		)
 	}
 
-	if err := addon.AddEntryWithVersion(appctx.Of(sh).ManifestPath, name, url, path, version, ""); err != nil {
+	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, addon.Addon{Name: name, URL: url, Path: path, Version: version}); err != nil {
 		return core.Seq(
 			core.SetStatus("error: "+err.Error()),
 			core.ResetToRoot(),

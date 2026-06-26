@@ -183,19 +183,27 @@ func EditEntry(manifestPath, name, url, path, version, tag string) error {
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
-// AddEntryWithVersion appends an entry like AddEntry (deduped by repo identity,
-// creating the file if absent), then pins version and/or tag lines onto it when
-// non-empty. It composes the two existing writers so a versioned/tagged add (a set
-// "Add Version", importing a set entry, or adding a tagged dependency) doesn't need
-// a second manifest shape. Empty version and tag behave exactly like AddEntry.
-func AddEntryWithVersion(manifestPath, name, url, path, version, tag string) error {
-	if err := AddEntry(manifestPath, name, url, path); err != nil {
+// AddEntryFull appends a manifest entry from a fully-specified Addon (deduped by
+// repo identity, creating the file if absent): AddEntry writes the url/path, then
+// version and/or tag lines are pinned on when non-empty, and a clone: true line is
+// added when a.Clone. It composes the existing writers so every "add a complete
+// entry" path (importing a set entry or a global entry, a set "Add Version", adding a
+// tagged dependency) carries the same fields without a second manifest shape — and
+// scales as the Addon struct grows. Empty version/tag and a false Clone behave
+// exactly like AddEntry.
+func AddEntryFull(manifestPath string, a Addon) error {
+	if err := AddEntry(manifestPath, a.Name, a.URL, a.Path); err != nil {
 		return err
 	}
-	if version == "" && tag == "" {
-		return nil
+	if a.Version != "" || a.Tag != "" {
+		if err := UpdateEntry(manifestPath, a.Name, "", "", a.Version, a.Tag); err != nil {
+			return err
+		}
 	}
-	return UpdateEntry(manifestPath, name, "", "", version, tag)
+	if a.Clone {
+		return SetCloneFlag(manifestPath, a.Name, true)
+	}
+	return nil
 }
 
 // SetCloneFlag sets (or clears) the boolean `clone:` line on an entry, in place,

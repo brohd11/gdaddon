@@ -27,7 +27,9 @@ func importSetToProject(sh *core.Shared, setName string) core.Action {
 	}
 	added, skipped := 0, 0
 	for _, e := range entries {
-		if err := addon.AddEntryWithVersion(c.ManifestPath, e.Name, e.URL, e.Path, e.Version, e.Tag); err != nil {
+		// e is a full addon.Addon, so AddEntryFull carries url/path/version/tag and
+		// the clone flag straight through — a set's clone entries import as clones.
+		if err := addon.AddEntryFull(c.ManifestPath, e); err != nil {
 			skipped++
 			continue
 		}

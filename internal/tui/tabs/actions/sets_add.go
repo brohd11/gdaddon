@@ -99,7 +99,7 @@ func setVersionEndpoint(setName, setPath, pluginName, path string) pck.Endpoint 
 					if !sel.Branch && sel.Tag != "" {
 						validTag = sel.Tag
 					}
-					if err := addon.UpsertEntry(setPath, pluginName, sel.Asset.URL, path, sel.Tag, validTag); err != nil {
+					if err := addon.UpsertEntry(setPath, addon.Addon{Name: pluginName, URL: sel.Asset.URL, Path: path, Version: sel.Tag, Tag: validTag}); err != nil {
 						return core.SetStatusAndLog("error: " + err.Error())
 					}
 					return core.Seq(

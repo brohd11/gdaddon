@@ -165,13 +165,8 @@ func depsConfirmBody(name string, plan depPlan) string {
 func commitDeps(name, manifestPath string, plan depPlan) core.Action {
 	added, failed := 0, 0
 	for _, p := range plan.add {
-		var err error
-		if p.tag == "" {
-			err = addon.AddEntry(manifestPath, p.name, p.url, "")
-		} else {
-			err = addon.AddEntryWithVersion(manifestPath, p.name, p.url, "", "", p.tag)
-		}
-		if err != nil {
+		// AddEntryFull with an empty tag behaves like a bare AddEntry.
+		if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: p.name, URL: p.url, Tag: p.tag}); err != nil {
 			failed++
 			continue
 		}

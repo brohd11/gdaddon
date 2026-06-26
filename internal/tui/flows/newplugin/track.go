@@ -106,22 +106,20 @@ func trackConfirmBody(sh *core.Shared, name, url, path, version string, clone bo
 
 // commitTrack upserts the installed plugin into the project manifest: UpsertEntry
 // matches by repo identity, so it backfills path+version on an existing pathless
-// entry or appends a new one. For a clone-tracked repo it records the branch as the
-// entry's tag (what cloneInstall clones) and sets the clone flag.
+// entry or appends a new one, and sets the clone flag from the Addon. For a
+// clone-tracked repo it records the branch as the entry's tag (what cloneInstall
+// clones).
 func commitTrack(sh *core.Shared, name, url, path, version string, clone bool, branch string) core.Action {
 	manifestPath := appctx.Of(sh).ManifestPath
 	tag := ""
 	if clone {
 		tag = branch
 	}
-	if err := addon.UpsertEntry(manifestPath, name, url, path, version, tag); err != nil {
+	if err := addon.UpsertEntry(manifestPath, addon.Addon{Name: name, URL: url, Path: path, Version: version, Tag: tag, Clone: clone}); err != nil {
 		return core.Seq(
 			core.SetStatus("error: "+err.Error()),
 			core.PopTo(),
 		)
-	}
-	if clone {
-		_ = addon.SetCloneFlag(manifestPath, name, true)
 	}
 	return core.Seq(
 		core.SetStatus("tracking "+name),

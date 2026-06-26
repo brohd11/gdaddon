@@ -75,14 +75,15 @@ func InGlobalList(url string) bool {
 	return false
 }
 
-// UpsertEntry updates the existing entry for url's repo (matched by source.RepoID)
+// UpsertEntry updates the existing entry for a.URL's repo (matched by source.RepoID)
 // in place — overwriting its url/version/tag — or appends a new one when absent. Used
 // where re-selecting a plugin should re-pin it rather than error on a duplicate
-// (a set's "Add Version"). Reuses UpdateEntry / AddEntryWithVersion. An empty tag
-// leaves an existing tag line untouched (a branch pin records no tag).
-func UpsertEntry(manifestPath, name, url, path, version, tag string) error {
+// (a set's "Add Version", tracking an installed plugin). Reuses UpdateEntry /
+// AddEntryFull. An empty tag leaves an existing tag line untouched (a branch pin
+// records no tag); a.Clone is applied additively (set when true, never cleared here).
+func UpsertEntry(manifestPath string, a Addon) error {
 	existingName := ""
-	if id, err := source.RepoID(url); err == nil {
+	if id, err := source.RepoID(a.URL); err == nil {
 		if entries, err := Parse(manifestPath); err == nil {
 			for _, e := range entries {
 				if eid, err := source.RepoID(e.URL); err == nil && eid == id {
@@ -92,11 +93,17 @@ func UpsertEntry(manifestPath, name, url, path, version, tag string) error {
 			}
 		}
 	}
-	if existingName != "" {
-		// UpdateEntry leaves path/tag untouched when "" and writes version.
-		return UpdateEntry(manifestPath, existingName, url, path, version, tag)
+	if existingName == "" {
+		return AddEntryFull(manifestPath, a)
 	}
-	return AddEntryWithVersion(manifestPath, name, url, path, version, tag)
+	// UpdateEntry leaves path/tag untouched when "" and writes version.
+	if err := UpdateEntry(manifestPath, existingName, a.URL, a.Path, a.Version, a.Tag); err != nil {
+		return err
+	}
+	if a.Clone {
+		return SetCloneFlag(manifestPath, existingName, true)
+	}
+	return nil
 }
 
 // CreateManifest creates an empty manifest file at path (and its parent dirs),

@@ -90,7 +90,8 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 // ProjectDirty (Focus false, so the Project list reloads silently without leaving the
 // Global tab) and pops the submenu back to the Global list — handy for importing several.
 func importToProject(sh *core.Shared, g globalItem) core.Action {
-	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, g.name, g.url, g.path); err != nil {
+	a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Clone: g.clone}
+	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, a); err != nil {
 		return core.Seq(
 			core.SetStatusAndLog("error: "+err.Error()),
 			core.ResetToRoot(),
