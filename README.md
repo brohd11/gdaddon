@@ -13,6 +13,8 @@
 
 ## Quick Start
 
+Example installing 25 addons: [here](https://youtu.be/1EIBzfUs50g)
+
 ### Manifest
 Each addon has an entry in the manifest. This editable via the TUI, or by hand.
 The path field is for installing repos that are in the submodule format, where it is difficult to infer the plugin directory name.
