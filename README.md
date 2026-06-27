@@ -11,6 +11,8 @@
  - Addon sets - save a collection of addons that can be added together
  - Archive - save a copy of any package locally, can be used for install
 
+## Quick Start
+
 ### Manifest
 Each addon has an entry in the manifest. This editable via the TUI, or by hand.
 The path field is for installing repos that are in the submodule format, where it is difficult to infer the plugin directory name.
@@ -36,4 +38,17 @@ When the addon is installed, the plugin.cfg will be read and checked for depende
 If you don't have a tagged version, just the repo will be added to your project where you can add the proper version manually.
 
 There is also an "Install All + Deps" command that will  install, check for dependencies, loop, until there are none left that can be installed.
+
+### Install
+
+There are binaries under releases, you can also build with Go: `make` will build for all platforms.
+
+on macOS, downloaded binaries may have quarantine status that needs to be cleared before you can execute: `xattr -dr com.apple.quarantine path/to/gdaddon`
+
+Alternatively, build and this is not a problem.
+
+The `install_unix.sh` script will symlink the binary into "$HOME/.local/bin/gdaddon", so you can just run `gdaddon` in any project to start it.
+
+
+More docs can be found [here](doc/docs.md)
 
