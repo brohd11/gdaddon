@@ -53,6 +53,53 @@ func URL(target string) core.Action {
 	)
 }
 
+// Terminal opens an OS terminal at path (a directory). On darwin/windows it shells
+// out to a known terminal; on linux it probes for a common emulator and reports a
+// status if none is found.
+func Terminal(path string) core.Action {
+	if _, err := os.Stat(path); err != nil {
+		return core.SetStatusAndLog("path not found: " + path)
+	}
+	cmd := terminalCmd(path)
+	if cmd == nil {
+		return core.SetStatusAndLog("no terminal emulator found")
+	}
+	return core.Seq(
+		core.SetStatus("opening terminal at "+path),
+		core.Async(func() tea.Msg {
+			_ = cmd.Start()
+			return nil
+		}),
+	)
+}
+
+// terminalCmd builds the terminal launch command for the current OS, or returns nil
+// when no suitable terminal could be found (linux with no known emulator on PATH).
+func terminalCmd(path string) *exec.Cmd {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", "-a", "Terminal", path)
+	case "windows":
+		return exec.Command("cmd", "/c", "start", "cmd", "/k", "cd /d "+path)
+	default:
+		for _, t := range []struct {
+			bin  string
+			args []string
+		}{
+			{"x-terminal-emulator", []string{"--working-directory=" + path}},
+			{"gnome-terminal", []string{"--working-directory=" + path}},
+			{"konsole", []string{"--workdir", path}},
+			{"xfce4-terminal", []string{"--working-directory=" + path}},
+			{"xterm", []string{"-e", "cd " + path + " && exec ${SHELL:-/bin/sh}"}},
+		} {
+			if _, err := exec.LookPath(t.bin); err == nil {
+				return exec.Command(t.bin, t.args...)
+			}
+		}
+		return nil
+	}
+}
+
 func pathCmd(path string, reveal bool) *exec.Cmd {
 	switch runtime.GOOS {
 	case "darwin":

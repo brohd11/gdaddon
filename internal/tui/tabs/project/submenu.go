@@ -99,6 +99,11 @@ func newOpenSubmenu(st addon.Status) *components.PickerScreen {
 			Desc: st.FullPath,
 			Pick: func(sh *core.Shared) core.Action { return sysopen.Path(st.FullPath, false) },
 		})
+		items = append(items, components.Item{
+			Name: "Terminal",
+			Desc: st.FullPath,
+			Pick: func(sh *core.Shared) core.Action { return sysopen.Terminal(st.FullPath) },
+		})
 	}
 	if st.Addon.URL != "" {
 		items = append(items, components.Item{

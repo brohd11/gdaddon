@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"gdaddon/internal/archive"
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/sysopen"
 
@@ -50,6 +51,9 @@ func newPathsPicker(sh *core.Shared) core.Screen {
 	add("Manifest", c.ManifestPath, true)
 	if home, err := os.UserHomeDir(); err == nil {
 		add(".gdaddon", filepath.Join(home, ".gdaddon"), false)
+	}
+	if dir, err := archive.Dir(); err == nil {
+		add("Archive", dir, false)
 	}
 
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Paths"})
