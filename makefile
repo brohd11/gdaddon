@@ -5,9 +5,15 @@ DIST_DIR = dist
 VERSION = $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS = -ldflags "-X gdaddon/cmd.version=$(VERSION)"
 
-.PHONY: all clean package package-mac-arm package-linux package-windows
+.PHONY: all clean test package package-mac-arm package-linux package-windows
 
 all: mac-arm linux windows
+
+# Run the test suite for both modules (bubblestack is a separate Go module, so a
+# root `go test ./...` does not descend into it).
+test:
+	go test ./...
+	cd bubblestack && go test ./...
 
 mac-arm:
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(OUT_DIR)/mac-arm64/$(APP_NAME) .
