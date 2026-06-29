@@ -104,6 +104,69 @@ func TestGitProbe(t *testing.T) {
 	})
 }
 
+func TestFindGitRepos(t *testing.T) {
+	base := t.TempDir()
+	initRepo(t, base, "https://github.com/owner/root.git", "main") // top-level: excluded
+
+	// Nested checkouts at varying depths.
+	foo := filepath.Join(base, "addons", "foo") // depth 2
+	os.MkdirAll(foo, 0o755)
+	initRepo(t, foo, "https://github.com/owner/foo.git", "main")
+
+	deep := filepath.Join(base, "a", "b", "c") // depth 3
+	os.MkdirAll(deep, 0o755)
+	initRepo(t, deep, "https://github.com/owner/deep.git", "main")
+
+	// A submodule-shaped checkout (.git is a file, not a dir) must be found too —
+	// the filesystem walk uses os.Stat, unlike the Python original's isdir check.
+	sub := filepath.Join(base, "addons", "sub") // depth 2
+	os.MkdirAll(sub, 0o755)
+	makeSubmodule(t, sub, "https://github.com/owner/sub.git", "main")
+
+	// A plain non-repo subdir is ignored.
+	os.MkdirAll(filepath.Join(base, "addons", "plain"), 0o755)
+
+	got, err := FindGitRepos(base, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{
+		filepath.Join("addons", "foo"): true,
+		filepath.Join("addons", "sub"): true,
+		filepath.Join("a", "b", "c"):   true,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("FindGitRepos = %v, want keys %v", got, want)
+	}
+	for _, rel := range got {
+		if rel == "." || rel == "" {
+			t.Errorf("base repo should be excluded; got %q", rel)
+		}
+		if !want[rel] {
+			t.Errorf("unexpected repo %q", rel)
+		}
+	}
+
+	// maxDepth caps the walk: depth-2 keeps the addons/* repos, drops the depth-3
+	// deep repo.
+	shallow, err := FindGitRepos(base, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shallowWant := map[string]bool{
+		filepath.Join("addons", "foo"): true,
+		filepath.Join("addons", "sub"): true,
+	}
+	if len(shallow) != len(shallowWant) {
+		t.Fatalf("FindGitRepos(depth=2) = %v, want %v", shallow, shallowWant)
+	}
+	for _, rel := range shallow {
+		if !shallowWant[rel] {
+			t.Errorf("FindGitRepos(depth=2) unexpected %q", rel)
+		}
+	}
+}
+
 func TestScanInstalledGit(t *testing.T) {
 	root := t.TempDir()
 

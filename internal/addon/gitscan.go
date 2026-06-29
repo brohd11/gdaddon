@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,6 +50,43 @@ func HasUncommittedChanges(dir string) bool {
 		return false
 	}
 	return gitOutput(dir, "status", "--porcelain") != ""
+}
+
+// FindGitRepos returns base-relative paths of every git checkout nested under base
+// (excluding base itself), up to maxDepth directory levels deep. A directory is a
+// checkout when it has a `.git` entry (a directory for a standalone clone, a file
+// for a submodule — same test as HasUncommittedChanges). It descends into found
+// repos so nested submodules are reported too, but never walks into `.git`
+// internals, and skips unreadable entries rather than failing the whole walk.
+func FindGitRepos(base string, maxDepth int) ([]string, error) {
+	var repos []string
+	err := filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if d.Name() == ".git" {
+			return filepath.SkipDir
+		}
+		if manifestDepth(base, path) > maxDepth {
+			return filepath.SkipDir
+		}
+		if path == base {
+			return nil
+		}
+		if _, err := os.Stat(filepath.Join(path, ".git")); err == nil {
+			if rel, err := filepath.Rel(base, path); err == nil {
+				repos = append(repos, rel)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return repos, nil
 }
 
 // gitOutput runs a read-only `git -C dir <args...>` and returns its trimmed stdout,
