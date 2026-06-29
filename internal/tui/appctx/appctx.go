@@ -47,6 +47,12 @@ type Ctx struct {
 	// draw the "missing deps" marker; the per-addon submenu gates its "Get
 	// dependencies" item on it.
 	DepChecks map[string][]addon.Dependency
+
+	// GitDirty marks each clone entry whose git working tree has uncommitted
+	// changes, keyed by addon name (only dirty clones appear). Local-only like
+	// DepChecks, recomputed synchronously in loadProject; the Project list reads it
+	// to draw the "uncommitted changes" marker.
+	GitDirty map[string]bool
 }
 
 // New builds the context for a project root and performs the initial path scan.
@@ -81,10 +87,26 @@ func (c *Ctx) loadProject() {
 	if c.ManifestPath == "" {
 		c.ProjectAddons = nil
 		c.DepChecks = nil
+		c.GitDirty = nil
 		return
 	}
 	c.ProjectAddons, _ = addon.Parse(c.ManifestPath)
 	c.refreshDepChecks()
+	c.refreshGitChecks()
+}
+
+// refreshGitChecks recomputes which present clone entries have a dirty git working
+// tree. Local-only (a `git status` per clone), so it rides loadProject alongside
+// refreshDepChecks. Reuses Inspect for each entry's resolved install path.
+func (c *Ctx) refreshGitChecks() {
+	checks := make(map[string]bool)
+	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
+	for _, s := range statuses {
+		if s.Addon.Clone && s.Present() && addon.HasUncommittedChanges(s.FullPath) {
+			checks[s.Addon.Name] = true
+		}
+	}
+	c.GitDirty = checks
 }
 
 // refreshDepChecks recomputes each addon's unsatisfied dependencies against the

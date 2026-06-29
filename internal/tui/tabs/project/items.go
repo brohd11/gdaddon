@@ -7,6 +7,7 @@ import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/sysopen"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -58,24 +59,39 @@ func addonDesc(s addon.Status) string {
 // inert row), which replaces the old Installable() gate in the screen's Update.
 // upd is the cached update-check result and missingDeps whether the addon has
 // unsatisfied dependencies; rowMarker decorates the name from both.
-func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps bool) components.Item {
+func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) components.Item {
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
-	return components.Item{Name: s.Addon.Name + rowMarker(upd, missingDeps), Desc: addonDesc(s), Pick: pick}
+	// A present clone row gets a "t" shortcut to open a terminal at its install path
+	// (the framework dispatches Item.Keys for the highlighted row, see RootUpdate).
+	var keys func(*core.Shared, string) (core.Action, bool)
+	if s.Addon.Clone && s.Present() {
+		keys = func(sh *core.Shared, k string) (core.Action, bool) {
+			if k == "t" {
+				return sysopen.Terminal(s.FullPath), true
+			}
+			return core.Action{}, false
+		}
+	}
+	return components.Item{Name: s.Addon.Name + rowMarker(upd, missingDeps, dirty), Desc: addonDesc(s), Pick: pick, Keys: keys}
 }
 
-// rowMarker builds the combined name suffix from the update and dependency checks,
-// e.g. "  ⚠ [update]", "  ⚠ [missing deps]", or "  ⚠ [update / missing deps]".
-// Empty when the addon is current and its deps are satisfied.
-func rowMarker(upd addon.UpdateInfo, missingDeps bool) string {
+// rowMarker builds the combined name suffix from the update, dependency, and
+// git-dirty checks, e.g. "  ⚠ [update]", "  ⚠ [missing deps]", or
+// "  ⚠ [missing deps / uncommitted changes]". Empty when the addon is current, its
+// deps are satisfied, and (for a clone) its working tree is clean.
+func rowMarker(upd addon.UpdateInfo, missingDeps, dirty bool) string {
 	var parts []string
 	if upd.State == addon.UpdateAvailable {
 		parts = append(parts, "update")
 	}
 	if missingDeps {
 		parts = append(parts, "missing deps")
+	}
+	if dirty {
+		parts = append(parts, "uncommitted changes")
 	}
 	if len(parts) == 0 {
 		return ""
@@ -90,7 +106,7 @@ func projectListItems(sh *core.Shared) []list.Item {
 	c := appctx.Of(sh)
 	items := make([]list.Item, 0, len(statuses))
 	for _, s := range statuses {
-		items = append(items, addonItem(s, c.UpdateChecks[s.Addon.Name], len(c.DepChecks[s.Addon.Name]) > 0))
+		items = append(items, addonItem(s, c.UpdateChecks[s.Addon.Name], len(c.DepChecks[s.Addon.Name]) > 0, c.GitDirty[s.Addon.Name]))
 	}
 	return items
 }

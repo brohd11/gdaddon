@@ -76,6 +76,14 @@ func RootUpdate(sh *core.Shared, l *list.Model, msg tea.Msg) core.Action {
 				return it.Pick(sh)
 			}
 			return core.Action{}
+		default:
+			// Let a self-dispatching Item handle its own row keys (e.g. a clone
+			// row's "t" → open terminal); unhandled keys fall through to the list.
+			if it, ok := l.SelectedItem().(Item); ok && it.Keys != nil {
+				if act, handled := it.Keys(sh, k); handled {
+					return act
+				}
+			}
 		}
 	}
 	var cmd tea.Cmd

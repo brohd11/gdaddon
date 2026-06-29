@@ -38,6 +38,16 @@ func gitProbe(dir string) (kind gitKind, remote, branch string) {
 	return gitRepo, remote, branch
 }
 
+// HasUncommittedChanges reports whether dir is a standalone git repo with a dirty
+// working tree (modified or untracked files). False when dir isn't a repo (no .git
+// directory) or the tree is clean.
+func HasUncommittedChanges(dir string) bool {
+	if info, err := os.Stat(filepath.Join(dir, ".git")); err != nil || !info.IsDir() {
+		return false
+	}
+	return gitOutput(dir, "status", "--porcelain") != ""
+}
+
 // gitOutput runs a read-only `git -C dir <args...>` and returns its trimmed stdout,
 // or "" on any error (a folder may be a repo with no origin, etc.).
 func gitOutput(dir string, args ...string) string {

@@ -34,6 +34,7 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 	l.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			core.FullHint("select", core.Keys.Select),
+			core.FullHint("terminal (clone)", key.NewBinding(key.WithKeys("t"))),
 			core.FullHint("focus log", core.Keys.ToggleOutput),
 			core.FullHint("toggle log", core.Keys.Output),
 			core.FullHint("clear log", core.Keys.Clear),
