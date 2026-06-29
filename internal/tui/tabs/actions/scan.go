@@ -17,7 +17,27 @@ import (
 // manifest and lists them; selecting one opens the Track form (path/name prefilled,
 // url suggested when an existing pathless entry matches) to start tracking it.
 // Scanning is filesystem-only, so the picker is built synchronously.
+//
+// The picker is a PopTo boundary (a command hub) and re-scans on ProjectDirty: after
+// tracking a plugin, commitTrack broadcasts ProjectDirty (rebuilding the rows so the
+// just-tracked plugin drops off) then PopTo lands back here, ready to track the rest.
 func newScanPicker(sh *core.Shared) *components.PickerScreen {
+	return components.NewPicker(scanItems(sh), components.PickerOpts{
+		Crumb:   "Scan",
+		Title:   "Untracked plugins",
+		PopStop: true,
+		Refresh: func(sh *core.Shared, payload any) ([]list.Item, bool) {
+			if _, ok := payload.(appctx.ProjectDirty); ok {
+				return scanItems(sh), true
+			}
+			return nil, false
+		},
+	})
+}
+
+// scanItems builds the untracked-plugin rows from a fresh filesystem scan against the
+// current manifest, falling back to a placeholder row when everything is tracked.
+func scanItems(sh *core.Shared) []list.Item {
 	c := appctx.Of(sh)
 	found, _ := addon.UntrackedInstalls(c.ManifestPath, c.ProjectRoot)
 
@@ -42,5 +62,5 @@ func newScanPicker(sh *core.Shared) *components.PickerScreen {
 			Desc: fmt.Sprintf("nothing untracked under %s", c.ProjectRoot),
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Crumb: "Scan", Title: "Untracked plugins"})
+	return items
 }

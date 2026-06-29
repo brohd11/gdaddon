@@ -22,6 +22,7 @@ type PickerScreen struct {
 	crumbShort string
 	OnSelect   func(*core.Shared, list.Item) core.Action
 	OnKey      func(*core.Shared, string, list.Item) (core.Action, bool)
+	refresh    func(*core.Shared, any) ([]list.Item, bool)
 	popStop    bool
 }
 
@@ -35,6 +36,9 @@ type PickerOpts struct {
 	Help         []key.Binding // extra help/hint bindings shown in the list help
 	OnSelect     func(*core.Shared, list.Item) core.Action
 	OnKey        func(*core.Shared, string, list.Item) (core.Action, bool)
+	// Refresh, when set, makes the picker a Receiver: on a PropagateAll broadcast it
+	// is called with the payload; returning ok=true rebuilds the rows from items.
+	Refresh      func(sh *core.Shared, payload any) (items []list.Item, ok bool)
 	PopStop      bool // mark this picker as a PopTo boundary (a command hub)
 	InitialIndex int  // cursor starts here; 0 = first item (default)
 }
@@ -42,6 +46,7 @@ type PickerOpts struct {
 var _ core.Filterer = (*PickerScreen)(nil)
 var _ core.PopStopper = (*PickerScreen)(nil)
 var _ core.Crumber = (*PickerScreen)(nil)
+var _ core.Receiver = (*PickerScreen)(nil)
 
 func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 	s := &PickerScreen{
@@ -50,6 +55,7 @@ func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 		crumbShort: opts.CrumbShort,
 		OnSelect:   opts.OnSelect,
 		OnKey:      opts.OnKey,
+		refresh:    opts.Refresh,
 		popStop:    opts.PopStop,
 	}
 	if opts.InitialIndex > 0 {
@@ -59,6 +65,17 @@ func NewPicker(items []list.Item, opts PickerOpts) *PickerScreen {
 }
 
 func (s *PickerScreen) PopStop() bool { return s.popStop }
+
+// Receive lets a picker rebuild its rows on a PropagateAll broadcast when a Refresh
+// closure is configured; without one it's a no-op (the common case).
+func (s *PickerScreen) Receive(sh *core.Shared, payload any) core.Action {
+	if s.refresh != nil {
+		if items, ok := s.refresh(sh, payload); ok {
+			s.list.SetItems(items)
+		}
+	}
+	return core.Action{}
+}
 
 // CrumbLabel contributes the picker's breadcrumb segment: the short form when set,
 // else the explicit crumb, else the list title (the default — crumb and title agree).
