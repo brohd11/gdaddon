@@ -90,56 +90,59 @@ func TestEditEntrySetAndClear(t *testing.T) {
 	}
 }
 
-func TestSetCloneFlag(t *testing.T) {
+func TestSetKind(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")
 	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Insert clone: true.
-	if err := SetCloneFlag(path, "Terrain3D", true); err != nil {
+	// Insert kind: submodule.
+	if err := SetKind(path, "Terrain3D", KindSubmodule); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(path)
-	if !strings.Contains(string(got), "\n    clone: true") {
-		t.Fatalf("clone line not inserted with indentation; got:\n%s", got)
+	if !strings.Contains(string(got), "\n    kind: submodule") {
+		t.Fatalf("kind line not inserted with indentation; got:\n%s", got)
 	}
 	// Untouched entry survives.
 	if !strings.Contains(string(got), `version: "0.1.0"`) {
 		t.Errorf("other entry mutated; got:\n%s", got)
 	}
 
-	// Parse reads it back as a bool.
+	// Parse reads it back as the enum.
 	addons, err := Parse(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range addons {
-		if a.Name == "Terrain3D" && !a.Clone {
-			t.Errorf("Clone not parsed as true")
+		if a.Name == "Terrain3D" && a.Kind != KindSubmodule {
+			t.Errorf("Kind = %q, want submodule", a.Kind)
 		}
-		if a.Name == "PluginDevTools" && a.Clone {
-			t.Errorf("Clone leaked onto another entry")
+		if a.Name == "PluginDevTools" && a.Kind != KindPackage {
+			t.Errorf("Kind leaked onto another entry: %q", a.Kind)
 		}
 	}
 
-	// Idempotent: setting true again does not duplicate the line.
-	if err := SetCloneFlag(path, "Terrain3D", true); err != nil {
+	// Switching kinds updates the existing line rather than duplicating it.
+	if err := SetKind(path, "Terrain3D", KindClone); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = os.ReadFile(path)
-	if strings.Count(string(got), "clone: true") != 1 {
-		t.Errorf("clone line duplicated; got:\n%s", got)
+	if strings.Count(string(got), "kind:") != 1 {
+		t.Errorf("kind line duplicated; got:\n%s", got)
+	}
+	if !strings.Contains(string(got), "\n    kind: clone") {
+		t.Errorf("kind line not updated to clone; got:\n%s", got)
 	}
 
-	// Clearing removes the line.
-	if err := SetCloneFlag(path, "Terrain3D", false); err != nil {
+	// KindPackage removes the line.
+	if err := SetKind(path, "Terrain3D", KindPackage); err != nil {
 		t.Fatal(err)
 	}
 	got, _ = os.ReadFile(path)
-	if strings.Contains(string(got), "clone:") {
-		t.Errorf("clone line not removed; got:\n%s", got)
+	if strings.Contains(string(got), "kind:") {
+		t.Errorf("kind line not removed; got:\n%s", got)
 	}
 }
 

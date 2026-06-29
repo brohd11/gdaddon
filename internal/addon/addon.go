@@ -18,6 +18,16 @@ import (
 // stdout; the TUI funnels them into bubbletea messages.
 type Reporter func(format string, args ...any)
 
+// Kind classifies how a manifest entry relates to git, on one mutually-exclusive
+// axis (mirroring the internal gitKind probe).
+type Kind string
+
+const (
+	KindPackage   Kind = ""          // default: an unzipped package, gdaddon-managed, no .git of its own
+	KindClone     Kind = "clone"     // a live git working copy gdaddon manages (cloned with .git kept)
+	KindSubmodule Kind = "submodule" // a live git working copy the parent repo manages; gdaddon never installs it
+)
+
 // Addon is a single manifest entry. Name is the manifest key. Tag records the
 // release tag the entry was installed from (empty for branch-HEAD installs, which
 // have no tag); it's what dependency specs match against, since Version holds the
@@ -28,12 +38,25 @@ type Addon struct {
 	Path    string `yaml:"path"`
 	Version string `yaml:"version"`
 	Tag     string `yaml:"tag"`
-	// Clone marks a branch-HEAD entry installed as a live git working copy (a
-	// "sub-repo" for development) rather than an unzipped package: Install clones
-	// the repo with its .git kept and never overwrites an existing checkout. Tag
-	// holds the branch that was cloned.
-	Clone bool `yaml:"clone"`
+	// Kind marks a live git checkout (clone or submodule) rather than an unzipped
+	// package. For a clone, Install clones the repo with its .git kept and never
+	// overwrites an existing checkout; for a submodule, gdaddon never installs at all
+	// (the parent repo manages it) — both exist only for the utility actions. Tag
+	// holds the checked-out branch.
+	Kind Kind `yaml:"kind"`
 }
+
+// IsClone reports whether the entry is a gdaddon-managed live git working copy.
+func (a Addon) IsClone() bool { return a.Kind == KindClone }
+
+// IsSubmodule reports whether the entry is a parent-repo-managed submodule that
+// gdaddon must never install or update.
+func (a Addon) IsSubmodule() bool { return a.Kind == KindSubmodule }
+
+// IsGitWorkdir reports whether the entry is a live git checkout (clone or
+// submodule) — a present folder gdaddon never overwrites, carrying a branch and a
+// dirty-state check rather than a pinned version.
+func (a Addon) IsGitWorkdir() bool { return a.Kind == KindClone || a.Kind == KindSubmodule }
 
 // State describes an addon's local install relative to the manifest.
 type State int
@@ -147,10 +170,10 @@ func statusFor(a Addon, baseDir string) Status {
 	local := getLocalPluginVersion(fullPath)
 	s.LocalVersion = local
 
-	// A clone entry is a live git working copy managed by the user; once present
-	// it's never overwritten, so report it as unversioned (which InstallAll skips)
-	// regardless of any version match.
-	if a.Clone {
+	// A live git checkout (clone or submodule) is never overwritten once present, so
+	// report it as unversioned (which InstallAll skips) regardless of any version
+	// match.
+	if a.IsGitWorkdir() {
 		s.State = StateUnversioned
 		return s
 	}

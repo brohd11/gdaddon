@@ -19,9 +19,20 @@ import (
 
 // addonDesc renders an addon row's status line from its inspected state.
 func addonDesc(s addon.Status) string {
-	// Clone entries are git working copies, not version-pinned packages: describe
-	// them by their tracked branch and whether the checkout is present.
-	if s.Addon.Clone {
+	// Git checkouts (clone/submodule) are working copies, not version-pinned
+	// packages: describe them by their tracked branch and whether the checkout is
+	// present. A submodule is parent-managed, so it can't be "cloned" by gdaddon.
+	if s.Addon.IsSubmodule() {
+		branch := s.Addon.Tag
+		if branch == "" {
+			branch = "HEAD"
+		}
+		if s.Present() {
+			return "⛓ submodule · " + branch
+		}
+		return "⛓ submodule (missing) · branch " + branch
+	}
+	if s.Addon.IsClone() {
 		branch := s.Addon.Tag
 		if branch == "" {
 			branch = "HEAD"
@@ -64,10 +75,11 @@ func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) co
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
-	// A present clone row gets a "t" shortcut to open a terminal at its install path
-	// (the framework dispatches Item.Keys for the highlighted row, see RootUpdate).
+	// A present git checkout (clone/submodule) gets a "t" shortcut to open a terminal
+	// at its install path (the framework dispatches Item.Keys for the highlighted row,
+	// see RootUpdate).
 	var keys func(*core.Shared, string) (core.Action, bool)
-	if s.Addon.Clone && s.Present() {
+	if s.Addon.IsGitWorkdir() && s.Present() {
 		keys = func(sh *core.Shared, k string) (core.Action, bool) {
 			if k == "t" {
 				return sysopen.Terminal(s.FullPath), true

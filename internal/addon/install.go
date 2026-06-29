@@ -82,7 +82,13 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 		return InstallResult{}, fmt.Errorf("missing 'url'")
 	}
 
-	if a.Clone {
+	// A submodule's checkout is owned by the parent repo; gdaddon registers it for the
+	// utility actions but must never install or overwrite it.
+	if a.IsSubmodule() {
+		return InstallResult{}, fmt.Errorf("%q is a submodule, managed by the parent repo; not installable", a.Name)
+	}
+
+	if a.IsClone() {
 		return cloneInstall(ctx, a, baseDir, report)
 	}
 

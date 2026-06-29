@@ -37,9 +37,9 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	if a.URL == "" {
 		return UpdateInfo{}
 	}
-	// Clone entries are live git working copies the user updates via git directly;
-	// they track a branch, not a release tag, so there's nothing to flag.
-	if a.Clone {
+	// Live git checkouts (clone/submodule) are updated via git directly; they track a
+	// branch, not a release tag, so there's nothing to flag.
+	if a.IsGitWorkdir() {
 		return UpdateInfo{}
 	}
 	listing, err := source.AvailableVersions(ctx, a.URL)

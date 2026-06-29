@@ -16,33 +16,36 @@ const (
 	gitSubmodule                // .git is a file: a parent-managed submodule
 )
 
-// gitProbe classifies dir by its `.git` entry and, for a standalone repo, returns
-// its origin remote (ssh scp form normalized to https) and checked-out branch ("" on
-// a detached HEAD). The `.git`-presence check is what keeps a plain subfolder of the
-// project repo from resolving to the project's own remote: such a folder has no
-// `.git` of its own, so it reads as gitNone. A submodule (its `.git` is a gitdir-
-// pointer file) needs no git calls — the caller omits it from the scan.
+// gitProbe classifies dir by its `.git` entry and, for a real checkout (a standalone
+// repo or a submodule), returns its origin remote (ssh scp form normalized to https)
+// and checked-out branch ("" on a detached HEAD). The `.git`-presence check is what
+// keeps a plain subfolder of the project repo from resolving to the project's own
+// remote: such a folder has no `.git` of its own, so it reads as gitNone. A submodule
+// (its `.git` is a gitdir-pointer file) is distinguished from a standalone clone (a
+// `.git` directory) but probed the same way — `git -C` works inside either.
 func gitProbe(dir string) (kind gitKind, remote, branch string) {
 	info, err := os.Stat(filepath.Join(dir, ".git"))
-	switch {
-	case err != nil:
+	if err != nil {
 		return gitNone, "", ""
-	case !info.IsDir():
-		return gitSubmodule, "", ""
+	}
+	if info.IsDir() {
+		kind = gitRepo
+	} else {
+		kind = gitSubmodule
 	}
 
 	remote = normalizeGitRemote(gitOutput(dir, "remote", "get-url", "origin"))
 	if b := gitOutput(dir, "rev-parse", "--abbrev-ref", "HEAD"); b != "" && b != "HEAD" {
 		branch = b
 	}
-	return gitRepo, remote, branch
+	return kind, remote, branch
 }
 
-// HasUncommittedChanges reports whether dir is a standalone git repo with a dirty
-// working tree (modified or untracked files). False when dir isn't a repo (no .git
-// directory) or the tree is clean.
+// HasUncommittedChanges reports whether dir is a git checkout (a standalone clone or
+// a submodule) with a dirty working tree (modified or untracked files). False when
+// dir isn't a checkout (no `.git` entry) or the tree is clean.
 func HasUncommittedChanges(dir string) bool {
-	if info, err := os.Stat(filepath.Join(dir, ".git")); err != nil || !info.IsDir() {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
 		return false
 	}
 	return gitOutput(dir, "status", "--porcelain") != ""

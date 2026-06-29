@@ -95,14 +95,15 @@ func (c *Ctx) loadProject() {
 	c.refreshGitChecks()
 }
 
-// refreshGitChecks recomputes which present clone entries have a dirty git working
-// tree. Local-only (a `git status` per clone), so it rides loadProject alongside
-// refreshDepChecks. Reuses Inspect for each entry's resolved install path.
+// refreshGitChecks recomputes which present git-checkout entries (clone or submodule)
+// have a dirty working tree. Local-only (a `git status` per checkout), so it rides
+// loadProject alongside refreshDepChecks. Reuses Inspect for each entry's resolved
+// install path.
 func (c *Ctx) refreshGitChecks() {
 	checks := make(map[string]bool)
 	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
 	for _, s := range statuses {
-		if s.Addon.Clone && s.Present() && addon.HasUncommittedChanges(s.FullPath) {
+		if s.Addon.IsGitWorkdir() && s.Present() && addon.HasUncommittedChanges(s.FullPath) {
 			checks[s.Addon.Name] = true
 		}
 	}

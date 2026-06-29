@@ -49,6 +49,22 @@ func initRepo(t *testing.T, dir, origin, branch string) {
 	run("commit", "-q", "-m", "init")
 }
 
+// makeSubmodule turns dir into a submodule-shaped checkout: a real git repo whose
+// `.git` is a gitdir-pointer file (not a directory), the layout git submodules use.
+// git -C dir then reads remote/branch normally, but the file form marks it a submodule.
+func makeSubmodule(t *testing.T, dir, origin, branch string) {
+	t.Helper()
+	initRepo(t, dir, origin, branch)
+	gitDir := filepath.Join(dir, ".git")
+	moved := filepath.Join(t.TempDir(), "gitdir")
+	if err := os.Rename(gitDir, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(gitDir, []byte("gitdir: "+moved+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGitProbe(t *testing.T) {
 	t.Run("non-checkout folder", func(t *testing.T) {
 		dir := t.TempDir()
@@ -57,12 +73,18 @@ func TestGitProbe(t *testing.T) {
 		}
 	})
 
-	t.Run("submodule (.git file) needs no git", func(t *testing.T) {
+	t.Run("submodule (.git file) reports remote and branch", func(t *testing.T) {
 		dir := t.TempDir()
-		os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: ../.git/modules/x\n"), 0o644)
+		makeSubmodule(t, dir, "git@github.com:owner/sub.git", "main")
 		kind, remote, branch := gitProbe(dir)
-		if kind != gitSubmodule || remote != "" || branch != "" {
-			t.Errorf("got (%d, %q, %q), want gitSubmodule", kind, remote, branch)
+		if kind != gitSubmodule {
+			t.Fatalf("kind = %d, want gitSubmodule", kind)
+		}
+		if remote != "https://github.com/owner/sub.git" {
+			t.Errorf("remote = %q, want normalized https", remote)
+		}
+		if branch != "main" {
+			t.Errorf("branch = %q, want main", branch)
 		}
 	})
 
@@ -91,11 +113,11 @@ func TestScanInstalledGit(t *testing.T) {
 	os.WriteFile(filepath.Join(repo, "plugin.cfg"), []byte("[plugin]\nname=\"RepoAddon\"\nversion=\"1.0.0\"\n"), 0o644)
 	initRepo(t, repo, "https://github.com/owner/repoaddon.git", "main")
 
-	// A submodule addon: .git is a file → must be omitted from the scan.
+	// A submodule addon: .git is a file → surfaced as KindSubmodule (parent-managed).
 	sub := filepath.Join(root, "addons", "subaddon")
 	os.MkdirAll(sub, 0o755)
 	os.WriteFile(filepath.Join(sub, "plugin.cfg"), []byte("[plugin]\nname=\"SubAddon\"\n"), 0o644)
-	os.WriteFile(filepath.Join(sub, ".git"), []byte("gitdir: ../../.git/modules/subaddon\n"), 0o644)
+	makeSubmodule(t, sub, "git@github.com:owner/subaddon.git", "main")
 
 	found, err := ScanInstalled(root)
 	if err != nil {
@@ -103,26 +125,36 @@ func TestScanInstalledGit(t *testing.T) {
 	}
 
 	var names []string
-	var repoAddon *Installed
+	var repoAddon, subAddon *Installed
 	for i := range found {
 		names = append(names, found[i].Name)
-		if found[i].Name == "RepoAddon" {
+		switch found[i].Name {
+		case "RepoAddon":
 			repoAddon = &found[i]
-		}
-	}
-	for _, n := range names {
-		if n == "SubAddon" {
-			t.Errorf("submodule should be omitted; got %v", names)
+		case "SubAddon":
+			subAddon = &found[i]
 		}
 	}
 	if repoAddon == nil {
 		t.Fatalf("RepoAddon not found; got %v", names)
 	}
-	if !repoAddon.Clone {
-		t.Error("standalone repo should set Clone")
+	if repoAddon.Kind != KindClone {
+		t.Errorf("standalone repo Kind = %q, want clone", repoAddon.Kind)
 	}
 	if repoAddon.Branch != "main" {
 		t.Errorf("Branch = %q, want main", repoAddon.Branch)
+	}
+	if subAddon == nil {
+		t.Fatalf("SubAddon (submodule) should be included; got %v", names)
+	}
+	if subAddon.Kind != KindSubmodule {
+		t.Errorf("submodule Kind = %q, want submodule", subAddon.Kind)
+	}
+	if subAddon.Branch != "main" {
+		t.Errorf("submodule Branch = %q, want main", subAddon.Branch)
+	}
+	if subAddon.SuggestedURL != "https://github.com/owner/subaddon.git" {
+		t.Errorf("submodule SuggestedURL = %q, want the origin remote", subAddon.SuggestedURL)
 	}
 	if repoAddon.SuggestedURL != "https://github.com/owner/repoaddon.git" {
 		t.Errorf("SuggestedURL = %q, want the origin remote", repoAddon.SuggestedURL)

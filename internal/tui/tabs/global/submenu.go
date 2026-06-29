@@ -67,7 +67,7 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 			if err != nil {
 				return core.SetStatusAndLog("error: " + err.Error())
 			}
-			a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Clone: g.clone}
+			a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Kind: g.kind}
 			return core.Push(editmanifest.New(gp, a, appctx.GlobalDirty{}, true))
 		},
 	})
@@ -90,7 +90,7 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 // ProjectDirty (Focus false, so the Project list reloads silently without leaving the
 // Global tab) and pops the submenu back to the Global list — handy for importing several.
 func importToProject(sh *core.Shared, g globalItem) core.Action {
-	a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Clone: g.clone}
+	a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Kind: g.kind}
 	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, a); err != nil {
 		return core.Seq(
 			core.SetStatusAndLog("error: "+err.Error()),

@@ -86,8 +86,8 @@ func UpdateEntry(manifestPath, name, url, path, version, tag string) error {
 // that field's line if present. This is the opposite of UpdateEntry's "empty leaves
 // the line untouched" rule, and is what the Edit Manifest form needs (a blanked
 // field means the user wants the field gone). Every other line — blank lines,
-// comments, the clone line, indentation — is left byte-for-byte intact. clone is a
-// bool and stays out of here; use SetCloneFlag for it.
+// comments, the kind line, indentation — is left byte-for-byte intact. kind is an
+// enum and stays out of here; use SetKind for it.
 func EditEntry(manifestPath, name, url, path, version, tag string) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -185,11 +185,11 @@ func EditEntry(manifestPath, name, url, path, version, tag string) error {
 
 // AddEntryFull appends a manifest entry from a fully-specified Addon (deduped by
 // repo identity, creating the file if absent): AddEntry writes the url/path, then
-// version and/or tag lines are pinned on when non-empty, and a clone: true line is
-// added when a.Clone. It composes the existing writers so every "add a complete
+// version and/or tag lines are pinned on when non-empty, and a kind: line is added
+// for a non-package Kind. It composes the existing writers so every "add a complete
 // entry" path (importing a set entry or a global entry, a set "Add Version", adding a
 // tagged dependency) carries the same fields without a second manifest shape — and
-// scales as the Addon struct grows. Empty version/tag and a false Clone behave
+// scales as the Addon struct grows. Empty version/tag and a package Kind behave
 // exactly like AddEntry.
 func AddEntryFull(manifestPath string, a Addon) error {
 	if err := AddEntry(manifestPath, a.Name, a.URL, a.Path); err != nil {
@@ -200,18 +200,18 @@ func AddEntryFull(manifestPath string, a Addon) error {
 			return err
 		}
 	}
-	if a.Clone {
-		return SetCloneFlag(manifestPath, a.Name, true)
+	if a.Kind != KindPackage {
+		return SetKind(manifestPath, a.Name, a.Kind)
 	}
 	return nil
 }
 
-// SetCloneFlag sets (or clears) the boolean `clone:` line on an entry, in place,
-// using the same flat-shape block scan as UpdateEntry. When clone is true it
-// inserts/updates `clone: true`; when false it removes any existing clone line.
-// Kept separate from UpdateEntry so its string-field "empty means leave untouched"
-// convention isn't muddied by a bool.
-func SetCloneFlag(manifestPath, name string, clone bool) error {
+// SetKind sets (or clears) the `kind:` line on an entry, in place, using the same
+// flat-shape block scan as UpdateEntry. For KindClone/KindSubmodule it inserts/updates
+// `kind: <value>`; for KindPackage it removes any existing kind line. Kept separate
+// from UpdateEntry so its string-field "empty means leave untouched" convention isn't
+// muddied by this enum's "empty means package".
+func SetKind(manifestPath, name string, kind Kind) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return err
@@ -225,27 +225,27 @@ func SetCloneFlag(manifestPath, name string, clone bool) error {
 	}
 
 	indent := "    "
-	cloneIdx := -1
+	kindIdx := -1
 	for i := keyIdx + 1; i < end; i++ {
 		ind, key, ok := splitField(lines[i])
 		if !ok {
 			continue
 		}
 		indent = ind
-		if key == "clone" {
-			cloneIdx = i
+		if key == "kind" {
+			kindIdx = i
 		}
 	}
 
 	switch {
-	case !clone:
-		if cloneIdx != -1 {
-			lines = append(lines[:cloneIdx], lines[cloneIdx+1:]...)
+	case kind == KindPackage:
+		if kindIdx != -1 {
+			lines = append(lines[:kindIdx], lines[kindIdx+1:]...)
 		}
-	case cloneIdx != -1:
-		lines[cloneIdx] = indent + "clone: true"
+	case kindIdx != -1:
+		lines[kindIdx] = indent + "kind: " + string(kind)
 	default:
-		tail := append([]string{indent + "clone: true"}, lines[keyIdx+1:]...)
+		tail := append([]string{indent + "kind: " + string(kind)}, lines[keyIdx+1:]...)
 		lines = append(lines[:keyIdx+1], tail...)
 	}
 

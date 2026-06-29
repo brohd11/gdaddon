@@ -32,7 +32,7 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 		// chosen branch, instead of unzipping the branch archive.
 		target.URL = "https://" + pick.repoID + ".git"
 		target.Tag = pick.tag
-		target.Clone = true
+		target.Kind = addon.KindClone
 	}
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)

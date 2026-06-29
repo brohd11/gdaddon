@@ -32,7 +32,7 @@ func newScanPicker(sh *core.Shared) *components.PickerScreen {
 			Name: in.Name,
 			Desc: desc,
 			Pick: func(sh *core.Shared) core.Action {
-				return core.Push(newplugin.NewFromInstall(in.Path, in.Name, in.Version, in.SuggestedURL, in.Clone, in.Branch))
+				return core.Push(newplugin.NewFromInstall(in.Path, in.Name, in.Version, in.SuggestedURL, in.Kind, in.Branch))
 			},
 		})
 	}

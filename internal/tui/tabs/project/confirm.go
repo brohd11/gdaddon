@@ -41,8 +41,23 @@ var removeConfirmHelp = []key.Binding{
 
 // newRemoveConfirm builds the project Remove confirm: a vertical selector between
 // removing just the manifest entry or that plus the installed files. ↑/↓ move the
-// selection (via the confirm's OnKey), enter commits the chosen mode.
+// selection (via the confirm's OnKey), enter commits the chosen mode. A submodule's
+// files are owned by the parent repo, so it offers no file-deletion modes — just a
+// plain confirm that removes the manifest entry.
 func newRemoveConfirm(st addon.Status) *components.DialogScreen {
+	if st.Addon.IsSubmodule() {
+		return &components.DialogScreen{
+			Render: func(sh *core.Shared) string {
+				path := st.Addon.Path
+				if path == "" {
+					path = "(none)"
+				}
+				return sh.Box(fmt.Sprintf("Remove submodule %s\n\n  path:  %s\n\n  removes the manifest entry only;\n  the parent repo still manages the files", st.Addon.Name, path))
+			},
+			OnYes: func(sh *core.Shared) core.Action { return commitRemove(sh, st, removeProject) },
+			Help:  confirmHelp,
+		}
+	}
 	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 		Crumb:  "Remove",
 		Count:  3,

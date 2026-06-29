@@ -13,19 +13,18 @@ const scanMaxDepth = 4
 // Installed is a plugin folder found on disk by ScanInstalled: its project-root-
 // relative path, a display name (the config's name key, else the folder basename),
 // and the version read from its plugin.cfg/version.cfg. SuggestedURL is the derived
-// url to prefill when tracking it, in precedence: a standalone git checkout's origin
-// remote, else an author-declared `source=` cfg key (both read by ScanInstalled),
-// else a pathless manifest entry that looks like this folder (filled by
-// UntrackedInstalls). Clone/Branch are set when the folder is its own git repo: Clone
-// defaults the Track form's clone toggle, Branch is the checked-out branch recorded
-// as the entry's tag. (Submodules are omitted by ScanInstalled — the parent repo
-// manages them.)
+// url to prefill when tracking it, in precedence: a git checkout's origin remote,
+// else an author-declared `source=` cfg key (both read by ScanInstalled), else a
+// pathless manifest entry that looks like this folder (filled by UntrackedInstalls).
+// Kind/Branch are set when the folder is its own git checkout: Kind (clone or
+// submodule) defaults the Track form's kind picker, Branch is the checked-out branch
+// recorded as the entry's tag.
 type Installed struct {
 	Path         string
 	Name         string
 	Version      string
 	SuggestedURL string
-	Clone        bool
+	Kind         Kind
 	Branch       string
 }
 
@@ -57,25 +56,25 @@ func ScanInstalled(root string) ([]Installed, error) {
 			return nil
 		}
 		kind, remote, branch := gitProbe(path)
-		if kind == gitSubmodule {
-			return filepath.SkipDir // omit; the parent repo manages it
-		}
 		name := readPluginCfgKey(path, "name")
 		if name == "" {
 			name = base
 		}
-		sug, clone := SourceURL(path), false
-		if kind == gitRepo && remote != "" {
-			sug, clone = remote, true // a real checkout's origin wins over source=
-		} else {
-			branch = "" // only standalone repos carry a tracked branch
+		sug, entryKind := SourceURL(path), KindPackage
+		switch {
+		case kind == gitRepo && remote != "":
+			sug, entryKind = remote, KindClone // a real checkout's origin wins over source=
+		case kind == gitSubmodule && remote != "":
+			sug, entryKind = remote, KindSubmodule // parent-managed; registered for utility only
+		default:
+			branch = "" // only real checkouts carry a tracked branch
 		}
 		out = append(out, Installed{
 			Path:         filepath.ToSlash(rel),
 			Name:         name,
 			Version:      getLocalPluginVersion(path),
 			SuggestedURL: sug,
-			Clone:        clone,
+			Kind:         entryKind,
 			Branch:       branch,
 		})
 		return filepath.SkipDir // found the top-level plugin here; don't dive in

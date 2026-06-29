@@ -41,7 +41,7 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 
 	_ = addon.UpdateEntry(manifestPath, name, url, path, version, tag)
 	if pick.clone {
-		_ = addon.SetCloneFlag(manifestPath, name, true)
+		_ = addon.SetKind(manifestPath, name, addon.KindClone)
 	}
 
 	if pick.clone {

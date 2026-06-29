@@ -80,7 +80,8 @@ func InGlobalList(url string) bool {
 // where re-selecting a plugin should re-pin it rather than error on a duplicate
 // (a set's "Add Version", tracking an installed plugin). Reuses UpdateEntry /
 // AddEntryFull. An empty tag leaves an existing tag line untouched (a branch pin
-// records no tag); a.Clone is applied additively (set when true, never cleared here).
+// records no tag); a.Kind is applied additively (set for a non-package kind, never
+// cleared here).
 func UpsertEntry(manifestPath string, a Addon) error {
 	existingName := ""
 	if id, err := source.RepoID(a.URL); err == nil {
@@ -100,8 +101,8 @@ func UpsertEntry(manifestPath string, a Addon) error {
 	if err := UpdateEntry(manifestPath, existingName, a.URL, a.Path, a.Version, a.Tag); err != nil {
 		return err
 	}
-	if a.Clone {
-		return SetCloneFlag(manifestPath, existingName, true)
+	if a.Kind != KindPackage {
+		return SetKind(manifestPath, existingName, a.Kind)
 	}
 	return nil
 }

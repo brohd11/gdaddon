@@ -19,7 +19,7 @@ import (
 // are self-dispatching components.Item values built in globalItems.
 type globalItem struct {
 	name, url, path, version, tag string
-	clone                         bool
+	kind                          addon.Kind
 }
 
 // GlobalScreen is the Global tab root.
@@ -43,7 +43,7 @@ func globalItems(sh *core.Shared) []list.Item {
 	if path, err := addon.GlobalListPath(); err == nil {
 		if addons, err := addon.Parse(path); err == nil {
 			for _, a := range addons {
-				g := globalItem{name: a.Name, url: a.URL, path: a.Path, version: a.Version, tag: a.Tag, clone: a.Clone}
+				g := globalItem{name: a.Name, url: a.URL, path: a.Path, version: a.Version, tag: a.Tag, kind: a.Kind}
 				items = append(items, components.Item{
 					Name: g.name,
 					Desc: g.url,

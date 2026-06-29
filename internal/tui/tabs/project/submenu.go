@@ -17,13 +17,17 @@ import (
 // newSubmenuScreen builds the per-addon command submenu (the screen reached by
 // pressing enter on an addon row). Install opens the version-fetch flow; Archive
 // (offered only when the addon is installed) opens the archive submenu; Remove
-// opens the remove confirm. Each row carries its own Pick.
+// opens the remove confirm. Each row carries its own Pick. A submodule is managed by
+// the parent repo, so its install/update-oriented rows (Install, Archive, Export) are
+// omitted — only the utility actions (Get deps, Open, Edit Manifest, Remove) remain.
 func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen {
 	a, local := st.Addon, st.LocalVersion
 	c := appctx.Of(sh)
+	submodule := a.IsSubmodule()
 
-	items := []list.Item{
-		components.Item{
+	var items []list.Item
+	if !submodule {
+		items = append(items, components.Item{
 			Name: "↧ Install / update",
 			Desc: "pick a version, branch, or asset to install",
 			Pick: func(sh *core.Shared) core.Action {
@@ -37,7 +41,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 					ArchivedMarker: "(archived)",
 				}))
 			},
-		},
+		})
 	}
 	// Offered only when the addon is installed and actually has unsatisfied deps
 	// (the cached check), so a fully-satisfied addon doesn't show a no-op action.
@@ -48,7 +52,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newGetDepsLoading(st, sh)) },
 		})
 	}
-	if a.URL != "" && !st.InGlobal(c.GlobalAddons) {
+	if !submodule && a.URL != "" && !st.InGlobal(c.GlobalAddons) {
 		items = append(items, components.Item{
 			Name: "⬆ Export to Global",
 			Desc: "add this plugin to your global library (~/.gdaddon)",
@@ -62,14 +66,16 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newOpenSubmenu(st)) },
 		})
 	}
-	items = append(items, components.Item{
-		Name: "⛃ Archive",
-		Desc: "browse the repo's versions and save a local copy",
-		Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st, sh)) },
-	})
+	if !submodule {
+		items = append(items, components.Item{
+			Name: "⛃ Archive",
+			Desc: "browse the repo's versions and save a local copy",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st, sh)) },
+		})
+	}
 	items = append(items, components.Item{
 		Name: "✎ Edit Manifest",
-		Desc: "edit this plugin's manifest entry (url, path, version, tag, clone)",
+		Desc: "edit this plugin's manifest entry (url, path, version, tag, kind)",
 		Pick: func(sh *core.Shared) core.Action {
 			return core.Push(editmanifest.New(appctx.Of(sh).ManifestPath, a, appctx.ProjectDirty{}, false))
 		},

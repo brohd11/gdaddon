@@ -1,13 +1,13 @@
 // Package editmanifest is the shared "Edit Manifest" flow: a form that lists an
-// entry's raw fields (url, path, version, tag, clone) prefilled with their current
+// entry's raw fields (url, path, version, tag, kind) prefilled with their current
 // values and writes them back. It works against any of the flat-shaped manifest
 // files — the project manifest, the global list, or a set — so it lives in the flows
 // layer (core ← components ← flows ← tabs ← tui) and is opened by more than one tab
 // with the matching dirty payload.
 //
 // Blanking a text field clears that field (addon.EditEntry removes the line), the
-// inverse of UpdateEntry's "blank leaves it untouched". clone is a bool toggle and
-// is written separately via addon.SetCloneFlag.
+// inverse of UpdateEntry's "blank leaves it untouched". kind is a 3-way toggle
+// (package/clone/submodule) and is written separately via addon.SetKind.
 package editmanifest
 
 import (
@@ -21,11 +21,37 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 )
 
+// kindOptions is the kind toggle's order; the toggle value maps back to the
+// addon.Kind it names.
+var kindOptions = []string{"package", "clone", "submodule"}
+
+func kindIndex(k addon.Kind) int {
+	switch k {
+	case addon.KindClone:
+		return 1
+	case addon.KindSubmodule:
+		return 2
+	default:
+		return 0
+	}
+}
+
+func kindFromValue(v string) addon.Kind {
+	switch v {
+	case "clone":
+		return addon.KindClone
+	case "submodule":
+		return addon.KindSubmodule
+	default:
+		return addon.KindPackage
+	}
+}
+
 // New builds the Edit Manifest form for entry a in the manifest at manifestPath.
 // dirty is broadcast on a successful save (e.g. appctx.ProjectDirty{}) so whichever
 // tab root owns this manifest reloads. The entry name is read-only. In global mode
-// only url and path are shown — version, tag, and clone are irrelevant to the global
-// library, so those fields (and the clone write) are omitted.
+// only url and path are shown — version, tag, and kind are irrelevant to the global
+// library, so those fields (and the kind write) are omitted.
 func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *components.FormScreen {
 	urlF := components.NewTextField("url", "URL:     ", "(blank to clear)")
 	pathF := components.NewTextField("path", "Path:    ", "(blank to clear)")
@@ -44,20 +70,18 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 	}
 
 	var versionF, tagF *components.TextField
-	var cloneF *components.ToggleField
+	var kindF *components.ToggleField
 	if !globalMode {
 		versionF = components.NewTextField("version", "Version: ", "(blank to clear)")
 		tagF = components.NewTextField("tag", "Tag:     ", "(blank to clear)")
 		versionF.SetValue(a.Version)
 		tagF.SetValue(a.Tag)
-		cloneF = components.NewToggleField("clone", "Clone:   ", []string{"false", "true"}, "|")
-		if a.Clone {
-			cloneF.OnToggle(true)
-		}
-		fields = append(fields, versionF, tagF, components.NewSpacer(), cloneF)
+		kindF = components.NewToggleField("kind", "Kind:    ", kindOptions, "|")
+		kindF.SetIndex(kindIndex(a.Kind))
+		fields = append(fields, versionF, tagF, components.NewSpacer(), kindF)
 		help = []key.Binding{
 			core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
-			core.Hint("clone", core.Keys.Left, core.Keys.Right),
+			core.Hint("kind", core.Keys.Left, core.Keys.Right),
 			core.Hint("save", core.Keys.Select),
 			core.Hint("cancel", core.Keys.Back),
 		}
@@ -78,7 +102,7 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 				return core.Seq(core.SetStatusAndLog("error: "+err.Error()), core.Async(f.Focus("url")))
 			}
 			if !globalMode {
-				if err := addon.SetCloneFlag(manifestPath, a.Name, cloneF.Index() == 1); err != nil {
+				if err := addon.SetKind(manifestPath, a.Name, kindFromValue(kindF.Value())); err != nil {
 					return core.Seq(core.SetStatusAndLog("error: "+err.Error()), core.Async(f.Focus("url")))
 				}
 			}
