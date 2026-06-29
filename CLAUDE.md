@@ -172,16 +172,28 @@ Key packages/functions:
 (target tracks `build/`, so it follows rebuilds). Update `GO_DIR` inside the script if
 your repo path differs.
 
-**Release (general users):** `make package` bundles, into each platform zip, a
-standalone installer that copies the *prebuilt* binary (no repo/Go toolchain needed):
-`install_scripts/install.sh` (macOS + Linux) and `install_scripts/install.ps1`
-(Windows). Each lands next to the binary at the zip root (the package targets use
-`zip -j`) and finds it via its own dir. On run it prompts for one of three
+**Release (general users):** the install logic lives in the binary itself —
+`gdaddon install` (`cmd/install.go` + `internal/installer/`). It copies the running
+binary (`os.Executable()`) to a destination chosen via a small bubbletea menu (reusing
+the bubblestack stack), or non-interactively with `--dest system|user|home`. The three
 destinations: **system** (`/usr/local/bin` / `%ProgramFiles%\gdaddon`, on PATH, needs
-sudo/admin), **user** (`~/.local/bin` / `%LOCALAPPDATA%\Programs\gdaddon`, sets up
-PATH), or **gdaddon home** (`~/.gdaddon/bin`, no PATH change — the permission-free
-target a Godot plugin launches via `~/.gdaddon/bin/gdaddon` (`+.exe` on Windows) after
-probing PATH for a global `gdaddon`).
+sudo/admin), **user** (`~/.local/bin` / `%LOCALAPPDATA%\Programs\gdaddon`, sets up PATH —
+registry on Windows, profile guidance on unix), or **gdaddon home** (`~/.gdaddon/bin`, no
+PATH change — the permission-free target a Godot plugin launches via
+`~/.gdaddon/bin/gdaddon` (`+.exe` on Windows) after probing PATH for a global `gdaddon`).
+The TUI only *selects*; the copy/sudo/PATH work runs after it exits (bubbletea owns the
+terminal). Per-OS bits are build-tagged in `internal/installer/path_unix.go` /
+`path_windows.go`.
+
+`gdaddon uninstall` (`installer.Uninstall`) removes the binary from all three locations
+wherever present — binaries only, leaving PATH entries and other `~/.gdaddon` files alone
+(sudo for the system copy; the running binary is skipped).
+
+`make package` bundles, into each platform zip next to the binary (`zip -j`), a thin
+double-click launcher that just calls `gdaddon install`: `install.command` (macOS),
+`install.bat` (Windows), `install.sh` (Linux/terminal). Caveats: macOS Gatekeeper warns
+on the unsigned binary first run (right-click → Open); Linux double-click is
+desktop-dependent.
 
 On startup `runRoot` also writes `~/.gdaddon/.gitignore` (ignoring `bin/`) if absent —
 `~/.gdaddon` is meant to be committable, but the OS binary isn't by default
