@@ -10,8 +10,22 @@ import (
 	"github.com/brohd11/bubblestack/core"
 )
 
+// newImportConfirm prompts before importing a set into the project manifest. On
+// confirm it runs importSetToProject, which adds every entry, logs the summary,
+// then reloads and shows the Project tab.
+func newImportConfirm(setName string) *components.DialogScreen {
+	return components.CreateConfirmScreen(components.ConfirmSimple{
+		Crumb: "Import",
+		Text:  fmt.Sprintf("Import all plugins from set %q into the project?", setName),
+		OnYesLamda: func(sh *core.Shared) core.Action {
+			return importSetToProject(sh, setName)
+		},
+	})
+}
+
 // importSetToProject adds every entry in the set to the project manifest (deduped by
-// repo id, carrying any pinned version), then shows the Project tab reloaded.
+// repo id, carrying any pinned version), logs the result, then shows the Project tab
+// reloaded.
 func importSetToProject(sh *core.Shared, setName string) core.Action {
 	c := appctx.Of(sh)
 	if c.ManifestPath == "" {
@@ -35,26 +49,14 @@ func importSetToProject(sh *core.Shared, setName string) core.Action {
 		}
 		added++
 	}
-	// Acknowledge with a popup over the Set submenu; dismissing it reloads the
-	// Project tab and jumps there (ShowTab unwinds the stack, discarding the popup).
-	return core.Push(newImportDonePopup(setName, added, skipped))
-}
-
-// newImportDonePopup is the "job done" acknowledgement shown after an import: a small
-// box summarizing the result; pressing done reloads and shows the Project tab.
-func newImportDonePopup(setName string, added, skipped int) *components.DialogScreen {
-	return &components.DialogScreen{
-		Overlay: true, // a centered modal over the Set submenu
-		Title:   "Import complete",
-		Render: func(*core.Shared) string {
-			return fmt.Sprintf("✓ %s\n\n%d added, %d skipped", setName, added, skipped)
-		},
-		OnYes: func(*core.Shared) core.Action {
-			return core.Seq(
-				core.PropagateAll(appctx.ProjectDirty{}),
-				core.ShowTab(appctx.TitleProject),
-			)
-		},
-		Help: components.DefaultPopupHelp,
-	}
+	// Log the summary (status line + output pane), then reload the Project tab and
+	// jump there (ShowTab unwinds the stack, discarding the confirm).
+	return core.Seq(
+		core.SetStatusAndLog(
+			fmt.Sprintf("imported set %s — %d added, %d skipped", setName, added, skipped),
+			true, // forceShow: surface the summary in the output pane
+		),
+		core.PropagateAll(appctx.ProjectDirty{}),
+		core.ShowTab(appctx.TitleProject),
+	)
 }

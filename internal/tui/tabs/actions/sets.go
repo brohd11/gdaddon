@@ -184,7 +184,7 @@ func newSetOptions(sh *core.Shared, setName string) *components.PickerScreen {
 		items = append(items, components.Item{
 			Name: "⬇ Import to Project",
 			Desc: "add every plugin in this set to the project manifest",
-			Pick: func(sh *core.Shared) core.Action { return importSetToProject(sh, setName) },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newImportConfirm(setName)) },
 		})
 	}
 	items = append(items, components.Item{

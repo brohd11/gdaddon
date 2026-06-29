@@ -114,7 +114,8 @@
 // the same closure-configured box serves a full-screen confirm and, when its Overlay
 // flag is set, a modal (core.PopupBox renders it in the theme accent, with its key
 // hints inside the box since the router keeps the background's help bar).
-// See actions.newImportDonePopup for a worked overlay example.
+// See components.DialogScreen (the Overlay flag) and components.CreatePopup for
+// the popup machinery.
 //
 // # Adding a tab
 //
