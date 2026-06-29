@@ -168,5 +168,22 @@ Key packages/functions:
 
 ## Installing the binary
 
-`install_unix.sh` symlinks the built binary into `~/.local/bin/gdaddon`. Update
-`GO_DIR` inside the script if your repo path differs.
+**Dev:** `install_unix.sh` symlinks the built binary into `~/.local/bin/gdaddon`
+(target tracks `build/`, so it follows rebuilds). Update `GO_DIR` inside the script if
+your repo path differs.
+
+**Release (general users):** `make package` bundles, into each platform zip, a
+standalone installer that copies the *prebuilt* binary (no repo/Go toolchain needed):
+`install_scripts/install.sh` (macOS + Linux) and `install_scripts/install.ps1`
+(Windows). Each lands next to the binary at the zip root (the package targets use
+`zip -j`) and finds it via its own dir. On run it prompts for one of three
+destinations: **system** (`/usr/local/bin` / `%ProgramFiles%\gdaddon`, on PATH, needs
+sudo/admin), **user** (`~/.local/bin` / `%LOCALAPPDATA%\Programs\gdaddon`, sets up
+PATH), or **gdaddon home** (`~/.gdaddon/bin`, no PATH change — the permission-free
+target a Godot plugin launches via `~/.gdaddon/bin/gdaddon` (`+.exe` on Windows) after
+probing PATH for a global `gdaddon`).
+
+On startup `runRoot` also writes `~/.gdaddon/.gitignore` (ignoring `bin/`) if absent —
+`~/.gdaddon` is meant to be committable, but the OS binary isn't by default
+(`config.EnsureGitignore`). An existing `.gitignore` is left alone, so a user can opt to
+commit the binary.

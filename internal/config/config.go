@@ -23,6 +23,11 @@ type Config struct {
 	Sources          []SourceConfig `yaml:"sources,omitempty"`            // search sources; the source of truth once dumped
 }
 
+// BinSubdir is the ~/.gdaddon subdirectory the release installers copy the OS
+// binary into (the permission-free, plugin-launched target). It is the single
+// source of truth for the dir name shared by EnsureGitignore and the installers.
+const BinSubdir = "bin"
+
 // Dir is ~/.gdaddon, the home for config.yml and the default archive.
 func Dir() (string, error) {
 	home, err := os.UserHomeDir()
@@ -56,6 +61,32 @@ func Ensure() (created bool, path string, err error) {
 		return false, path, err
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return false, path, err
+	}
+	return true, path, nil
+}
+
+// EnsureGitignore writes ~/.gdaddon/.gitignore ignoring the bin/ dir if none
+// exists yet, creating ~/.gdaddon as needed. ~/.gdaddon is meant to be
+// committable (config.yml, sources, sets); the OS binary is not, so bin/ is
+// ignored by default. An existing file is left untouched — a user who wants to
+// commit the binary can remove the entry. It returns whether it created the file
+// and the file's path.
+func EnsureGitignore() (created bool, path string, err error) {
+	base, err := Dir()
+	if err != nil {
+		return false, "", err
+	}
+	path = filepath.Join(base, ".gitignore")
+	if _, err := os.Stat(path); err == nil {
+		return false, path, nil // already present — never overwrite the user's file
+	} else if !os.IsNotExist(err) {
+		return false, path, err
+	}
+	if err := os.MkdirAll(base, 0o755); err != nil {
+		return false, path, err
+	}
+	if err := os.WriteFile(path, []byte(BinSubdir+"/\n"), 0o644); err != nil {
 		return false, path, err
 	}
 	return true, path, nil

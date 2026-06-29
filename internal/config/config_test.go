@@ -84,6 +84,46 @@ func TestEnsureWritesDefaultsOnce(t *testing.T) {
 	}
 }
 
+func TestEnsureGitignore(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	path := filepath.Join(home, ".gdaddon", ".gitignore")
+
+	created, got, err := EnsureGitignore()
+	if err != nil {
+		t.Fatalf("EnsureGitignore: %v", err)
+	}
+	if !created {
+		t.Fatal("first EnsureGitignore should create the file")
+	}
+	if got != path {
+		t.Fatalf("path = %q, want %q", got, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	if want := BinSubdir + "/\n"; string(data) != want {
+		t.Fatalf("contents = %q, want %q", data, want)
+	}
+
+	// Idempotent: a second call leaves a user-edited file alone.
+	if err := os.WriteFile(path, []byte("bin/\nfoo/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	created, _, err = EnsureGitignore()
+	if err != nil {
+		t.Fatalf("second EnsureGitignore: %v", err)
+	}
+	if created {
+		t.Fatal("second EnsureGitignore should not recreate the file")
+	}
+	data, _ = os.ReadFile(path)
+	if string(data) != "bin/\nfoo/\n" {
+		t.Fatalf("EnsureGitignore overwrote an existing file: %q", data)
+	}
+}
+
 func TestLoadSources(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
