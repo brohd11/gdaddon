@@ -8,13 +8,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 browsing and installing Godot addons from a YAML manifest (`.zip` or `.git`, with
 version pinning via `plugin.cfg`).
 
-It's a single command, not a suite of subcommands:
+The root command is the addon installer itself (TUI by default, flags for
+non-interactive runs):
 - no args → launches the interactive TUI (browse, pick versions/branches/assets, install/update)
 - `--install` → runs the non-interactive install (inspect manifest + install/update all), then exits
 - `--list` → prints the manifest's install status without changing anything, then exits
 - `--update` → updates installed addons to their latest release non-interactively, then exits
 
 (`--install`/`--list`/`--update` are mutually exclusive.)
+
+There is one subcommand, `repos`, a standalone CLI utility (no TUI) for running a
+shell command across every git checkout nested under a directory — handy for the
+submodule/addon repos a Godot project accumulates (see `cmd/repos.go`).
 
 
 ## Build commands
@@ -41,6 +46,25 @@ gdaddon --install      # non-interactive install of everything in the discovered
 gdaddon --list         # print the manifest's install status (state/local/pinned), then exit
 gdaddon --update       # non-interactive update of installed addons to their latest release
 ```
+
+### `repos` subcommand
+
+Run a shell command in every git repo nested under a directory (the top-level repo
+is excluded; submodules — `.git` file form — are included):
+
+```bash
+gdaddon repos                          # list every nested repo (base-relative paths)
+gdaddon repos --dirty                  # list only repos with uncommitted changes
+gdaddon repos -- git status -s         # run in each repo; header + output only when non-empty
+gdaddon repos --raw -- git fetch       # live-stream each repo's output under its header
+gdaddon repos --dirty -- git pull      # restrict to repos with uncommitted changes
+gdaddon repos -C /path --depth 3 -- pwd
+gdaddon repos -- "git log --oneline | head -1"   # pipes work (quoted), run via sh -c
+```
+
+With no command it lists matching repo paths; with a command (after `--`, optional)
+it runs it in each. Flags: `-C/--dir` (scan root, default cwd), `--raw` (stream vs
+the default capture), `--dirty`, `--depth` (default 5).
 
 If no manifest is found, the TUI still launches with an empty Project list; use
 Actions → Create manifest to bootstrap one (it must land within the manifest-walk
@@ -76,10 +100,11 @@ The derived path is then recorded back into the manifest on install.
 ```
 main.go              — calls cmd.Execute()
 cmd/
-  root.go            — the single `gdaddon` cobra command: TUI by default, --install for non-interactive
+  root.go            — the root `gdaddon` cobra command: TUI by default, --install for non-interactive
+  repos.go           — the `repos` subcommand: run a shell command in every nested git repo (uses addon.FindGitRepos / addon.HasUncommittedChanges)
   paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
 internal/
-  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), nested-repo walk (FindGitRepos) + dirty check (HasUncommittedChanges), ~/.gdaddon global list
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
   archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   config/            — ~/.gdaddon/config.yml (archive_dir, search sources, per-host VCS rules); `Ensure` dumps defaults on first run

@@ -74,7 +74,7 @@ func actionItems(sh *core.Shared) []list.Item {
 	items = append(items, components.Item{
 		Name: "⟳ Refresh",
 		Desc: "manually refresh lists",
-		Pick: func(sh *core.Shared) core.Action { return refreshAll() },
+		Pick: func(sh *core.Shared) core.Action { return appctx.RefreshAll() },
 	})
 
 	return items

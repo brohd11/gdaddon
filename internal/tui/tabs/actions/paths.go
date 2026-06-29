@@ -14,16 +14,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 )
 
-// Refreshes all lists and paths
-func refreshAll() core.Action {
-	return core.Seq(
-		core.PropagateAll(appctx.ArchiveDirty{}),
-		core.PropagateAll(appctx.ProjectDirty{}),
-		core.PropagateAll(appctx.GlobalDirty{}),
-		core.PropagateAll(appctx.PathRefresh{}),
-	)
-}
-
 // newPathsPicker is a quick navigation helper (Actions ▸ Paths): each row reveals a
 // project-relevant location in the OS file manager. Rows are built from the live
 // context, so missing locations (no manifest yet) are simply omitted. Selecting a row

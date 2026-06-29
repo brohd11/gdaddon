@@ -15,6 +15,16 @@ func (r *Router) globalKey(msg tea.KeyMsg) (Action, bool) {
 		return Async(tea.Quit), true
 	}
 
+	// Refresh fires from any screen/depth except while text is captured (a filtering
+	// list or a focused form, both reporting Filtering()). The action is
+	// consumer-supplied so core names no domain type. Placed before the
+	// output-focused branch so it works even with the output pane focused.
+	if r.refreshAction != nil && MatchKey(k, Keys.Refresh) {
+		if f, ok := r.Top().(Filterer); !ok || !f.Filtering() {
+			return r.refreshAction(r.sh), true
+		}
+	}
+
 	ch := r.sh.Chrome
 	outputOn := ch != nil && ch.Output != nil
 

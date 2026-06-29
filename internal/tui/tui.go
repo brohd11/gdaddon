@@ -28,6 +28,9 @@ func Run(projectRoot string) error {
 		Output: components.NewLogPane(),
 		Status: components.NewStatusLine(),
 		Theme:  theme,
+		RefreshAction: func(sh *bubblestack.Shared) bubblestack.Action {
+			return appctx.RefreshAll()
+		},
 		Tabs: []bubblestack.TabEntry{
 			{Title: appctx.TitleProject, New: func(sh *bubblestack.Shared) bubblestack.Screen { return project.NewProjectScreen(sh) }},
 			{Title: appctx.TitleGlobal, New: func(sh *bubblestack.Shared) bubblestack.Screen { return global.NewGlobalScreen(sh) }},

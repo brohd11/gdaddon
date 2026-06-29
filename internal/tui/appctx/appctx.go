@@ -123,6 +123,19 @@ func (c *Ctx) refreshDepChecks() {
 	c.DepChecks = checks
 }
 
+// RefreshAll broadcasts the four Dirty markers so every cached tab root reloads from
+// disk. The global Refresh key (Keys.Refresh, wired in tui.Run) and Actions ▸ Refresh
+// both return it.
+func RefreshAll() core.Action {
+	return core.Seq(
+		core.PropagateAll(ArchiveDirty{}),
+		core.PropagateAll(ProjectDirty{}),
+		core.PropagateAll(GlobalDirty{}),
+		core.PropagateAll(PathRefresh{}),
+		core.SetStatus("Refreshed"),
+	)
+}
+
 // RefreshGlobal reloads the cached global addon list from disk.
 func (c *Ctx) RefreshGlobal() { c.loadGlobal() }
 

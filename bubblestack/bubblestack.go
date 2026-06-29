@@ -24,6 +24,7 @@ type (
 	Output     = core.Output
 	Status     = core.Status
 	ChromeMask = core.ChromeMask
+	Action     = core.Action
 )
 
 // FullscreenMask re-exports core.FullscreenMask so a consumer's screen can return it
@@ -41,6 +42,11 @@ type Config struct {
 	Status core.Status               // transient status line (nil ⇒ none)
 	Tabs   []core.TabEntry           // top-level tabs
 	Theme  string                    // named theme; empty ⇒ leave the default
+
+	// RefreshAction is the Action returned by the global Refresh key (Keys.Refresh),
+	// fired from any screen/depth except while text is captured. nil ⇒ the key is
+	// left to the active screen.
+	RefreshAction func(*core.Shared) core.Action
 }
 
 // Run builds the chrome from the config, applies the theme, wires the router over
@@ -55,6 +61,7 @@ func Run(cfg Config) error {
 		core.SetTheme(cfg.Theme)
 	}
 	r := core.NewRouter(sh, cfg.Tabs)
+	r.SetRefreshAction(cfg.RefreshAction)
 	_, err := tea.NewProgram(r, tea.WithAltScreen()).Run()
 	return err
 }

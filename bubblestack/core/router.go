@@ -40,7 +40,17 @@ type Router struct {
 	// auto-clear timer for; when the element's Gen advances past it (a fresh write),
 	// scheduleStatusClear arms a new timer keyed on the new generation.
 	statusGen int
+
+	// refreshAction supplies the Action for the global Refresh key (Keys.Refresh).
+	// Consumer-set via SetRefreshAction so core names no domain type; nil ⇒ the key
+	// is left to the active screen.
+	refreshAction func(*Shared) Action
 }
+
+// SetRefreshAction wires the consumer's "refresh everything" action to the global
+// Refresh key. globalKey invokes it from any screen/depth except while text is being
+// captured. Called by the Run facade after NewRouter.
+func (r *Router) SetRefreshAction(f func(*Shared) Action) { r.refreshAction = f }
 
 func NewRouter(sh *Shared, tabs []TabEntry) Router {
 	roots := make([]Screen, len(tabs))

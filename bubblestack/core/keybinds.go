@@ -45,6 +45,7 @@ type KeyMap struct {
 	Output       key.Binding // show/hide the output box
 	Clear        key.Binding
 	Unwind       key.Binding
+	Refresh      key.Binding // reload all views; action is consumer-supplied
 
 	// form
 	NextField key.Binding
@@ -77,6 +78,7 @@ var Keys = KeyMap{
 	Output:       key.NewBinding(key.WithKeys("o")),
 	Clear:        key.NewBinding(key.WithKeys("C")),
 	Unwind:       key.NewBinding(key.WithKeys("`", "r")),
+	Refresh:      key.NewBinding(key.WithKeys("u")),
 
 	NextField: key.NewBinding(key.WithKeys("down", "tab")),
 	PrevField: key.NewBinding(key.WithKeys("up", "shift+tab")),
