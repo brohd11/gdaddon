@@ -102,7 +102,12 @@ func UpsertEntry(manifestPath string, a Addon) error {
 		return err
 	}
 	if a.Kind != KindPackage {
-		return SetKind(manifestPath, existingName, a.Kind)
+		if err := SetKind(manifestPath, existingName, a.Kind); err != nil {
+			return err
+		}
+	}
+	if a.Lock {
+		return SetLock(manifestPath, existingName, true)
 	}
 	return nil
 }

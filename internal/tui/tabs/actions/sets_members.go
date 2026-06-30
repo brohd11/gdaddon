@@ -41,8 +41,17 @@ func newSetPluginsPicker(setName string) core.Screen {
 // newSetEntrySubmenu is a set member's command menu: re-pin a version (Add Version)
 // or drop it from the set (Remove plugin). Both return to the set's command hub.
 func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.PickerScreen {
+	lockName, lockDesc := "🔒 Lock", "pin this version — stop update alerts"
+	if e.IsLocked() {
+		lockName, lockDesc = "🔓 Unlock", "resume update checks"
+	}
 	items := []list.Item{
 		setAddVersionItem(setName, setPath, e.Name, e.URL, e.Path),
+		components.Item{
+			Name: lockName,
+			Desc: lockDesc,
+			Pick: func(sh *core.Shared) core.Action { return toggleSetLock(setName, setPath, e) },
+		},
 		components.Item{
 			Name: "✎ Edit Manifest",
 			Desc: "edit this set entry (url, path, version, tag, clone)",
@@ -59,6 +68,25 @@ func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.Pick
 		},
 	}
 	return components.NewPicker(items, components.PickerOpts{Title: e.Name})
+}
+
+// toggleSetLock flips the set entry's lock flag, then re-renders the member submenu
+// so its Lock/Unlock row reflects the new state. Mirrors the project tab's toggleLock.
+func toggleSetLock(setName, setPath string, e addon.Addon) core.Action {
+	newLock := !e.Lock
+	if err := addon.SetLock(setPath, e.Name, newLock); err != nil {
+		return core.SetStatusAndLog("error: " + err.Error())
+	}
+	e.Lock = newLock
+	verb := "locked"
+	if !newLock {
+		verb = "unlocked"
+	}
+	return core.Seq(
+		core.SetStatus(verb+" "+e.Name+" in "+setName),
+		core.PropagateAll(appctx.SetsDirty{}),
+		core.Replace(newSetEntrySubmenu(setName, setPath, e)),
+	)
 }
 
 func newRemovePluginConf(setName, setPath string, e addon.Addon) *components.DialogScreen {

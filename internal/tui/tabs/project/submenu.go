@@ -43,6 +43,21 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			},
 		})
 	}
+	// Lock pins the entry: a later step suppresses its update alerts and makes
+	// Install / update reinstall the pinned version. Offered only for package entries
+	// with a url (the things that carry a version pin); clones/submodules are live git
+	// checkouts with no version to pin.
+	if !a.IsGitWorkdir() && a.URL != "" {
+		lockName, lockDesc := "🔒 Lock", "pin this version — stop update alerts"
+		if a.IsLocked() {
+			lockName, lockDesc = "🔓 Unlock", "resume update checks"
+		}
+		items = append(items, components.Item{
+			Name: lockName,
+			Desc: lockDesc,
+			Pick: func(sh *core.Shared) core.Action { return toggleLock(sh, st) },
+		})
+	}
 	// Offered only when the addon is installed and actually has unsatisfied deps
 	// (the cached check), so a fully-satisfied addon doesn't show a no-op action.
 	if a.URL != "" && st.Present() && len(c.DepChecks[a.Name]) > 0 {
@@ -123,6 +138,27 @@ func newOpenSubmenu(st addon.Status) *components.PickerScreen {
 		Title:   st.Addon.Name,
 		PopStop: true,
 	})
+}
+
+// toggleLock flips the manifest entry's lock flag (SetLock writes/removes the
+// `lock: true` line), logs it, broadcasts ProjectDirty so the list reloads, and
+// re-renders the submenu so its Lock/Unlock row reflects the new state.
+func toggleLock(sh *core.Shared, st addon.Status) core.Action {
+	c := appctx.Of(sh)
+	newLock := !st.Addon.Lock
+	if err := addon.SetLock(c.ManifestPath, st.Addon.Name, newLock); err != nil {
+		return core.SetStatusAndLog("error: " + err.Error())
+	}
+	st.Addon.Lock = newLock
+	verb := "locked"
+	if !newLock {
+		verb = "unlocked"
+	}
+	return core.Seq(
+		core.SetStatus(verb+" "+st.Addon.Name),
+		core.PropagateAll(appctx.ProjectDirty{}),
+		core.Replace(newSubmenuScreen(st, sh)),
+	)
 }
 
 // exportToGlobal copies the project addon into the global list, stripping the

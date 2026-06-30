@@ -201,7 +201,12 @@ func AddEntryFull(manifestPath string, a Addon) error {
 		}
 	}
 	if a.Kind != KindPackage {
-		return SetKind(manifestPath, a.Name, a.Kind)
+		if err := SetKind(manifestPath, a.Name, a.Kind); err != nil {
+			return err
+		}
+	}
+	if a.Lock {
+		return SetLock(manifestPath, a.Name, true)
 	}
 	return nil
 }
@@ -246,6 +251,52 @@ func SetKind(manifestPath, name string, kind Kind) error {
 		lines[kindIdx] = indent + "kind: " + string(kind)
 	default:
 		tail := append([]string{indent + "kind: " + string(kind)}, lines[keyIdx+1:]...)
+		lines = append(lines[:keyIdx+1], tail...)
+	}
+
+	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+// SetLock sets (or clears) the `lock:` line on an entry, in place, using the same
+// flat-shape block scan as SetKind. For lock=true it inserts/updates `lock: true`;
+// for lock=false it removes any existing lock line (an absent line reads as
+// unlocked, so the manifest stays minimal). Kept separate from EditEntry's
+// string-field semantics since this is a bool whose absence is the zero value.
+func SetLock(manifestPath, name string, lock bool) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	keyIdx, end, ok := findEntryBlock(lines, name)
+	if !ok {
+		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+	}
+
+	indent := "    "
+	lockIdx := -1
+	for i := keyIdx + 1; i < end; i++ {
+		ind, key, ok := splitField(lines[i])
+		if !ok {
+			continue
+		}
+		indent = ind
+		if key == "lock" {
+			lockIdx = i
+		}
+	}
+
+	switch {
+	case !lock:
+		if lockIdx != -1 {
+			lines = append(lines[:lockIdx], lines[lockIdx+1:]...)
+		}
+	case lockIdx != -1:
+		lines[lockIdx] = indent + "lock: true"
+	default:
+		tail := append([]string{indent + "lock: true"}, lines[keyIdx+1:]...)
 		lines = append(lines[:keyIdx+1], tail...)
 	}
 

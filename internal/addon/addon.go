@@ -44,7 +44,15 @@ type Addon struct {
 	// (the parent repo manages it) — both exist only for the utility actions. Tag
 	// holds the checked-out branch.
 	Kind Kind `yaml:"kind"`
+	// Lock pins the entry: when true, gdaddon stops reporting available updates for it
+	// and install/update reinstalls the pinned version rather than offering newer
+	// releases. The user toggles it per-entry; it carries through set import/export.
+	Lock bool `yaml:"lock"`
 }
+
+// IsLocked reports whether the entry is pinned (no update alerts, install/update
+// reinstalls the pinned version rather than offering newer releases).
+func (a Addon) IsLocked() bool { return a.Lock }
 
 // IsClone reports whether the entry is a gdaddon-managed live git working copy.
 func (a Addon) IsClone() bool { return a.Kind == KindClone }

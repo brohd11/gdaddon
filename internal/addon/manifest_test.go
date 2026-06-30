@@ -146,6 +146,77 @@ func TestSetKind(t *testing.T) {
 	}
 }
 
+func TestSetLock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Lock inserts `lock: true` with indentation, leaving other entries intact.
+	if err := SetLock(path, "Terrain3D", true); err != nil {
+		t.Fatal(err)
+	}
+	got := string(mustRead(t, path))
+	if !strings.Contains(got, "\n    lock: true") {
+		t.Fatalf("lock line not inserted; got:\n%s", got)
+	}
+	if !strings.Contains(got, `version: "0.1.0"`) {
+		t.Errorf("other entry mutated; got:\n%s", got)
+	}
+
+	// Parse reads it back as the bool, without leaking onto other entries.
+	addons, err := Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range addons {
+		if a.Name == "Terrain3D" && !a.IsLocked() {
+			t.Errorf("Terrain3D not locked")
+		}
+		if a.Name == "PluginDevTools" && a.IsLocked() {
+			t.Errorf("lock leaked onto another entry")
+		}
+	}
+
+	// Locking again updates in place rather than duplicating the line.
+	if err := SetLock(path, "Terrain3D", true); err != nil {
+		t.Fatal(err)
+	}
+	got = string(mustRead(t, path))
+	if strings.Count(got, "lock:") != 1 {
+		t.Errorf("lock line duplicated; got:\n%s", got)
+	}
+
+	// Unlocking removes the line.
+	if err := SetLock(path, "Terrain3D", false); err != nil {
+		t.Fatal(err)
+	}
+	got = string(mustRead(t, path))
+	if strings.Contains(got, "lock:") {
+		t.Errorf("lock line not removed; got:\n%s", got)
+	}
+}
+
+func TestAddEntryFullCarriesLock(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := AddEntryFull(path, Addon{Name: "Dep", URL: "https://github.com/u/Dep.git", Path: "addons/dep", Version: "1.0.0", Lock: true}); err != nil {
+		t.Fatal(err)
+	}
+	got := string(mustRead(t, path))
+	if !strings.Contains(got, "\n    lock: true") {
+		t.Errorf("lock not carried through AddEntryFull; got:\n%s", got)
+	}
+	addons, err := Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(addons) != 1 || !addons[0].IsLocked() {
+		t.Errorf("parsed entry not locked; got %+v", addons)
+	}
+}
+
 func TestUpdateEntryEmptyURLPreservesURL(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")
