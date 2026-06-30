@@ -40,6 +40,11 @@ func optionDesc(d Dest) string {
 // exeName is the binary's filename on this platform.
 func exeName() string { return "gdaddon" }
 
+// selfRemovable reports whether the running binary can be deleted while it runs.
+// On unix unlinking a running executable is safe (the process keeps running from
+// the open inode), so uninstall removes it too.
+const selfRemovable = true
+
 // destDir maps a Dest to its concrete directory.
 func destDir(d Dest) (string, error) {
 	switch d {

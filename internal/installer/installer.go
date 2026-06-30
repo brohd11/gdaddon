@@ -143,8 +143,10 @@ func binPath(d Dest) (string, error) {
 
 // Uninstall removes the gdaddon binary from every known destination where it is
 // present (binaries only — it leaves PATH entries and other ~/.gdaddon files
-// untouched). The currently-running binary is left in place and reported in
-// skipped. System removal may prompt for sudo on unix.
+// untouched). On unix the currently-running binary is removed too (unlinking a
+// running executable is safe); on Windows it can't be deleted while running, so it
+// is left in place and reported in skipped. System removal may prompt for sudo on
+// unix.
 func Uninstall() (removed, skipped []string, err error) {
 	self, err := Self()
 	if err != nil {
@@ -161,8 +163,10 @@ func Uninstall() (removed, skipped []string, err error) {
 	return uninstallFrom(paths, self)
 }
 
-// uninstallFrom removes each existing path that isn't the running binary. Split
-// out so it can be tested with temp paths (never the real /usr/local/bin).
+// uninstallFrom removes each existing path. The running binary is removed too where
+// the OS allows deleting a running executable (selfRemovable); otherwise it is left
+// in place and reported in skipped. Split out so it can be tested with temp paths
+// (never the real /usr/local/bin).
 func uninstallFrom(paths []string, self string) (removed, skipped []string, err error) {
 	selfInfo, _ := os.Stat(self)
 	for _, p := range paths {
@@ -170,7 +174,7 @@ func uninstallFrom(paths []string, self string) (removed, skipped []string, err 
 		if statErr != nil {
 			continue // not installed here
 		}
-		if selfInfo != nil && os.SameFile(fi, selfInfo) {
+		if !selfRemovable && selfInfo != nil && os.SameFile(fi, selfInfo) {
 			skipped = append(skipped, p)
 			continue
 		}

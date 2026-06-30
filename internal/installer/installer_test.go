@@ -68,14 +68,30 @@ func TestUninstallFrom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("uninstallFrom: %v", err)
 	}
+	if _, err := os.Stat(normal); !os.IsNotExist(err) {
+		t.Fatalf("normal should be gone, stat err = %v", err)
+	}
+
+	if selfRemovable {
+		// unix: the running binary is removed too.
+		if len(removed) != 2 || removed[0] != normal || removed[1] != self {
+			t.Fatalf("removed = %v, want [%s %s]", removed, normal, self)
+		}
+		if len(skipped) != 0 {
+			t.Fatalf("skipped = %v, want []", skipped)
+		}
+		if _, err := os.Stat(self); !os.IsNotExist(err) {
+			t.Fatalf("self should be gone, stat err = %v", err)
+		}
+		return
+	}
+
+	// windows: the running binary is left in place and reported as skipped.
 	if len(removed) != 1 || removed[0] != normal {
 		t.Fatalf("removed = %v, want [%s]", removed, normal)
 	}
 	if len(skipped) != 1 || skipped[0] != self {
 		t.Fatalf("skipped = %v, want [%s]", skipped, self)
-	}
-	if _, err := os.Stat(normal); !os.IsNotExist(err) {
-		t.Fatalf("normal should be gone, stat err = %v", err)
 	}
 	if _, err := os.Stat(self); err != nil {
 		t.Fatalf("self (running binary) must survive: %v", err)

@@ -41,6 +41,10 @@ func optionDesc(d Dest) string {
 // exeName is the binary's filename on this platform.
 func exeName() string { return "gdaddon.exe" }
 
+// selfRemovable reports whether the running binary can be deleted while it runs.
+// Windows locks a running .exe, so uninstall leaves the invoked binary in place.
+const selfRemovable = false
+
 // removeAt deletes path. (No sudo equivalent; system removal relies on the admin
 // shell the user already needed to install there.)
 func removeAt(path string) error { return os.Remove(path) }

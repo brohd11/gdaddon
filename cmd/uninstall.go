@@ -38,7 +38,7 @@ func runUninstallCmd(cmd *cobra.Command, args []string) error {
 		fmt.Printf("removed %s\n", p)
 	}
 	for _, p := range skipped {
-		fmt.Printf("skipped %s (currently running)\n", p)
+		fmt.Printf("skipped %s (the running binary — can't remove itself on this OS)\n", p)
 	}
 	return nil
 }
