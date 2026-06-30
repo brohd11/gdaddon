@@ -47,6 +47,12 @@ type Config struct {
 	// fired from any screen/depth except while text is captured. nil ⇒ the key is
 	// left to the active screen.
 	RefreshAction func(*core.Shared) core.Action
+
+	// Init is an app-level startup command, batched with the initial screen's Init
+	// when the program starts (run once, asynchronously). Use it for app-wide
+	// background work that isn't tied to any one tab (e.g. a self-update check whose
+	// result writes the shared status line). nil ⇒ no app-level startup command.
+	Init func(*core.Shared) tea.Cmd
 }
 
 // Run builds the chrome from the config, applies the theme, wires the router over
@@ -62,6 +68,7 @@ func Run(cfg Config) error {
 	}
 	r := core.NewRouter(sh, cfg.Tabs)
 	r.SetRefreshAction(cfg.RefreshAction)
+	r.SetInit(cfg.Init)
 	_, err := tea.NewProgram(r, tea.WithAltScreen()).Run()
 	return err
 }

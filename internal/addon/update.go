@@ -19,6 +19,19 @@ const (
 	UpdateAvailable                    // a newer release than the pinned one exists
 )
 
+// String renders an UpdateState as a short lowercase label for non-interactive
+// output, mirroring State.String().
+func (s UpdateState) String() string {
+	switch s {
+	case UpdateCurrent:
+		return "current"
+	case UpdateAvailable:
+		return "available"
+	default:
+		return "unknown"
+	}
+}
+
 // UpdateInfo is the cached result of one addon's update check.
 type UpdateInfo struct {
 	State     UpdateState

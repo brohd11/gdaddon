@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -17,9 +18,11 @@ import (
 var version = "dev"
 
 var (
-	installFlag bool
-	listFlag    bool
-	updateFlag  bool
+	installFlag      bool
+	listFlag         bool
+	updateFlag       bool
+	jsonFlag         bool
+	checkUpdatesFlag bool
 )
 
 var rootCmd = &cobra.Command{
@@ -37,6 +40,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&installFlag, "install", false, "install addons from the manifest non-interactively, then exit")
 	rootCmd.Flags().BoolVar(&listFlag, "list", false, "print the manifest's install status without installing, then exit")
 	rootCmd.Flags().BoolVar(&updateFlag, "update", false, "update installed addons to their latest release non-interactively, then exit")
+	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "with --list, print status as JSON for machine consumption")
+	rootCmd.Flags().BoolVar(&checkUpdatesFlag, "check-updates", false, "with --list --json, also check each addon for a newer release (network)")
 	rootCmd.MarkFlagsMutuallyExclusive("install", "list", "update")
 }
 
@@ -73,7 +78,7 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	case updateFlag:
 		return runUpdate(projectRoot)
 	}
-	return tui.Run(projectRoot)
+	return tui.Run(projectRoot, version)
 }
 
 // discoverManifest finds the manifest under the project root, returning a helpful
@@ -100,6 +105,9 @@ func runList(projectRoot string) error {
 	if err != nil {
 		return err
 	}
+	if jsonFlag {
+		return printListJSON(statuses, projectRoot)
+	}
 	if len(statuses) == 0 {
 		fmt.Println("No addons found in YAML.")
 		return nil
@@ -115,6 +123,87 @@ func runList(projectRoot string) error {
 		}
 		fmt.Printf("%-12s %-24s local=%s pinned=%s\n", s.State.String(), s.Addon.Name, local, ver)
 	}
+	return nil
+}
+
+// listEntryJSON is the stable, machine-parseable shape of one addon's status,
+// emitted by `--list --json` for the GDScript side to consume.
+type listEntryJSON struct {
+	Name          string        `json:"name"`
+	State         string        `json:"state"` // missing/installed/mismatch/unversioned/invalid
+	Kind          string        `json:"kind"`  // package/clone/submodule
+	Path          string        `json:"path"`  // manifest-relative
+	FullPath      string        `json:"full_path"`
+	LocalVersion  string        `json:"local_version"`
+	PinnedVersion string        `json:"pinned_version"`
+	Tag           string        `json:"tag"`
+	URL           string        `json:"url"`
+	Update        string        `json:"update"` // unknown/current/available
+	LatestTag     string        `json:"latest_tag"`
+	MissingDeps   []missDepJSON `json:"missing_deps"`
+}
+
+// missDepJSON is one unsatisfied dependency declared by an installed addon.
+type missDepJSON struct {
+	RepoID string `json:"repo_id"`
+	Tag    string `json:"tag"`
+	URL    string `json:"url"`
+}
+
+// kindLabel renders an addon.Kind as a readable label (the empty package kind
+// becomes "package").
+func kindLabel(k addon.Kind) string {
+	if k == addon.KindPackage {
+		return "package"
+	}
+	return string(k)
+}
+
+// printListJSON marshals the inspected statuses as a JSON array to stdout. It's
+// local-only unless --check-updates is set, in which case each addon's update state
+// is resolved over the network. The array is always valid JSON ("[]" when empty).
+func printListJSON(statuses []addon.Status, projectRoot string) error {
+	manifestAddons := make([]addon.Addon, 0, len(statuses))
+	for _, s := range statuses {
+		manifestAddons = append(manifestAddons, s.Addon)
+	}
+
+	entries := make([]listEntryJSON, 0, len(statuses))
+	for _, s := range statuses {
+		deps := make([]missDepJSON, 0)
+		if missing, err := addon.MissingDeps(s.Addon, projectRoot, manifestAddons); err == nil {
+			for _, d := range missing {
+				deps = append(deps, missDepJSON{RepoID: d.RepoID, Tag: d.Tag, URL: d.RepoURL})
+			}
+		}
+
+		update, latestTag := addon.UpdateUnknown.String(), ""
+		if checkUpdatesFlag {
+			info := addon.CheckUpdate(context.Background(), s.Addon)
+			update, latestTag = info.State.String(), info.LatestTag
+		}
+
+		entries = append(entries, listEntryJSON{
+			Name:          s.Addon.Name,
+			State:         s.State.String(),
+			Kind:          kindLabel(s.Addon.Kind),
+			Path:          s.Addon.Path,
+			FullPath:      s.FullPath,
+			LocalVersion:  s.LocalVersion,
+			PinnedVersion: s.Addon.Version,
+			Tag:           s.Addon.Tag,
+			URL:           s.Addon.URL,
+			Update:        update,
+			LatestTag:     latestTag,
+			MissingDeps:   deps,
+		})
+	}
+
+	out, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(out))
 	return nil
 }
 

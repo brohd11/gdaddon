@@ -45,12 +45,20 @@ type Router struct {
 	// Consumer-set via SetRefreshAction so core names no domain type; nil ⇒ the key
 	// is left to the active screen.
 	refreshAction func(*Shared) Action
+
+	// appInit is an app-level startup command, batched with the initial screen's Init
+	// in Init(). Consumer-set via SetInit; nil ⇒ no app-level startup command.
+	appInit func(*Shared) tea.Cmd
 }
 
 // SetRefreshAction wires the consumer's "refresh everything" action to the global
 // Refresh key. globalKey invokes it from any screen/depth except while text is being
 // captured. Called by the Run facade after NewRouter.
 func (r *Router) SetRefreshAction(f func(*Shared) Action) { r.refreshAction = f }
+
+// SetInit wires the consumer's app-level startup command, batched with the initial
+// screen's Init in Init(). Called by the Run facade after NewRouter.
+func (r *Router) SetInit(f func(*Shared) tea.Cmd) { r.appInit = f }
 
 func NewRouter(sh *Shared, tabs []TabEntry) Router {
 	roots := make([]Screen, len(tabs))
@@ -62,7 +70,13 @@ func NewRouter(sh *Shared, tabs []TabEntry) Router {
 
 func (r Router) Top() Screen { return r.stack[len(r.stack)-1] }
 
-func (r Router) Init() tea.Cmd { return r.Top().Init(r.sh) }
+func (r Router) Init() tea.Cmd {
+	cmd := r.Top().Init(r.sh)
+	if r.appInit == nil {
+		return cmd
+	}
+	return tea.Batch(cmd, r.appInit(r.sh))
+}
 
 func (r Router) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd

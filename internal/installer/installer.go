@@ -92,7 +92,44 @@ func Install(dest Dest) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	return InstallFrom(dest, src)
+}
+
+// InstallFrom copies an explicit source binary to dest and applies any PATH wiring.
+// Install is InstallFrom with src = the running binary; self-update passes a freshly
+// downloaded binary instead.
+func InstallFrom(dest Dest, src string) (Result, error) {
 	return doInstall(dest, src)
+}
+
+// ExeName is the gdaddon binary's filename on this platform ("gdaddon", or
+// "gdaddon.exe" on Windows). Exported so callers (e.g. self-update locating the
+// binary inside a downloaded release zip) don't duplicate the per-OS name.
+func ExeName() string { return exeName() }
+
+// CurrentDest reports which managed destination (System/User/Home) the running
+// binary occupies, comparing by inode so a symlinked launcher still resolves to its
+// target. ok is false when the running binary is outside all managed locations (e.g.
+// a dev build under build/).
+func CurrentDest() (Dest, bool) {
+	self, err := Self()
+	if err != nil {
+		return 0, false
+	}
+	selfInfo, err := os.Stat(self)
+	if err != nil {
+		return 0, false
+	}
+	for _, d := range []Dest{System, User, Home} {
+		p, err := binPath(d)
+		if err != nil {
+			continue
+		}
+		if fi, err := os.Stat(p); err == nil && os.SameFile(fi, selfInfo) {
+			return d, true
+		}
+	}
+	return 0, false
 }
 
 // binPath is the full path the gdaddon binary would occupy for dest.

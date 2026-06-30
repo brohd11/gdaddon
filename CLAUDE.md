@@ -13,9 +13,12 @@ non-interactive runs):
 - no args → launches the interactive TUI (browse, pick versions/branches/assets, install/update)
 - `--install` → runs the non-interactive install (inspect manifest + install/update all), then exits
 - `--list` → prints the manifest's install status without changing anything, then exits
+  (`--json` modifier emits a JSON array for tools to parse; `--check-updates` adds the
+  network-bound update state to that JSON — see Running)
 - `--update` → updates installed addons to their latest release non-interactively, then exits
 
-(`--install`/`--list`/`--update` are mutually exclusive.)
+(`--install`/`--list`/`--update` are mutually exclusive; `--json`/`--check-updates`
+are modifiers on `--list`, not modes.)
 
 There is one subcommand, `repos`, a standalone CLI utility (no TUI) for running a
 shell command across every git checkout nested under a directory — handy for the
@@ -44,8 +47,21 @@ gdaddon                # TUI; git root auto-detected, manifest found by walking 
 gdaddon /godot/proj    # TUI with an explicit project root (manifest still discovered by the scan)
 gdaddon --install      # non-interactive install of everything in the discovered manifest
 gdaddon --list         # print the manifest's install status (state/local/pinned), then exit
+gdaddon --list --json  # same, as a JSON array for machine consumption (e.g. a Godot plugin UI)
+gdaddon --list --json --check-updates  # JSON + per-addon update state (network)
 gdaddon --update       # non-interactive update of installed addons to their latest release
+gdaddon self-update             # update gdaddon itself to the latest release (see below)
+gdaddon self-update --check --json  # report {current,latest_tag,available} for the Godot plugin
 ```
+
+`--list --json` (`printListJSON` in `cmd/root.go`) emits one `listEntryJSON` object per
+manifest entry with stable snake_case keys: `name`, `state`, `kind`
+(`package`/`clone`/`submodule`), `path`, `full_path`, `local_version`, `pinned_version`,
+`tag`, `url`, `update` (`unknown`/`current`/`available`), `latest_tag`, `missing_deps`
+(array of `{repo_id, tag, url}`). Always valid JSON (`[]` when empty). Everything is
+local/instant except `update`/`latest_tag`, which stay `"unknown"` unless
+`--check-updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`).
+`missing_deps` comes from `addon.MissingDeps` (local).
 
 ### `repos` subcommand
 
@@ -112,6 +128,8 @@ internal/
   gitcred/           — git credential/token resolution for clones
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
   store/             — Asset Store URL detection/backend used by search/install
+  installer/         — `gdaddon install`/`uninstall`: copy the running binary to system/user/home, PATH/elevation (InstallFrom for an explicit source, CurrentDest for the running binary's location)
+  selfupdate/        — `gdaddon self-update`: check gdaddon's own repo for a newer release (source.AvailableVersions + addon.SemverGE) and download+install it via installer
   tui/               — bubbletea front-end (see internal/tui/doc.go)
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
@@ -188,6 +206,24 @@ terminal). Per-OS bits are build-tagged in `internal/installer/path_unix.go` /
 `gdaddon uninstall` (`installer.Uninstall`) removes the binary from all three locations
 wherever present — binaries only, leaving PATH entries and other `~/.gdaddon` files alone
 (sudo for the system copy; the running binary is skipped).
+
+### Self-update
+
+`gdaddon self-update` (`cmd/selfupdate.go` + `internal/selfupdate/`) checks gdaddon's own
+repo (`selfupdate.RepoURL` = github.com/brohd11/gdaddon) for a newer release than the
+running binary's injected `version`, reusing `source.AvailableVersions` for the listing and
+`addon.SemverGE` for the tag comparison — the same machinery as the per-addon update check.
+When a newer release exists it downloads the platform release zip (`<os>-<arch>` token, e.g.
+`darwin-arm64`, matching `make package`'s asset names), extracts the binary, and installs it
+via `installer.InstallFrom(dest, …)` to `installer.DefaultDest()` — the managed location the
+running binary occupies (`installer.CurrentDest`), or `~/.gdaddon/bin` otherwise.
+`--check [--json]` only reports (`{current,latest_tag,available}` for the Godot plugin to
+parse, like `--list --json`); `--interactive` opens the same dest picker as `install`. The
+check also runs automatically on TUI startup (wired as `bubblestack.Config.Init` →
+`appctx.SelfUpdateCheckCmd`, a generic app-level startup hook in `bubblestack/core`'s Router)
+and writes an "update available" line to the status/log; Actions ▸ Update gdaddon runs the
+loading → confirm → task flow in-TUI (`internal/tui/tabs/actions/selfupdate.go`). A
+self-update doesn't change the already-running process — relaunch to use the new binary.
 
 `make package` bundles, into each platform zip next to the binary (`zip -j`), a thin
 double-click launcher that just calls `gdaddon install`: `install.command` (macOS),

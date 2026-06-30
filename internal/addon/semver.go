@@ -17,6 +17,10 @@ func (d Dependency) SatisfiedByTag(installedTag string) (satisfied, verified boo
 	return ge, true
 }
 
+// SemverGE is the exported wrapper over semverGE, for callers outside the package
+// (e.g. self-update comparing the running binary's version against the latest tag).
+func SemverGE(a, b string) (ge, ok bool) { return semverGE(a, b) }
+
 // semverGE reports whether version a is >= version b, treating both as dotted
 // numeric versions. A leading "v" and any pre-release/build suffix (after "-"/"+")
 // are ignored. ok is false when either side has no comparable numeric components.

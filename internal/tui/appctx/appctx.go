@@ -7,11 +7,15 @@
 package appctx
 
 import (
+	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/archive"
+	"gdaddon/internal/selfupdate"
 
 	"github.com/brohd11/bubblestack/core"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +23,7 @@ import (
 
 // Ctx is the consumer context stored on core.Shared.App. Tabs recover it with Of.
 type Ctx struct {
+	Version       string // the running binary's version, for the self-update check
 	ManifestPath  string
 	ProjectRoot   string
 	ManifestRel   string // ManifestPath relative to ProjectRoot, for display
@@ -56,8 +61,8 @@ type Ctx struct {
 }
 
 // New builds the context for a project root and performs the initial path scan.
-func New(projectRoot string) *Ctx {
-	c := &Ctx{ProjectRoot: projectRoot}
+func New(projectRoot, version string) *Ctx {
+	c := &Ctx{ProjectRoot: projectRoot, Version: version}
 	c.Scan()
 	c.loadGlobal()
 	c.loadArchive()
@@ -172,6 +177,32 @@ func (c *Ctx) Scan() {
 // Of recovers the gdaddon context from a Shared. Tabs call c := appctx.Of(sh) to
 // reach ManifestPath/ProjectRoot.
 func Of(sh *core.Shared) *Ctx { return core.App[Ctx](sh) }
+
+// selfUpdateCheckTimeout caps the startup self-update check's network fetch so a slow
+// or unreachable host can't leave it pending.
+const selfUpdateCheckTimeout = 30 * time.Second
+
+// SelfUpdateCheckCmd is the app-level startup command (wired onto bubblestack
+// Config.Init): it checks gdaddon's own repo for a newer release off the UI thread
+// and, only when an update is available, writes an "update available" line to the
+// shared status line and log. Anything else (up to date, dev build, fetch error) is
+// silent. The returned Action rides back on the cmd's tea.Msg and is applied by the
+// router, the same pattern as the project tab's update check.
+func SelfUpdateCheckCmd(sh *core.Shared) tea.Cmd {
+	version := Of(sh).Version
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), selfUpdateCheckTimeout)
+		defer cancel()
+		info, err := selfupdate.Check(ctx, version)
+		if err != nil || !info.Available {
+			return nil
+		}
+		return core.SetStatusAndLog(
+			fmt.Sprintf("gdaddon update available: %s → %s · Actions ▸ Update gdaddon", info.Current, info.LatestTag),
+			true,
+		)
+	}
+}
 
 // Receive handles App-level broadcasts (the router notifies App on every PropagateAll).
 // A theme change rebuilds the cached tab roots so each re-bakes its delegate/list styles

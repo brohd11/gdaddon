@@ -20,6 +20,27 @@ gdaddon --install      # install/update everything in the manifest, then exit
 gdaddon --update       # update installed addons to their latest release, then exit
 ```
 
+`--list` also has a machine-parseable mode for tools (e.g. a Godot editor plugin)
+that drive `gdaddon` and render their own UI from its output:
+
+```bash
+gdaddon --list --json                  # print status as a JSON array, then exit
+gdaddon --list --json --check-updates   # also resolve each addon's update state (network)
+```
+
+`--json` emits one object per manifest entry with stable, snake_case keys: `name`,
+`state` (`missing`/`installed`/`mismatch`/`unversioned`/`invalid`), `kind`
+(`package`/`clone`/`submodule`), `path` (manifest-relative), `full_path` (absolute
+install dir), `local_version`, `pinned_version`, `tag`, `url`, `update`
+(`unknown`/`current`/`available`), `latest_tag`, and `missing_deps` (an array of
+`{repo_id, tag, url}`, empty when satisfied). It's always valid JSON — an empty
+manifest prints `[]`.
+
+Everything in `--json` is computed locally and instantly **except** `update`/
+`latest_tag`, which require a network round-trip per addon and so stay `"unknown"`
+unless you pass `--check-updates`. `--json`/`--check-updates` are modifiers on
+`--list` and are ignored without it.
+
 The TUI is organized into tabs, each one a domain: **Project**, **Global**,
 **Archive**, **Search**, and **Actions**. Everything below maps onto those tabs.
 

@@ -72,6 +72,12 @@ func actionItems(sh *core.Shared) []list.Item {
 	)
 
 	items = append(items, components.Item{
+		Name: "⟲ Update gdaddon",
+		Desc: "check for a newer gdaddon release and install it",
+		Pick: func(sh *core.Shared) core.Action { return core.Push(newSelfUpdateLoading(sh)) },
+	})
+
+	items = append(items, components.Item{
 		Name: "⟳ Refresh",
 		Desc: "manually refresh lists",
 		Pick: func(sh *core.Shared) core.Action { return appctx.RefreshAll() },

@@ -17,17 +17,18 @@ import (
 // Run wires the tabs and blocks until the user quits. Tab roots are built lazily by
 // the router (after the theme is applied), so each tab reads its own state when
 // constructed; nothing is inspected here.
-func Run(projectRoot string) error {
+func Run(projectRoot, version string) error {
 	theme := "mono"
 	if cfg, err := config.Load(); err == nil && cfg.CurrentTheme != "" {
 		theme = cfg.CurrentTheme
 	}
 	return bubblestack.Run(bubblestack.Config{
-		App:    appctx.New(projectRoot),
+		App:    appctx.New(projectRoot, version),
 		Header: appctx.Header,
 		Output: components.NewLogPane(),
 		Status: components.NewStatusLine(),
 		Theme:  theme,
+		Init:   appctx.SelfUpdateCheckCmd,
 		RefreshAction: func(sh *bubblestack.Shared) bubblestack.Action {
 			return appctx.RefreshAll()
 		},
