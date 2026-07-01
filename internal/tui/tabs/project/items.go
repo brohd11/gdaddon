@@ -42,28 +42,40 @@ func addonDesc(s addon.Status) string {
 		}
 		return "⎇ not cloned · branch " + branch
 	}
+	desc := ""
 	switch s.State {
 	case addon.StateInvalid:
-		return "✗ invalid — missing url or path"
+		desc = "✗ invalid — missing url or path"
 	case addon.StateMissing:
-		if s.Addon.Version != "" {
-			return "• not installed — target " + s.Addon.Version
-		} else if s.Addon.Tag != "" {
-			return "• not installed — target " + s.Addon.Tag
+		switch {
+		case s.Addon.Version != "":
+			desc = "• not installed — target " + s.Addon.Version
+		case s.Addon.Tag != "":
+			desc = "• not installed — target " + s.Addon.Tag
+		default:
+			desc = "• not installed"
 		}
-		return "• not installed"
 	case addon.StateInstalled:
-		return fmt.Sprintf("✓ installed v%s", s.LocalVersion)
+		desc = fmt.Sprintf("✓ installed v%s", s.LocalVersion)
 	case addon.StateUnversioned:
-		return "✓ installed (no version pinned)"
+		desc = "✓ installed (no version pinned)"
 	case addon.StateMismatch:
 		local := s.LocalVersion
 		if local == "" {
 			local = "unknown"
 		}
-		return fmt.Sprintf("⚠ manifest pins %s, installed %s", s.Addon.Version, local)
+		desc = fmt.Sprintf("⚠ manifest pins %s, installed %s", s.Addon.Version, local)
 	}
-	return ""
+	// Lock is only ever set on package entries (the toggle is gated to non-git-workdir),
+	// so the note rides after the install status here, e.g. "✓ installed v1.0.0 · 🔒 locked".
+	if s.Addon.Lock {
+		if desc != "" {
+			desc += " · 🔒 locked"
+		} else {
+			desc = "🔒 locked"
+		}
+	}
+	return desc
 }
 
 // addonItem builds one browse row. A non-installable addon gets a nil Pick (an

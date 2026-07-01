@@ -138,6 +138,7 @@ type listEntryJSON struct {
 	PinnedVersion string        `json:"pinned_version"`
 	Tag           string        `json:"tag"`
 	URL           string        `json:"url"`
+	Lock          bool          `json:"lock"`   // pinned: no update alerts, never bulk-updated
 	Update        string        `json:"update"` // unknown/current/available
 	LatestTag     string        `json:"latest_tag"`
 	MissingDeps   []missDepJSON `json:"missing_deps"`
@@ -177,8 +178,14 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 			}
 		}
 
+		// Lock is a local fact (no network), so report "locked" regardless of
+		// --check-updates; otherwise resolve the update state over the network only when
+		// --check-updates is set.
 		update, latestTag := addon.UpdateUnknown.String(), ""
-		if checkUpdatesFlag {
+		switch {
+		case s.Addon.Lock:
+			update = addon.UpdateLocked.String()
+		case checkUpdatesFlag:
 			info := addon.CheckUpdate(context.Background(), s.Addon)
 			update, latestTag = info.State.String(), info.LatestTag
 		}
@@ -193,6 +200,7 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 			PinnedVersion: s.Addon.Version,
 			Tag:           s.Addon.Tag,
 			URL:           s.Addon.URL,
+			Lock:          s.Addon.Lock,
 			Update:        update,
 			LatestTag:     latestTag,
 			MissingDeps:   deps,

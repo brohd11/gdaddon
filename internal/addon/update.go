@@ -17,6 +17,7 @@ const (
 	UpdateUnknown   UpdateState = iota // not checked, branch-tracked, no releases, or unresolvable url
 	UpdateCurrent                      // the pinned url is part of the latest release
 	UpdateAvailable                    // a newer release than the pinned one exists
+	UpdateLocked                       // the entry is locked: updates are intentionally not checked
 )
 
 // String renders an UpdateState as a short lowercase label for non-interactive
@@ -27,6 +28,8 @@ func (s UpdateState) String() string {
 		return "current"
 	case UpdateAvailable:
 		return "available"
+	case UpdateLocked:
+		return "locked"
 	default:
 		return "unknown"
 	}
@@ -54,6 +57,12 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	// branch, not a release tag, so there's nothing to flag.
 	if a.IsGitWorkdir() {
 		return UpdateInfo{}
+	}
+	// A locked entry is pinned by the user: don't check (or flag) updates for it. Short
+	// circuit before the network fetch and report UpdateLocked — no marker, but
+	// distinguishable from an unresolvable UpdateUnknown.
+	if a.IsLocked() {
+		return UpdateInfo{State: UpdateLocked}
 	}
 	listing, err := source.AvailableVersions(ctx, a.URL)
 	if err != nil || listing == nil {
@@ -141,6 +150,10 @@ type UpdatePlan struct {
 // comparable releases, or can't be fetched — so it never plans a no-op update.
 func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePlan, bool) {
 	if a.URL == "" {
+		return UpdatePlan{}, false
+	}
+	// A locked entry is pinned by the user: never plan a bulk update for it.
+	if a.IsLocked() {
 		return UpdatePlan{}, false
 	}
 	listing, err := source.AvailableVersions(ctx, a.URL)

@@ -1,10 +1,35 @@
 package addon
 
 import (
+	"context"
 	"testing"
 
 	"gdaddon/internal/source"
 )
+
+func TestLockedSkipsUpdateCheck(t *testing.T) {
+	// A locked addon short-circuits before any network fetch: CheckUpdate reads as
+	// UpdateUnknown (no marker) and ResolveUpdate plans nothing. The url would
+	// otherwise be resolved over the network, so reaching it would hang/fail the test.
+	a := Addon{
+		Name:    "Locked",
+		URL:     "https://github.com/owner/repo/releases/download/v1.0.0/repo.zip",
+		Path:    "addons/repo",
+		Version: "1.0.0",
+		Tag:     "v1.0.0",
+		Lock:    true,
+	}
+
+	if info := CheckUpdate(context.Background(), a); info.State != UpdateLocked {
+		t.Errorf("CheckUpdate on locked addon = %v, want UpdateLocked", info.State)
+	}
+	if _, ok := ResolveUpdate(context.Background(), a, "1.0.0"); ok {
+		t.Errorf("ResolveUpdate on locked addon returned a plan, want ok=false")
+	}
+	if got := UpdateLocked.String(); got != "locked" {
+		t.Errorf("UpdateLocked.String() = %q, want \"locked\"", got)
+	}
+}
 
 func TestLatestRelease(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
