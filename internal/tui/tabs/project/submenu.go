@@ -26,6 +26,16 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 	submodule := a.IsSubmodule()
 
 	var items []list.Item
+	// A git checkout on a different branch than the manifest records: offer to re-record
+	// the manifest tag to the live branch (the reconcile action; the checkout is source of
+	// truth and is never overwritten).
+	if st.State == addon.StateBranchChanged {
+		items = append(items, components.Item{
+			Name: "⎇ Update branch record",
+			Desc: "re-record this checkout's current branch (" + st.LiveBranch + ") in the manifest",
+			Pick: func(sh *core.Shared) core.Action { return updateBranchRecord(sh, st) },
+		})
+	}
 	if !submodule {
 		items = append(items, components.Item{
 			Name: "↧ Install / update",
@@ -158,6 +168,22 @@ func toggleLock(sh *core.Shared, st addon.Status) core.Action {
 		core.SetStatus(verb+" "+st.Addon.Name),
 		core.PropagateAll(appctx.ProjectDirty{}),
 		core.Replace(newSubmenuScreen(st, sh)),
+	)
+}
+
+// updateBranchRecord re-records the manifest entry's tag to the checkout's live branch
+// (UpdateEntry leaves url/path/version untouched), reconciling detected branch drift. It
+// logs the change and broadcasts ProjectDirty so the list reloads and the branch-changed
+// marker clears, then pops back to the browse list.
+func updateBranchRecord(sh *core.Shared, st addon.Status) core.Action {
+	c := appctx.Of(sh)
+	if err := addon.UpdateEntry(c.ManifestPath, st.Addon.Name, "", "", "", st.LiveBranch); err != nil {
+		return core.SetStatusAndLog("error: " + err.Error())
+	}
+	return core.Seq(
+		core.SetStatus("recorded branch "+st.LiveBranch+" for "+st.Addon.Name),
+		core.PropagateAll(appctx.ProjectDirty{}),
+		core.Pop(),
 	)
 }
 

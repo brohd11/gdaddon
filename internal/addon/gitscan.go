@@ -42,6 +42,20 @@ func gitProbe(dir string) (kind gitKind, remote, branch string) {
 	return kind, remote, branch
 }
 
+// gitCheckedOutBranch returns the branch currently checked out in dir, or "" when dir
+// isn't a git checkout (no `.git` entry), the HEAD is detached, or git can't be read.
+// It's the branch half of gitProbe without the remote lookup, cheap enough for Inspect
+// to call per git entry when detecting branch drift.
+func gitCheckedOutBranch(dir string) string {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		return ""
+	}
+	if b := gitOutput(dir, "rev-parse", "--abbrev-ref", "HEAD"); b != "" && b != "HEAD" {
+		return b
+	}
+	return ""
+}
+
 // HasUncommittedChanges reports whether dir is a git checkout (a standalone clone or
 // a submodule) with a dirty working tree (modified or untracked files). False when
 // dir isn't a checkout (no `.git` entry) or the tree is clean.

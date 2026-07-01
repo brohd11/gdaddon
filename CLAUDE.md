@@ -55,9 +55,11 @@ gdaddon self-update --check --json  # report {current,latest_tag,available} for 
 ```
 
 `--list --json` (`printListJSON` in `cmd/root.go`) emits one `listEntryJSON` object per
-manifest entry with stable snake_case keys: `name`, `state`, `kind`
+manifest entry with stable snake_case keys: `name`, `state`
+(`missing`/`installed`/`mismatch`/`unversioned`/`branch_changed`/`invalid`), `kind`
 (`package`/`clone`/`submodule`), `path`, `full_path`, `local_version`, `pinned_version`,
-`tag`, `url`, `update` (`unknown`/`current`/`available`), `latest_tag`, `missing_deps`
+`tag`, `live_branch` (a git checkout's current branch; `""` for non-git entries), `url`,
+`update` (`unknown`/`current`/`available`), `latest_tag`, `missing_deps`
 (array of `{repo_id, tag, url}`). Always valid JSON (`[]` when empty). Everything is
 local/instant except `update`/`latest_tag`, which stay `"unknown"` unless
 `--check-updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`).
@@ -177,7 +179,7 @@ live in separate packages. See `internal/tui/doc.go` for the full contract and h
 to add a tab.
 
 Key packages/functions:
-- `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing.
+- `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing. For git checkouts (clone/submodule) it reads the live checked-out branch (`gitCheckedOutBranch`, exposed on `Status.LiveBranch`) and reports `StateBranchChanged` when it differs from the recorded `tag` — branch drift, reconciled by re-recording the tag via the per-addon **Update branch record** action. A present git checkout is never touched by `Install All` (it skips clones/submodules whether unversioned or drifted).
 - `addon.Install` / `addon.InstallAll` — fetch (`.zip` download / `.git` clone / **local `.zip` path** for archived packages), derive the install dir from the package's `plugin.cfg`/`version.cfg` (`internal/addon/cfg.go`), and report progress via a callback. `Install` returns the resolved path+version. Both take a leading `ctx context.Context` (as do `UpdateAll`/`InstallAllDeps`) — cancelling it aborts the in-flight download/clone (HTTP request + `git clone` are context-bound), which is how the TUI's task-abort works.
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch-HEAD archives, and canonical repo identity, driven by per-host VCS rules from config.yml (github.com/codeberg.org as defaults).

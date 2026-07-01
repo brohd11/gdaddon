@@ -27,6 +27,9 @@ func addonDesc(s addon.Status) string {
 		if branch == "" {
 			branch = "HEAD"
 		}
+		if s.State == addon.StateBranchChanged {
+			return "⛓ submodule · recorded " + branch + " → on " + s.LiveBranch
+		}
 		if s.Present() {
 			return "⛓ submodule · " + branch
 		}
@@ -36,6 +39,9 @@ func addonDesc(s addon.Status) string {
 		branch := s.Addon.Tag
 		if branch == "" {
 			branch = "HEAD"
+		}
+		if s.State == addon.StateBranchChanged {
+			return "⎇ cloned (dev) · recorded " + branch + " → on " + s.LiveBranch
 		}
 		if s.Present() {
 			return "⎇ cloned (dev) · " + branch
@@ -99,17 +105,21 @@ func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) co
 			return core.Action{}, false
 		}
 	}
-	return components.Item{Name: s.Addon.Name + rowMarker(upd, missingDeps, dirty), Desc: addonDesc(s), Pick: pick, Keys: keys}
+	name := s.Addon.Name + rowMarker(upd, missingDeps, dirty, s.State == addon.StateBranchChanged)
+	return components.Item{Name: name, Desc: addonDesc(s), Pick: pick, Keys: keys}
 }
 
-// rowMarker builds the combined name suffix from the update, dependency, and
-// git-dirty checks, e.g. "  ⚠ [update]", "  ⚠ [missing deps]", or
-// "  ⚠ [missing deps / uncommitted changes]". Empty when the addon is current, its
-// deps are satisfied, and (for a clone) its working tree is clean.
-func rowMarker(upd addon.UpdateInfo, missingDeps, dirty bool) string {
+// rowMarker builds the combined name suffix from the update, branch-drift,
+// dependency, and git-dirty checks, e.g. "  ⚠ [update]", "  ⚠ [branch changed]", or
+// "  ⚠ [missing deps / uncommitted changes]". Empty when the addon is current, on its
+// recorded branch, its deps are satisfied, and (for a clone) its working tree is clean.
+func rowMarker(upd addon.UpdateInfo, missingDeps, dirty, branchChanged bool) string {
 	var parts []string
 	if upd.State == addon.UpdateAvailable {
 		parts = append(parts, "update")
+	}
+	if branchChanged {
+		parts = append(parts, "branch changed")
 	}
 	if missingDeps {
 		parts = append(parts, "missing deps")

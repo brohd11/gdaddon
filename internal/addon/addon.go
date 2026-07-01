@@ -75,6 +75,7 @@ const (
 	StateInstalled                // installed and version matches (or no version pinned + present unversioned)
 	StateMismatch                 // installed but local version != pinned version
 	StateUnversioned              // installed, present, manifest pins no version
+	StateBranchChanged            // git checkout present, on a different branch than the manifest records
 )
 
 // String renders a State as a short lowercase label for non-interactive output.
@@ -88,6 +89,8 @@ func (s State) String() string {
 		return "mismatch"
 	case StateUnversioned:
 		return "unversioned"
+	case StateBranchChanged:
+		return "branch_changed"
 	default:
 		return "invalid"
 	}
@@ -99,6 +102,10 @@ type Status struct {
 	State        State
 	LocalVersion string
 	FullPath     string
+	// LiveBranch is the branch currently checked out for a git workdir (clone/submodule),
+	// read at inspect time; "" for non-git entries or an unreadable/detached checkout. When
+	// it differs from the recorded Addon.Tag the State is StateBranchChanged.
+	LiveBranch string
 }
 
 // Installable reports whether installing this addon makes sense for an explicit
@@ -108,7 +115,7 @@ func (s Status) Installable() bool { return s.State != StateInvalid }
 // Present reports whether the addon is installed on disk (any present state),
 // regardless of version match.
 func (s Status) Present() bool {
-	return s.State == StateInstalled || s.State == StateMismatch || s.State == StateUnversioned
+	return s.State == StateInstalled || s.State == StateMismatch || s.State == StateUnversioned || s.State == StateBranchChanged
 }
 
 // Parse reads and unmarshals the manifest into a name-sorted slice.
@@ -178,11 +185,18 @@ func statusFor(a Addon, baseDir string) Status {
 	local := getLocalPluginVersion(fullPath)
 	s.LocalVersion = local
 
-	// A live git checkout (clone or submodule) is never overwritten once present, so
-	// report it as unversioned (which InstallAll skips) regardless of any version
-	// match.
+	// A live git checkout (clone or submodule) is never overwritten once present, so it
+	// carries no version match. Instead compare its live branch against the branch the
+	// manifest records (Addon.Tag): a known, differing branch is drift worth surfacing
+	// (StateBranchChanged); otherwise it stays unversioned (which InstallAll skips). A
+	// detached HEAD or unreadable repo yields "" and reads as unversioned, no false drift.
 	if a.IsGitWorkdir() {
-		s.State = StateUnversioned
+		s.LiveBranch = gitCheckedOutBranch(fullPath)
+		if s.LiveBranch != "" && s.LiveBranch != a.Tag {
+			s.State = StateBranchChanged
+		} else {
+			s.State = StateUnversioned
+		}
 		return s
 	}
 

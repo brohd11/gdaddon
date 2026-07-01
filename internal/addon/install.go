@@ -41,6 +41,12 @@ func InstallAll(ctx context.Context, manifestPath string, statuses []Status, bas
 		case StateUnversioned:
 			report("[%s] already exists at %s (no version specified). Skipping...", a.Name, a.Path)
 			continue
+		case StateBranchChanged:
+			// A git checkout on a different branch than the manifest records: a present git
+			// workdir is never touched by a batch install. Report the drift and skip;
+			// reconcile (re-record the tag) is the explicit per-addon "Update branch record".
+			report("[%s] branch changed (recorded %s, on %s). Skipping...", a.Name, a.Tag, s.LiveBranch)
+			continue
 		case StateMismatch:
 			old := s.LocalVersion
 			if old == "" {

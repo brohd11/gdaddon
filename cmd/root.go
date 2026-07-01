@@ -130,13 +130,14 @@ func runList(projectRoot string) error {
 // emitted by `--list --json` for the GDScript side to consume.
 type listEntryJSON struct {
 	Name          string        `json:"name"`
-	State         string        `json:"state"` // missing/installed/mismatch/unversioned/invalid
+	State         string        `json:"state"` // missing/installed/mismatch/unversioned/branch_changed/invalid
 	Kind          string        `json:"kind"`  // package/clone/submodule
 	Path          string        `json:"path"`  // manifest-relative
 	FullPath      string        `json:"full_path"`
 	LocalVersion  string        `json:"local_version"`
 	PinnedVersion string        `json:"pinned_version"`
 	Tag           string        `json:"tag"`
+	LiveBranch    string        `json:"live_branch"` // git checkout's current branch; "" for non-git entries
 	URL           string        `json:"url"`
 	Lock          bool          `json:"lock"`   // pinned: no update alerts, never bulk-updated
 	Update        string        `json:"update"` // unknown/current/available
@@ -199,6 +200,7 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 			LocalVersion:  s.LocalVersion,
 			PinnedVersion: s.Addon.Version,
 			Tag:           s.Addon.Tag,
+			LiveBranch:    s.LiveBranch,
 			URL:           s.Addon.URL,
 			Lock:          s.Addon.Lock,
 			Update:        update,
