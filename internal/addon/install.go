@@ -212,8 +212,17 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 	}
 
 	if _, err := os.Stat(dest); err == nil {
-		report("[%s] Already cloned at %s. Skipping (manage updates with git).", a.Name, destRel)
-		return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
+		if isGitCheckout(dest) {
+			report("[%s] Already cloned at %s. Skipping (manage updates with git).", a.Name, destRel)
+			return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
+		}
+		// A non-git folder here (e.g. a prior package install being converted to a
+		// clone): replace it so the clone can take its place. Package folders are
+		// freely overwritten elsewhere and hold no uncommitted git work.
+		report("[%s] Replacing non-git folder at %s with a fresh clone.", a.Name, destRel)
+		if err := os.RemoveAll(dest); err != nil {
+			return InstallResult{}, fmt.Errorf("could not remove existing folder %s: %w", destRel, err)
+		}
 	}
 
 	if err := gitCloneBranch(ctx, a.URL, a.Tag, dest, a.Name, report); err != nil {

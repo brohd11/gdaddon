@@ -56,6 +56,14 @@ func gitCheckedOutBranch(dir string) string {
 	return ""
 }
 
+// isGitCheckout reports whether dir is its own git checkout (has a `.git` entry —
+// a directory for a standalone clone, a file for a submodule). The same presence
+// test HasUncommittedChanges/gitCheckedOutBranch use, without reading git.
+func isGitCheckout(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, ".git"))
+	return err == nil
+}
+
 // HasUncommittedChanges reports whether dir is a git checkout (a standalone clone or
 // a submodule) with a dirty working tree (modified or untracked files). False when
 // dir isn't a checkout (no `.git` entry) or the tree is clean.

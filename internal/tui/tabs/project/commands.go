@@ -40,9 +40,13 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 	}
 
 	_ = addon.UpdateEntry(manifestPath, name, url, path, version, tag)
+	// Always write the kind so a package install over a former clone clears the
+	// stale kind line (SetKind removes it for KindPackage), not just clone installs.
+	kind := addon.KindPackage
 	if pick.clone {
-		_ = addon.SetKind(manifestPath, name, addon.KindClone)
+		kind = addon.KindClone
 	}
+	_ = addon.SetKind(manifestPath, name, kind)
 
 	if pick.clone {
 		return "cloned " + name + " (" + pick.tag + ")"
