@@ -22,6 +22,7 @@ import (
 // it on the Selection (releaseSelection) so the install confirm can offer a source toggle.
 func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []source.Release, archived archivedSet) *components.PickerScreen {
 	var items []list.Item
+	items = append(items, opts.LeadItems...)
 	if opts.IncludeHEAD {
 		items = append(items, components.Item{
 			Name: "HEAD",

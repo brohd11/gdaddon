@@ -62,6 +62,10 @@ type BrowseOpts struct {
 	Endpoint       Endpoint // the per-package command menu
 	MarkArchived   bool     // mark already-archived remote versions instead of listing the local copies (archive flows)
 	ArchivedMarker string   // override the text tagging an archived version (defaults to archivedMarker)
+	// LeadItems are prepended (in order) to the versions list above the HEAD row.
+	// The project install flow uses this to offer "reinstall the pinned version" up
+	// top; other callers leave it nil. A slice so more lead rows can be added later.
+	LeadItems []list.Item
 }
 
 // marker returns the text used to tag a version that has a local archived copy.

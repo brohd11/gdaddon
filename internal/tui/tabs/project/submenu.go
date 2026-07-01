@@ -47,6 +47,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 				return core.Push(packages.BrowseRepo(a.URL, packages.BrowseOpts{
 					Source:         packages.SourceAll,
 					IncludeHEAD:    true,
+					LeadItems:      pinnedInstallItems(st),
 					Endpoint:       installEndpoint(a, local),
 					ArchivedMarker: "(archived)",
 				}))
@@ -116,6 +117,44 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 		Title:   a.Name,
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 	})
+}
+
+// pinnedInstallItems returns the "install what the manifest pins" lead row for the install
+// versions picker, or nil (no row) otherwise. Returning a slice matches BrowseOpts.LeadItems
+// and leaves room for more lead rows later. A package needs a url and a pinned version/tag;
+// a clone offers to check out its recorded branch, but only when not yet cloned (a present
+// checkout is a live workdir gdaddon never overwrites); a submodule is never installable.
+func pinnedInstallItems(st addon.Status) []list.Item {
+	a := st.Addon
+	if a.URL == "" || a.IsSubmodule() {
+		return nil
+	}
+	name, desc := "", "reinstall the pinned version"
+	if a.IsClone() {
+		if st.Present() {
+			return nil // a live checkout is never overwritten
+		}
+		branch := a.Tag
+		if branch == "" {
+			branch = "HEAD"
+		}
+		name = "⧉ Clone (" + branch + ")"
+		desc = "clone the recorded branch"
+	} else {
+		ver := a.Version
+		if ver == "" {
+			ver = a.Tag
+		}
+		if ver == "" {
+			return nil // nothing pinned to reinstall — browse instead
+		}
+		name = "↺ Install pinned (" + ver + ")"
+	}
+	return []list.Item{components.Item{
+		Name: name,
+		Desc: desc,
+		Pick: func(sh *core.Shared) core.Action { return core.Push(pinnedInstallScreen(a, st.LocalVersion)) },
+	}}
 }
 
 // newOpenSubmenu builds the Open command submenu: reveal the installed plugin

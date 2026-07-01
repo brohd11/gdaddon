@@ -2,11 +2,13 @@ package project
 
 import (
 	"fmt"
+	"path"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
 	"gdaddon/internal/addon"
+	"gdaddon/internal/source"
 	"gdaddon/internal/store"
 	"gdaddon/internal/tui/flows/packages"
 	"gdaddon/internal/tui/widgets"
@@ -28,6 +30,21 @@ func installEndpoint(selected addon.Addon, local string) packages.Endpoint {
 		pick := versionItem{tag: sel.Tag, asset: sel.Asset, archivedAsset: sel.ArchivedAsset, repoID: sel.RepoID, branch: sel.Branch, archived: sel.Archived}
 		return newInstallConfirm(selected, local, pick)
 	}
+}
+
+// pinnedInstallScreen reinstalls exactly what the manifest pins for `a` — the same
+// per-entry install InstallAll performs — reusing installEndpoint's confirm builders but
+// sourcing the version/asset from the manifest entry instead of a browsed selection. A
+// clone entry carries pick.clone so newInstallTask git-clones the recorded branch (via
+// cloneInstall) rather than unzipping the .git url as a package.
+func pinnedInstallScreen(a addon.Addon, local string) core.Screen {
+	if store.IsStoreURL(a.URL) {
+		return newStoreInstallConfirm(a, local, a.Version) // store pins Version
+	}
+	repoID, _ := source.RepoID(a.URL)
+	pick := versionItem{tag: a.Tag, repoID: repoID, clone: a.IsClone(),
+		asset: source.Asset{Name: path.Base(a.URL), URL: a.URL}}
+	return newInstallConfirm(a, local, pick) // plain (non-branch/non-archived) confirm → newInstallTask
 }
 
 // newStoreInstallConfirm confirms installing a chosen Asset Store version, then runs
