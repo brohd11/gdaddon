@@ -17,7 +17,7 @@ type SourceConfig struct {
 // VCSRule tells internal/source how to list an addon's versions on one host. It
 // is indexed by Host, so a repo URL (from a manifest entry or a search result)
 // resolves to the rule whose Host matches the URL's domain. Templates use the
-// placeholders {owner} {repo} {tag} {branch}, substituted verbatim.
+// placeholders {owner} {repo} {tag} {branch} {commit}, substituted verbatim.
 type VCSRule struct {
 	Host             string       `yaml:"host"`           // index key, e.g. "github.com"
 	Auth             string       `yaml:"auth,omitempty"` // "github" → Bearer $GITHUB_TOKEN
@@ -25,6 +25,7 @@ type VCSRule struct {
 	Branches         BranchesRule `yaml:"branches,omitempty"`
 	SourceArchive    ArchiveSpec  `yaml:"source_archive,omitempty"`     // appended to every release
 	BranchArchiveURL string       `yaml:"branch_archive_url,omitempty"` // when a manifest URL tracks refs/heads/<branch>
+	CommitArchiveURL string       `yaml:"commit_archive_url,omitempty"` // archive for a specific commit; templates {commit} — pins a branch install to its HEAD sha
 }
 
 // ReleasesRule extracts releases from a host's release-list endpoint. AssetsPath
@@ -42,12 +43,15 @@ type ReleasesRule struct {
 }
 
 // BranchesRule extracts branch names from a host's branch-list endpoint and maps
-// each to a HEAD archive download. ArchiveURL templates {branch}.
+// each to a HEAD archive download. ArchiveURL templates {branch}. CommitPath is a
+// dotted JSON path (within each branch element) to the branch's HEAD commit sha,
+// used with VCSRule.CommitArchiveURL to pin a branch install to that commit.
 type BranchesRule struct {
 	URL         string `yaml:"url"`
 	ResultsPath string `yaml:"results_path,omitempty"`
 	NamePath    string `yaml:"name_path"`
 	ArchiveURL  string `yaml:"archive_url"`
+	CommitPath  string `yaml:"commit_path,omitempty"`
 }
 
 // ArchiveSpec is the generated source-archive download offered for every release.

@@ -22,9 +22,9 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 	}
 	version := instVersion
 	// Fall back to the picked tag as the version only for release installs; a clone
-	// tracks a branch, so leave version empty when the checkout has no plugin.cfg
-	// version rather than recording the branch name as a version.
-	if version == "" && !pick.clone {
+	// tracks a branch and a branch package carries the branch name in pick.tag (not a
+	// version), so leave version empty for both rather than recording the branch name.
+	if version == "" && !pick.clone && !pick.branch {
 		version = strings.TrimPrefix(pick.tag, "v")
 	}
 	// Branch-HEAD installs carry the branch name in pick.tag but have no release
@@ -47,9 +47,19 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 		kind = addon.KindClone
 	}
 	_ = addon.SetKind(manifestPath, name, kind)
+	// A branch package pins the resolved HEAD commit; record it (and clear any stale
+	// pin on every other install kind, so a re-install off a release/branch drops it).
+	commit := ""
+	if pick.branch && !pick.clone {
+		commit = pick.asset.Commit
+	}
+	_ = addon.SetCommit(manifestPath, name, commit)
 
 	if pick.clone {
 		return "cloned " + name + " (" + pick.tag + ")"
+	}
+	if commit != "" {
+		return "pinned " + name + " @ " + shortSHA(commit)
 	}
 	return "updated " + name + " → " + version
 }

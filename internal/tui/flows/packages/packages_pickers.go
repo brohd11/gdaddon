@@ -125,9 +125,13 @@ func newBranchPicker(repoID string, branches []source.Asset, opts BrowseOpts) *c
 	items := make([]list.Item, 0, len(branches))
 	for _, b := range branches {
 		b := b
+		desc := "latest commit · " + b.Name
+		if b.Commit != "" {
+			desc = "pinned · " + b.Commit[:min(7, len(b.Commit))]
+		}
 		items = append(items, components.Item{
 			Name: "branch: " + b.Name,
-			Desc: "latest commit · " + b.Name,
+			Desc: desc,
 			Pick: func(sh *core.Shared) core.Action {
 				return core.Push(opts.Endpoint(Selection{RepoID: repoID, Tag: b.Name, Asset: b, Branch: true}))
 			},

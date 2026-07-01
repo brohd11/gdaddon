@@ -137,6 +137,7 @@ type listEntryJSON struct {
 	LocalVersion  string        `json:"local_version"`
 	PinnedVersion string        `json:"pinned_version"`
 	Tag           string        `json:"tag"`
+	Commit        string        `json:"commit"`      // pinned branch-package HEAD sha; "" for non-pinned entries
 	LiveBranch    string        `json:"live_branch"` // git checkout's current branch; "" for non-git entries
 	URL           string        `json:"url"`
 	Lock          bool          `json:"lock"`   // pinned: no update alerts, never bulk-updated
@@ -200,6 +201,7 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 			LocalVersion:  s.LocalVersion,
 			PinnedVersion: s.Addon.Version,
 			Tag:           s.Addon.Tag,
+			Commit:        s.Addon.Commit,
 			LiveBranch:    s.LiveBranch,
 			URL:           s.Addon.URL,
 			Lock:          s.Addon.Lock,

@@ -24,6 +24,7 @@ type Asset struct {
 	Name      string
 	URL       string
 	Generated bool
+	Commit    string // resolved HEAD sha for a branch asset pinned via CommitArchiveURL ("" = floating/unpinned)
 }
 
 // Release is a selectable version: a tag plus its downloadable assets.
@@ -203,10 +204,20 @@ func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo stri
 	branches := make([]Asset, 0, len(raw))
 	for _, el := range raw {
 		name := restrule.GetPathString(el, b.NamePath)
-		branches = append(branches, Asset{
+		asset := Asset{
 			Name: name,
 			URL:  restrule.Render(b.ArchiveURL, vars(owner, repo, "", name)),
-		})
+		}
+		// Pin to the branch's HEAD commit when the host supports a commit archive
+		// and we can read the sha — so the install is reproducible. Otherwise fall
+		// back to the floating branch-HEAD archive above (unpinned).
+		if sha := restrule.GetPathString(el, b.CommitPath); sha != "" && rule.CommitArchiveURL != "" {
+			v := vars(owner, repo, "", name)
+			v["commit"] = sha
+			asset.URL = restrule.Render(rule.CommitArchiveURL, v)
+			asset.Commit = sha
+		}
+		branches = append(branches, asset)
 	}
 	return branches, nil
 }

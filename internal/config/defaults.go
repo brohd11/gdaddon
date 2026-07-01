@@ -61,8 +61,10 @@ func DefaultSources() []SourceConfig {
 					URL:        "https://api.github.com/repos/{owner}/{repo}/branches?per_page=100",
 					NamePath:   "name",
 					ArchiveURL: "https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip",
+					CommitPath: "commit.sha",
 				},
 				BranchArchiveURL: "https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip",
+				CommitArchiveURL: "https://github.com/{owner}/{repo}/archive/{commit}.zip",
 			},
 		},
 		{
@@ -134,8 +136,10 @@ func DefaultSources() []SourceConfig {
 					URL:        "https://codeberg.org/api/v1/repos/{owner}/{repo}/branches?limit=100",
 					NamePath:   "name",
 					ArchiveURL: "https://codeberg.org/{owner}/{repo}/archive/{branch}.zip",
+					CommitPath: "commit.id",
 				},
 				BranchArchiveURL: "https://codeberg.org/{owner}/{repo}/archive/{branch}.zip",
+				CommitArchiveURL: "https://codeberg.org/{owner}/{repo}/archive/{commit}.zip",
 			},
 		},
 	}

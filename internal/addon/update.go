@@ -58,6 +58,12 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	if a.IsGitWorkdir() {
 		return UpdateInfo{}
 	}
+	// A commit-pinned package is a frozen snapshot chosen deliberately; a sha has no
+	// semver "latest" to compare, and its recorded plugin.cfg version must not nag
+	// against newer releases. Re-pinning is just re-installing the branch.
+	if a.Commit != "" {
+		return UpdateInfo{}
+	}
 	// A locked entry is pinned by the user: don't check (or flag) updates for it. Short
 	// circuit before the network fetch and report UpdateLocked — no marker, but
 	// distinguishable from an unresolvable UpdateUnknown.

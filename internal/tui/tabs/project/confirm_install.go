@@ -77,10 +77,11 @@ var installToggleHelp = []key.Binding{
 	core.Hint("cancel", core.Keys.No),
 }
 
-// branch install modes (also the vertical option order).
+// branch install modes (also the vertical option order). Clone is first/default —
+// it keeps a real .git; the pinned package snapshot is the de-emphasized second.
 const (
-	installPackageMode = iota // download + unzip the branch archive (current behavior)
-	installCloneMode          // git clone the repo as a live working copy (keeps .git)
+	installCloneMode   = iota // git clone the repo as a live working copy (keeps .git)
+	installPackageMode        // download + unzip the branch's HEAD commit as a pinned package
 )
 
 var installCloneToggleHelp = []key.Binding{
@@ -96,12 +97,14 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 		return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 			Crumb: "Install",
 			Count: 2,
-			Start: installPackageMode,
+			Start: installCloneMode,
 			Render: func(sh *core.Shared, mode int) string {
 				body := confirmInstallBody(sh, selected, pick)
 				body += "\n\n  mode:\n" + cloneModeOptions(mode)
 				if mode == installCloneMode {
 					body += "\n\n" + cloneModeWarning(selected)
+				} else {
+					body += "\n\n" + packageModeWarning(pick)
 				}
 				return sh.Box(body)
 			},
@@ -178,8 +181,8 @@ func installSourceOptions(mode int) string {
 // vertically, the active one marked and highlighted (mirrors installSourceOptions).
 func cloneModeOptions(mode int) string {
 	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
-		{Label: "Package", Desc: "download the branch and install as an unzipped package"},
 		{Label: "Clone", Desc: "git clone the repo as a live working copy (keeps .git)"},
+		{Label: "Package", Desc: "download & pin the branch's current commit as an unzipped package"},
 	})
 }
 
@@ -192,4 +195,24 @@ func cloneModeWarning(selected addon.Addon) string {
 	}
 	warn := lipgloss.NewStyle().Foreground(core.MutedColor)
 	return warn.Render("  ⚠ clones the whole repo (with .git) to " + dest + ";\n    the repo root must be the addon itself or it won't load in Godot.")
+}
+
+// packageModeWarning cautions that a branch package is a clone without git's
+// utility: a static snapshot pinned to the branch's current HEAD commit (no .git,
+// no auto-update). Re-installing moves the pin; a submodule fits an arbitrary commit.
+func packageModeWarning(pick versionItem) string {
+	pin := "HEAD"
+	if pick.asset.Commit != "" {
+		pin = shortSHA(pick.asset.Commit)
+	}
+	warn := lipgloss.NewStyle().Foreground(core.MutedColor)
+	return warn.Render("  ⚠ a clone without git's utility: installs a snapshot pinned to\n    commit " + pin + " (no .git, no auto-update). Re-install to move the\n    pin; for an arbitrary commit use a submodule.")
+}
+
+// shortSHA abbreviates a commit sha for display, leaving shorter refs untouched.
+func shortSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
 }

@@ -303,6 +303,52 @@ func SetLock(manifestPath, name string, lock bool) error {
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
+// SetCommit sets (or clears) the `commit:` line on an entry, in place, using the
+// same flat-shape block scan as SetLock. A non-empty sha inserts/updates
+// `commit: "<sha>"`; an empty sha removes any existing commit line. Kept separate
+// from UpdateEntry so a branch package's pin isn't muddled with the tag/version
+// fields (a sha is deliberately not stored in tag, which deps compare via semver).
+func SetCommit(manifestPath, name, commit string) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	keyIdx, end, ok := findEntryBlock(lines, name)
+	if !ok {
+		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+	}
+
+	indent := "    "
+	commitIdx := -1
+	for i := keyIdx + 1; i < end; i++ {
+		ind, key, ok := splitField(lines[i])
+		if !ok {
+			continue
+		}
+		indent = ind
+		if key == "commit" {
+			commitIdx = i
+		}
+	}
+
+	switch {
+	case commit == "":
+		if commitIdx != -1 {
+			lines = append(lines[:commitIdx], lines[commitIdx+1:]...)
+		}
+	case commitIdx != -1:
+		lines[commitIdx] = indent + "commit: \"" + commit + "\""
+	default:
+		tail := append([]string{indent + "commit: \"" + commit + "\""}, lines[keyIdx+1:]...)
+		lines = append(lines[:keyIdx+1], tail...)
+	}
+
+	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
 // RemoveEntry deletes a manifest entry — its key line and the indented block
 // beneath it — in place, leaving every other entry byte-for-byte intact. It uses
 // the same flat-shape block detection as UpdateEntry, so it works on the project

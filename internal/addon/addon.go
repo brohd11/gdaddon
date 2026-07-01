@@ -38,6 +38,10 @@ type Addon struct {
 	Path    string `yaml:"path"`
 	Version string `yaml:"version"`
 	Tag     string `yaml:"tag"`
+	// Commit records the HEAD sha a branch package was pinned to (packages only; the
+	// url is that commit's archive). It gives an otherwise-floating branch snapshot a
+	// durable identity: a pinned entry reads as installed and never nags for updates.
+	Commit string `yaml:"commit"`
 	// Kind marks a live git checkout (clone or submodule) rather than an unzipped
 	// package. For a clone, Install clones the repo with its .git kept and never
 	// overwrites an existing checkout; for a submodule, gdaddon never installs at all
@@ -201,6 +205,10 @@ func statusFor(a Addon, baseDir string) Status {
 	}
 
 	switch {
+	case a.Commit != "":
+		// A commit-pinned package: its exact snapshot can't be re-verified from a
+		// .git-less folder, so trust the recorded pin — present means installed.
+		s.State = StateInstalled
 	case a.Version == "":
 		s.State = StateUnversioned
 	case local == a.Version:
