@@ -11,9 +11,36 @@
  - Addon sets - save a collection of addons that can be added together
  - Archive - save a copy of any package locally, can be used for install
 
+### Examples
+Installing 25 addons: [here](https://youtu.be/1EIBzfUs50g)
+
 ## Quick Start
 
-Example installing 25 addons: [here](https://youtu.be/1EIBzfUs50g)
+### Install
+
+#### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-EditorPlugin)
+This is the Godot EditorPlugin companion to gdaddon. You can actually download and install the binary from here if you want. It should remove the need for quarantine management on macOS.
+
+Open the gdaddon dialog and it will prompt you to update/install the binary.
+
+#### To install from this repo:
+
+There are binaries under releases, you can also build with Go and Make: `make` will build for all current platforms.
+
+On macOS, downloaded binaries may have quarantine status that needs to be cleared before you can execute: `xattr -dr com.apple.quarantine path/to/gdaddon`
+
+Alternatively, build with Go and this is not a problem.
+
+With your fresh binary, run `gdaddon install` from the download or build directory. This will launch an installer with a few options:
+ - system - Can be directly accessed by name `gdaddon`, needs permissions
+ - local - Can be directly accessed by name, if directory is in PATH, no permissions
+ - ~/.gdaddon - Can not be directly accessed by name, but can be launched directly from the companion EditorPlugin, no permissions
+
+After install you can delete the download folder.
+
+**Note:** On Windows, `install.bat` will launch a terminal and start `gdaddon install` when double clicked. The linux and mac install helpers will be removed since you need to open a terminal to either: (on linux) run the install helper, (on mac) dequarantine the install helper and binary. They are redundant artifacts from before the logic moved from shell -> `gdaddon install`
+
+---
 
 ### Manifest
 Each addon has an entry in the manifest. This editable via the TUI, or by hand.
@@ -41,16 +68,5 @@ If you don't have a tagged version, just the repo will be added to your project 
 
 There is also an "Install All + Deps" command that will  install, check for dependencies, loop, until there are none left that can be installed.
 
-### Install
-
-There are binaries under releases, you can also build with Go: `make` will build for all platforms.
-
-on macOS, downloaded binaries may have quarantine status that needs to be cleared before you can execute: `xattr -dr com.apple.quarantine path/to/gdaddon`
-
-Alternatively, build and this is not a problem.
-
-The `install_unix.sh` script will symlink the binary into "$HOME/.local/bin/gdaddon", so you can just run `gdaddon` in any project to start it.
-
 
 More docs can be found [here](doc/docs.md)
-
