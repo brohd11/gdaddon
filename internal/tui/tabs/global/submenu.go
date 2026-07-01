@@ -43,7 +43,7 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 		})
 	}
 	items = append(items, components.Item{
-		Name: "🌐 Open Source",
+		Name: "{ } Open Source",
 		Desc: "open the source URL in your browser",
 		Pick: func(sh *core.Shared) core.Action { return sysopen.URL(g.url) },
 	})

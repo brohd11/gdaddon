@@ -87,7 +87,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 	}
 	if st.Present() || a.URL != "" {
 		items = append(items, components.Item{
-			Name: "📂 Open",
+			Name: "\u00BB Open",
 			Desc: "open the plugin's install path or source url",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newOpenSubmenu(st)) },
 		})
