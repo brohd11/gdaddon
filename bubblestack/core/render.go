@@ -161,12 +161,27 @@ const (
 )
 
 // ShortHelp renders a tab root's decluttered short help for the given preset; the
-// full (?) help still lists everything via the list's own FullHelp. Tab roots use
-// this instead of helpView so secondary keys (filter, output, clear) stay out of
-// the short bar.
+// full (?) help still lists everything via the list's own FullHelp, plus the global
+// refresh/quit keys inserted here (they're router-owned, so they don't appear in the
+// list's own FullHelp). The insert lands just before FullHelp's trailing "?" column so
+// that close-help entry stays furthest right. Tab roots use this instead of helpView so
+// secondary keys (filter, output, clear) stay out of the short bar.
 func ShortHelp(l list.Model, mode HelpMode) string {
 	if l.Help.ShowAll {
-		return l.Styles.HelpStyle.Render(l.Help.FullHelpView(l.FullHelp()))
+		full := l.FullHelp()
+		extra := []key.Binding{
+			FullHint("refresh", Keys.Refresh),
+			FullHint("quit", Keys.Quit),
+		}
+		// Slot refresh/quit in just before the list's trailing "?" (close-help) column;
+		// the three-index slice caps capacity so append can't clobber full[n-1] before
+		// it's re-appended.
+		if n := len(full); n > 0 {
+			full = append(full[:n-1:n-1], extra, full[n-1])
+		} else {
+			full = append(full, extra)
+		}
+		return l.Styles.HelpStyle.Render(l.Help.FullHelpView(full))
 	}
 	short := []key.Binding{
 		Hint("up", Keys.Up),

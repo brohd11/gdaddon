@@ -38,8 +38,6 @@ With your fresh binary, run `gdaddon install` from the download or build directo
 
 After install you can delete the download folder.
 
-**Note:** On Windows, `install.bat` will launch a terminal and start `gdaddon install` when double clicked. The linux and mac install helpers will be removed since you need to open a terminal to either: (on linux) run the install helper, (on mac) dequarantine the install helper and binary. They are redundant artifacts from before the logic moved from shell -> `gdaddon install`
-
 ---
 
 ### Manifest

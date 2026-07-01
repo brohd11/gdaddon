@@ -43,8 +43,9 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action {
 				// BrowseRepo lists store releases for a store url and git versions
 				// otherwise; installEndpoint branches on the same to build the right
-				// confirm/task.
-				return core.Push(packages.BrowseRepo(a.URL, packages.BrowseOpts{
+				// confirm/task. Gate behind the dirty-checkout confirm since an install
+				// overwrites the clone.
+				return guardDirty(sh, st, packages.BrowseRepo(a.URL, packages.BrowseOpts{
 					Source:         packages.SourceAll,
 					IncludeHEAD:    true,
 					LeadItems:      pinnedInstallItems(st),
@@ -109,7 +110,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 	items = append(items, components.Item{
 		Name: "✗ Remove",
 		Desc: "remove from the project (and optionally delete files)",
-		Pick: func(sh *core.Shared) core.Action { return core.Push(newRemoveConfirm(st)) },
+		Pick: func(sh *core.Shared) core.Action { return guardDirty(sh, st, newRemoveConfirm(st)) },
 	})
 
 	return components.NewPicker(items, components.PickerOpts{
@@ -117,6 +118,23 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 		Title:   a.Name,
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 	})
+}
+
+// guardDirty interposes a "there are uncommitted changes" confirm before target when the
+// addon is a present git checkout with a dirty working tree (the cached GitDirty flag) —
+// an install overwrites the clone and a remove may delete its files, so we warn first. On
+// Yes the confirm replaces itself with target (so a later back from target returns to the
+// submenu, not the confirm); a clean checkout / package entry pushes target directly. The
+// caller builds target either way (both constructors are pure).
+func guardDirty(sh *core.Shared, st addon.Status, target core.Screen) core.Action {
+	if !appctx.Of(sh).GitDirty[st.Addon.Name] {
+		return core.Push(target)
+	}
+	return core.Push(components.CreateConfirmScreen(components.ConfirmSimple{
+		Crumb: "Uncommitted",
+		Text:  "There are uncommitted changes in this repository,\nare you sure you want to continue?",
+		OnYes: core.Replace(target),
+	}))
 }
 
 // pinnedInstallItems returns the "install what the manifest pins" lead row for the install

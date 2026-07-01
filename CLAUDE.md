@@ -241,11 +241,9 @@ and writes an "update available" line to the status/log; Actions ▸ Update gdad
 loading → confirm → task flow in-TUI (`internal/tui/tabs/actions/selfupdate.go`). A
 self-update doesn't change the already-running process — relaunch to use the new binary.
 
-`make package` bundles, into each platform zip next to the binary (`zip -j`), a thin
-double-click launcher that just calls `gdaddon install`: `install.command` (macOS),
-`install.bat` (Windows), `install.sh` (Linux/terminal). Caveats: macOS Gatekeeper warns
-on the unsigned binary first run (right-click → Open); Linux double-click is
-desktop-dependent.
+`make package` zips each platform build into `dist/` (`zip -j`, binary only). Caveat:
+macOS Gatekeeper warns on the unsigned binary first run (right-click → Open, or clear
+quarantine with `xattr -dr com.apple.quarantine`).
 
 On startup `runRoot` also writes `~/.gdaddon/.gitignore` (ignoring `bin/`) if absent —
 `~/.gdaddon` is meant to be committable, but the OS binary isn't by default

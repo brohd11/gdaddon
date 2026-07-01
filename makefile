@@ -29,15 +29,15 @@ package: package-mac-arm package-linux package-windows
 
 package-mac-arm: mac-arm
 	mkdir -p $(DIST_DIR)
-	cd $(OUT_DIR)/mac-arm64 && zip -q -j ../../$(DIST_DIR)/$(APP_NAME)-$(VERSION)-darwin-arm64.zip $(APP_NAME) ../../install_scripts/install.command ../../install_scripts/install.sh
+	cd $(OUT_DIR)/mac-arm64 && zip -q -j ../../$(DIST_DIR)/$(APP_NAME)-$(VERSION)-darwin-arm64.zip $(APP_NAME)
 
 package-linux: linux
 	mkdir -p $(DIST_DIR)
-	cd $(OUT_DIR)/linux && zip -q -j ../../$(DIST_DIR)/$(APP_NAME)-$(VERSION)-linux-amd64.zip $(APP_NAME) ../../install_scripts/install.sh
+	cd $(OUT_DIR)/linux && zip -q -j ../../$(DIST_DIR)/$(APP_NAME)-$(VERSION)-linux-amd64.zip $(APP_NAME)
 
 package-windows: windows
 	mkdir -p $(DIST_DIR)
-	cd $(OUT_DIR)/windows && zip -q -j ../../$(DIST_DIR)/$(APP_NAME)-$(VERSION)-windows-amd64.zip $(APP_NAME).exe ../../install_scripts/install.bat
+	cd $(OUT_DIR)/windows && zip -q -j ../../$(DIST_DIR)/$(APP_NAME)-$(VERSION)-windows-amd64.zip $(APP_NAME).exe
 
 clean:
 	rm -rf $(OUT_DIR) $(DIST_DIR)
