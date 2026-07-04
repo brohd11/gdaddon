@@ -40,6 +40,10 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 		if rel.Prerelease {
 			desc += " · prerelease"
 		}
+		// A commit-pinned branch package (archived as <branch>@<sha>) surfaces its sha.
+		if len(rel.Assets) > 0 && rel.Assets[0].Commit != "" {
+			desc += " · " + rel.Assets[0].Commit[:min(7, len(rel.Assets[0].Commit))]
+		}
 		if archived.releaseArchived(rel) || (opts.Source == SourceAll && allLocal(rel)) {
 			desc += " · " + opts.marker()
 		}

@@ -217,6 +217,76 @@ func TestMerge(t *testing.T) {
 	}
 }
 
+func TestParseArchiveTag(t *testing.T) {
+	cases := []struct{ dir, tag, commit string }{
+		{"v1.0.0", "v1.0.0", ""},
+		{"main", "main", ""},
+		{"main@abc1234", "main", "abc1234"},
+		{"main@0123456789abcdef0123456789abcdef01234567", "main", "0123456789abcdef0123456789abcdef01234567"},
+		{"feat@old@abc1234", "feat@old", "abc1234"}, // split on the last @
+		{"main@notasha", "main@notasha", ""},        // suffix isn't hex
+		{"main@ABCDEF0", "main@ABCDEF0", ""},         // uppercase isn't matched
+	}
+	for _, c := range cases {
+		tag, commit := parseArchiveTag(c.dir)
+		if tag != c.tag || commit != c.commit {
+			t.Errorf("parseArchiveTag(%q) = (%q,%q), want (%q,%q)", c.dir, tag, commit, c.tag, c.commit)
+		}
+	}
+}
+
+func TestArchiveCommitPinRoundTrip(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("PK-" + r.URL.Path))
+	}))
+	defer srv.Close()
+
+	const repoID = "github.com/owner/repo"
+	const shaA = "aaaaaaa1111111111111111111111111111aaaa"
+	const shaB = "bbbbbbb2222222222222222222222222222bbbb"
+
+	// Two commits of the same branch, archived over time.
+	for _, sha := range []string{shaA, shaB} {
+		asset := source.Asset{Name: "main", URL: srv.URL + "/archive/" + sha + ".zip", Commit: sha}
+		if err := Archive(context.Background(), repoID, "main", asset); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Both snapshots coexist under distinct <branch>@<sha> dirs (no overwrite).
+	root, _ := Dir()
+	for _, sha := range []string{shaA, shaB} {
+		if _, err := os.Stat(filepath.Join(root, "github.com_owner_repo", "main@"+sha, "main")); err != nil {
+			t.Errorf("snapshot for %s not stored: %v", sha, err)
+		}
+	}
+
+	releases, err := List(repoID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(releases) != 2 {
+		t.Fatalf("expected 2 archived commit snapshots, got %d", len(releases))
+	}
+	// Each reads back with Tag=branch and the sha recovered onto the asset.
+	seen := map[string]bool{}
+	for _, rel := range releases {
+		if rel.Tag != "main" {
+			t.Errorf("expected Tag=main, got %q", rel.Tag)
+		}
+		if len(rel.Assets) != 1 || rel.Assets[0].Commit == "" {
+			t.Fatalf("asset should carry a recovered commit, got %+v", rel.Assets)
+		}
+		seen[rel.Assets[0].Commit] = true
+	}
+	if !seen[shaA] || !seen[shaB] {
+		t.Errorf("both commits should round-trip, got %v", seen)
+	}
+}
+
 func TestArchiveDownloads(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

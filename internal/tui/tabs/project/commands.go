@@ -20,19 +20,28 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 	if pick.archived {
 		url = ""
 	}
+	// A commit-pinned package (fresh branch Package install, or an archived copy of
+	// one — which reads back as a release row but carries the sha on the asset) records
+	// only its sha; it has no release tag/version. Treat a carried commit as the signal.
+	commit := ""
+	if pick.asset.Commit != "" && !pick.clone {
+		commit = pick.asset.Commit
+	}
+	pinned := commit != ""
+
 	version := instVersion
 	// Fall back to the picked tag as the version only for release installs; a clone
-	// tracks a branch and a branch package carries the branch name in pick.tag (not a
-	// version), so leave version empty for both rather than recording the branch name.
-	if version == "" && !pick.clone && !pick.branch {
+	// tracks a branch and a branch/commit package carries the branch name in pick.tag
+	// (not a version), so leave version empty for those rather than recording it.
+	if version == "" && !pick.clone && !pick.branch && !pinned {
 		version = strings.TrimPrefix(pick.tag, "v")
 	}
-	// Branch-HEAD installs carry the branch name in pick.tag but have no release
-	// tag; pick.branch marks them so we don't record a bogus tag. A clone install
-	// is the exception: it keeps the branch as tag and records the canonical .git
-	// url so a re-clone targets the right branch.
+	// Branch-HEAD / commit-pinned installs carry the branch name in pick.tag but have no
+	// release tag; don't record a bogus tag. A clone install is the exception: it keeps
+	// the branch as tag and records the canonical .git url so a re-clone targets the
+	// right branch.
 	tag := pick.tag
-	if pick.branch && !pick.clone {
+	if (pick.branch || pinned) && !pick.clone {
 		tag = ""
 	}
 	if pick.clone {
@@ -47,12 +56,8 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 		kind = addon.KindClone
 	}
 	_ = addon.SetKind(manifestPath, name, kind)
-	// A branch package pins the resolved HEAD commit; record it (and clear any stale
-	// pin on every other install kind, so a re-install off a release/branch drops it).
-	commit := ""
-	if pick.branch && !pick.clone {
-		commit = pick.asset.Commit
-	}
+	// Record the pinned HEAD commit (computed above), clearing any stale pin on every
+	// other install kind so a re-install off a release/branch drops it.
 	_ = addon.SetCommit(manifestPath, name, commit)
 
 	if pick.clone {

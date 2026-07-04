@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -95,10 +96,31 @@ func Archive(ctx context.Context, repoID, tag string, asset source.Asset) error 
 		return fmt.Errorf("download failed: %s", resp.Status)
 	}
 
-	if _, err := Store(repoID, tag, cleanAssetName(asset.Name), resp.Body); err != nil {
+	// A commit-pinned branch package has no release tag; fold the sha into the tag
+	// dir (<branch>@<sha>) so distinct commits of the same branch don't overwrite and
+	// listDir can recover the pin. cleanAssetName leaves the filename (the branch name).
+	storeTag := tag
+	if asset.Commit != "" {
+		storeTag = tag + "@" + asset.Commit
+	}
+	if _, err := Store(repoID, storeTag, cleanAssetName(asset.Name), resp.Body); err != nil {
 		return err
 	}
 	return nil
+}
+
+// shaTag matches a tag-dir suffix that is a git commit sha (7–40 hex chars), used to
+// split a commit-pinned branch package's tag dir back into branch + sha.
+var shaTag = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+
+// parseArchiveTag splits a tag-dir name into its release/branch tag and (for a
+// commit-pinned branch package stored as "<branch>@<sha>") the recovered commit sha.
+// A dir without a sha suffix returns (dir, "") unchanged.
+func parseArchiveTag(dir string) (tag, commit string) {
+	if i := strings.LastIndex(dir, "@"); i != -1 && shaTag.MatchString(dir[i+1:]) {
+		return dir[:i], dir[i+1:]
+	}
+	return dir, ""
 }
 
 // cleanAssetName strips the archived suffix (so re-archiving an archived asset
@@ -155,14 +177,16 @@ func listDir(base string) ([]source.Release, error) {
 		if err != nil {
 			continue
 		}
-		rel := source.Release{Tag: td.Name()}
+		tag, commit := parseArchiveTag(td.Name())
+		rel := source.Release{Tag: tag}
 		for _, f := range files {
 			if f.IsDir() {
 				continue
 			}
 			rel.Assets = append(rel.Assets, source.Asset{
-				Name: f.Name() + ArchivedSuffix,
-				URL:  filepath.Join(base, td.Name(), f.Name()),
+				Name:   f.Name() + ArchivedSuffix,
+				URL:    filepath.Join(base, td.Name(), f.Name()),
+				Commit: commit,
 			})
 		}
 		if len(rel.Assets) > 0 {
