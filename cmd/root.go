@@ -55,10 +55,13 @@ func Execute() {
 // (--install) or launches the TUI (default). The manifest is discovered under the root
 // (by runInstall here, or the TUI context's scan).
 func runRoot(cmd *cobra.Command, args []string) error {
-	// Dump the default config.yml on first run so it's the editable source of
-	// truth (search sources, archive dir). A failure here is non-fatal.
-	if created, path, err := config.Ensure(); err == nil && created {
-		fmt.Fprintf(os.Stderr, "wrote default config to %s\n", path)
+	// Dump the default config files on first run so they're the editable source
+	// of truth (config.yml: archive dir/theme; sources.yml: search/vcs rules). A
+	// failure here is non-fatal.
+	if created, err := config.Ensure(); err == nil {
+		for _, path := range created {
+			fmt.Fprintf(os.Stderr, "wrote default config to %s\n", path)
+		}
 	}
 	// Ship a .gitignore so the OS binary (~/.gdaddon/bin) isn't committed if the
 	// user version-controls ~/.gdaddon. Non-fatal; existing files are left alone.

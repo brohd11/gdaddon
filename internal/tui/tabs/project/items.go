@@ -2,6 +2,7 @@ package project
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"gdaddon/internal/addon"
@@ -99,7 +100,7 @@ func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) co
 	var keys func(*core.Shared, string) (core.Action, bool)
 	if s.Addon.IsGitWorkdir() && s.Present() {
 		keys = func(sh *core.Shared, k string) (core.Action, bool) {
-			if k == "t" {
+			if core.MatchKey(k, appctx.AppKeys.Terminal) {
 				return sysopen.Terminal(s.FullPath), true
 			}
 			return core.Action{}, false
@@ -133,16 +134,109 @@ func rowMarker(upd addon.UpdateInfo, missingDeps, dirty, branchChanged bool) str
 	return "  ⚠ [" + strings.Join(parts, " / ") + "]"
 }
 
+// projectSortModes is the Project tab's sort cycle: name A→Z, name Z→A, then
+// grouped by install state. The "i" key advances through it (see ProjectScreen.Update).
+var projectSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse, appctx.SortStatus}
+
+// rowData pairs an inspected addon with its cached warning flags (the same signals
+// rowMarker draws), so a row can be both sorted — the status mode factors warnings,
+// not just install state — and built from one value.
+type rowData struct {
+	s      addon.Status
+	update bool // a newer release exists (UpdateAvailable; excludes locked/current/unknown)
+	deps   bool // has unsatisfied dependencies
+	dirty  bool // git checkout has uncommitted changes
+}
+
 // projectListItems builds the browse list contents: one row per addon, decorated
-// with the cached update-check and dependency-check markers.
-func projectListItems(sh *core.Shared) []list.Item {
-	statuses := inspect(sh)
+// with the cached update-check and dependency-check markers, ordered per mode.
+func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	c := appctx.Of(sh)
-	items := make([]list.Item, 0, len(statuses))
-	for _, s := range statuses {
-		items = append(items, addonItem(s, c.UpdateChecks[s.Addon.Name], len(c.DepChecks[s.Addon.Name]) > 0, c.GitDirty[s.Addon.Name]))
+	statuses := inspect(sh)
+	rows := make([]rowData, len(statuses))
+	for i, s := range statuses {
+		rows[i] = rowData{
+			s:      s,
+			update: c.UpdateChecks[s.Addon.Name].State == addon.UpdateAvailable,
+			deps:   len(c.DepChecks[s.Addon.Name]) > 0,
+			dirty:  c.GitDirty[s.Addon.Name],
+		}
+	}
+	sortRows(rows, mode)
+	items := make([]list.Item, len(rows))
+	for i, r := range rows {
+		items[i] = addonItem(r.s, c.UpdateChecks[r.s.Addon.Name], r.deps, r.dirty)
 	}
 	return items
+}
+
+// sortRows reorders rows in place for the chosen mode: A→Z / Z→A by name
+// (case-insensitive), or by attentionRank (install state + warnings) with a name
+// tie-break. Sorting this domain-aware slice — not the finished rows — keeps the
+// status mode keyed on real state/warnings rather than the marker-suffixed Title.
+func sortRows(rows []rowData, mode appctx.SortMode) {
+	name := func(i int) string { return strings.ToLower(rows[i].s.Addon.Name) }
+	switch mode {
+	case appctx.SortReverse:
+		sort.SliceStable(rows, func(i, j int) bool { return name(i) > name(j) })
+	case appctx.SortStatus:
+		sort.SliceStable(rows, func(i, j int) bool {
+			ri, rj := attentionRank(rows[i]), attentionRank(rows[j])
+			if ri != rj {
+				return ri < rj
+			}
+			return name(i) < name(j)
+		})
+	default: // SortAlpha
+		sort.SliceStable(rows, func(i, j int) bool { return name(i) < name(j) })
+	}
+}
+
+// Attention tiers for SortStatus, most-urgent (lowest) first: install-state issues,
+// then the three warnings in the order the user cares about (update → deps → dirty),
+// then settled/installed, with invalid at the bottom. Reorder these to retune the
+// status sort — they're the single source of the ordering.
+const (
+	rankMissing     = iota // not installed
+	rankMismatch           // installed version != pinned
+	rankBranch             // git checkout on a different branch than recorded
+	rankUpdate             // a newer release is available
+	rankDeps               // unsatisfied dependencies
+	rankDirty              // uncommitted changes in a git checkout
+	rankUnversioned        // installed, no version pinned
+	rankInstalled          // installed and clean
+	rankInvalid            // broken entry (missing url/path)
+)
+
+// attentionRank scores a row for the status sort: a base rank from install state,
+// which any warning can only raise in urgency (take the minimum). So an installed
+// addon with an available update ranks at the "update" tier, not "installed".
+// Invalid entries carry no install path (hence no warnings) and sort to the bottom.
+func attentionRank(r rowData) int {
+	base := rankInstalled
+	switch r.s.State {
+	case addon.StateMissing:
+		base = rankMissing
+	case addon.StateMismatch:
+		base = rankMismatch
+	case addon.StateBranchChanged:
+		base = rankBranch
+	case addon.StateUnversioned:
+		base = rankUnversioned
+	case addon.StateInvalid:
+		return rankInvalid
+	}
+	// Warnings raise urgency (lower the number) but never lower it.
+	if r.update && rankUpdate < base {
+		base = rankUpdate
+	}
+	if r.deps && rankDeps < base {
+		base = rankDeps
+	}
+	if r.dirty && rankDirty < base {
+		base = rankDirty
+	}
+	return base
 }
 
 // ---------- install payload ----------

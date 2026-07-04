@@ -12,8 +12,15 @@ func TestLoadMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.ArchiveDir != "" || len(cfg.Sources) != 0 {
+	if cfg.ArchiveDir != "" || cfg.CurrentTheme != "" {
 		t.Fatalf("missing file should yield zero Config, got %+v", cfg)
+	}
+	srcs, err := LoadSources()
+	if err != nil {
+		t.Fatalf("LoadSources() error = %v", err)
+	}
+	if len(srcs) != 0 {
+		t.Fatalf("missing file should yield no sources, got %d", len(srcs))
 	}
 }
 
@@ -45,40 +52,39 @@ func TestResolvedArchiveDir(t *testing.T) {
 func TestEnsureWritesDefaultsOnce(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	path := filepath.Join(home, ".gdaddon", "config.yml")
+	dir := filepath.Join(home, ".gdaddon", "config")
+	configPath := filepath.Join(dir, "config.yml")
+	sourcesPath := filepath.Join(dir, "sources.yml")
 
-	created, got, err := Ensure()
+	created, err := Ensure()
 	if err != nil {
 		t.Fatalf("Ensure: %v", err)
 	}
-	if !created {
-		t.Fatal("first Ensure should create the file")
-	}
-	if got != path {
-		t.Fatalf("path = %q, want %q", got, path)
+	if len(created) != 2 || created[0] != configPath || created[1] != sourcesPath {
+		t.Fatalf("first Ensure should create both files, got %v", created)
 	}
 
-	// The dumped file must parse back into the defaults.
-	cfg, err := Load()
+	// The dumped sources file must parse back into the defaults.
+	srcs, err := LoadSources()
 	if err != nil {
-		t.Fatalf("Load after Ensure: %v", err)
+		t.Fatalf("LoadSources after Ensure: %v", err)
 	}
-	if len(cfg.Sources) != len(DefaultSources()) || cfg.Sources[0].Name != "GitHub" {
-		t.Fatalf("dumped sources mismatch: %+v", cfg.Sources)
+	if len(srcs) != len(DefaultSources()) || srcs[0].Name != "GitHub" {
+		t.Fatalf("dumped sources mismatch: %+v", srcs)
 	}
 
-	// Idempotent: a second call leaves the (possibly user-edited) file alone.
-	if err := os.WriteFile(path, []byte("archive_dir: ~/custom\n"), 0o644); err != nil {
+	// Idempotent: a second call leaves the (possibly user-edited) files alone.
+	if err := os.WriteFile(configPath, []byte("archive_dir: ~/custom\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	created, _, err = Ensure()
+	created, err = Ensure()
 	if err != nil {
 		t.Fatalf("second Ensure: %v", err)
 	}
-	if created {
-		t.Fatal("second Ensure should not recreate the file")
+	if len(created) != 0 {
+		t.Fatalf("second Ensure should not recreate any file, got %v", created)
 	}
-	cfg, _ = Load()
+	cfg, _ := Load()
 	if cfg.ArchiveDir != "~/custom" {
 		t.Fatalf("Ensure overwrote an existing file: %+v", cfg)
 	}
@@ -127,12 +133,11 @@ func TestEnsureGitignore(t *testing.T) {
 func TestLoadSources(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	base := filepath.Join(home, ".gdaddon")
-	if err := os.MkdirAll(base, 0o755); err != nil {
+	dir := filepath.Join(home, ".gdaddon", "config")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	yml := `
-archive_dir: ~/pkgs
 sources:
   - name: My Store
     type: json
@@ -148,18 +153,18 @@ sources:
       url: "https://ex.com/repo/{id}"
       browse_url_path: clone_url
 `
-	if err := os.WriteFile(filepath.Join(base, "config.yml"), []byte(yml), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "sources.yml"), []byte(yml), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load()
+	srcs, err := LoadSources()
 	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+		t.Fatalf("LoadSources() error = %v", err)
 	}
-	if len(cfg.Sources) != 1 {
-		t.Fatalf("got %d sources, want 1", len(cfg.Sources))
+	if len(srcs) != 1 {
+		t.Fatalf("got %d sources, want 1", len(srcs))
 	}
-	s := cfg.Sources[0]
+	s := srcs[0]
 	if s.Name != "My Store" || s.Type != "json" || s.Auth != "github" {
 		t.Fatalf("source header mismatch: %+v", s)
 	}

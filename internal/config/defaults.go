@@ -1,12 +1,12 @@
 package config
 
-// DefaultConfig is the config dumped on first run: the default archive dir plus
-// the built-in search sources. Add future defaults here so Ensure picks them up.
+// DefaultConfig is the general config dumped on first run (config.yml): the
+// default archive dir and theme. Add future general knobs here so Ensure picks
+// them up. The provider rules are dumped separately from DefaultSources (sources.yml).
 func DefaultConfig() *Config {
 	return &Config{
 		ArchiveDir:   "~/.gdaddon/archive",
 		CurrentTheme: "mono",
-		Sources:      DefaultSources(),
 	}
 }
 

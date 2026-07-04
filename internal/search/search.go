@@ -62,15 +62,15 @@ type AssetURLer interface {
 }
 
 // Sources is the registry of available backends, in display order: the
-// config-defined JSON sources from ~/.gdaddon/config.yml (the source of truth,
+// config-defined JSON sources from ~/.gdaddon/config/sources.yml (the source of truth,
 // dumped with defaults on first run — see config.Ensure), then the hard-coded
 // Asset Store. The first entry is the default selection. A misconfigured source
 // is skipped, not fatal; a missing or unreadable file falls back to the built-in
 // defaults so search always works.
 func Sources() []Source {
 	rules := config.DefaultSources()
-	if cfg, err := config.Load(); err == nil && len(cfg.Sources) > 0 {
-		rules = cfg.Sources
+	if srcs, err := config.LoadSources(); err == nil && len(srcs) > 0 {
+		rules = srcs
 	}
 
 	var srcs []Source

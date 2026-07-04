@@ -1,8 +1,10 @@
-// Package config loads ~/.gdaddon/config.yml, the single user-config file for
-// gdaddon. It owns two things: the archive directory override (archive_dir) and
-// the list of user-defined search sources (sources). The file is tiny and read
-// per call — there is no process-wide cache, so callers always see the current
-// on-disk state (and tests that swap $HOME keep working).
+// Package config loads gdaddon's user config from ~/.gdaddon/config/, split
+// across two files: config.yml (general knobs — archive_dir, current_theme,
+// last_search_source) and sources.yml (the list of provider rules for search and
+// vcs resolution). Each file is read per call — there is no process-wide cache,
+// so callers always see the current on-disk state (and tests that swap $HOME keep
+// working). A missing file is not an error: it yields the zero value, and Ensure
+// dumps defaults on first run so each file becomes the editable source of truth.
 package config
 
 import (
@@ -13,14 +15,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the parsed ~/.gdaddon/config.yml. A missing file yields the zero
-// value, so every field is optional. omitempty keeps the dumped default file
-// (see Ensure) free of blank knobs.
+// Config is the parsed ~/.gdaddon/config/config.yml — the general knobs. A
+// missing file yields the zero value, so every field is optional. omitempty keeps
+// the dumped default file (see Ensure) free of blank knobs. The provider rules
+// live in a separate file (sources.yml); see LoadSources.
 type Config struct {
-	ArchiveDir       string         `yaml:"archive_dir,omitempty"`
-	CurrentTheme     string         `yaml:"current_theme,omitempty"`      // last-selected TUI theme; loaded at startup, saved on change
-	LastSearchSource string         `yaml:"last_search_source,omitempty"` // last-selected Search tab source; loaded at startup, saved on search
-	Sources          []SourceConfig `yaml:"sources,omitempty"`            // search sources; the source of truth once dumped
+	ArchiveDir       string `yaml:"archive_dir,omitempty"`
+	CurrentTheme     string `yaml:"current_theme,omitempty"`      // last-selected TUI theme; loaded at startup, saved on change
+	LastSearchSource string `yaml:"last_search_source,omitempty"` // last-selected Search tab source; loaded at startup, saved on search
+}
+
+// sourcesFile is the parsed ~/.gdaddon/config/sources.yml — the provider rules
+// under a top-level sources: key. See LoadSources / DefaultSources.
+type sourcesFile struct {
+	Sources []SourceConfig `yaml:"sources"`
 }
 
 // BinSubdir is the ~/.gdaddon subdirectory the release installers copy the OS
@@ -28,7 +36,7 @@ type Config struct {
 // source of truth for the dir name shared by EnsureGitignore and the installers.
 const BinSubdir = "bin"
 
-// Dir is ~/.gdaddon, the home for config.yml and the default archive.
+// Dir is ~/.gdaddon, the home for the config dir, bin/, and the default archive.
 func Dir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -37,33 +45,57 @@ func Dir() (string, error) {
 	return filepath.Join(home, ".gdaddon"), nil
 }
 
-// Ensure writes the default config.yml if none exists yet, creating ~/.gdaddon
-// as needed. This makes the file the editable source of truth from first run; a
-// user who breaks it can delete it and rerun to get a fresh default. It returns
-// whether it created the file and the file's path. An existing file is left
-// untouched.
-func Ensure() (created bool, path string, err error) {
+// ConfigDir is ~/.gdaddon/config, the home for config.yml and sources.yml.
+func ConfigDir() (string, error) {
 	base, err := Dir()
 	if err != nil {
-		return false, "", err
+		return "", err
 	}
-	path = filepath.Join(base, "config.yml")
-	if _, err := os.Stat(path); err == nil {
-		return false, path, nil // already present — never overwrite the user's file
-	} else if !os.IsNotExist(err) {
-		return false, path, err
-	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return false, path, err
-	}
-	data, err := yaml.Marshal(DefaultConfig())
+	return filepath.Join(base, "config"), nil
+}
+
+// Ensure writes the default config.yml and sources.yml if they don't exist yet,
+// creating ~/.gdaddon/config as needed. This makes each file the editable source
+// of truth from first run; a user who breaks one can delete it and rerun to get a
+// fresh default. It returns the paths it created (empty when both were already
+// present). Existing files are left untouched.
+func Ensure() (created []string, err error) {
+	dir, err := ConfigDir()
 	if err != nil {
-		return false, path, err
+		return nil, err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	if c, err := ensureFile(filepath.Join(dir, "config.yml"), DefaultConfig()); err != nil {
+		return created, err
+	} else if c != "" {
+		created = append(created, c)
+	}
+	if c, err := ensureFile(filepath.Join(dir, "sources.yml"), sourcesFile{Sources: DefaultSources()}); err != nil {
+		return created, err
+	} else if c != "" {
+		created = append(created, c)
+	}
+	return created, nil
+}
+
+// ensureFile writes v (marshalled as YAML) to path if it doesn't exist yet,
+// returning the path when it created the file (or "" when already present).
+func ensureFile(path string, v any) (string, error) {
+	if _, err := os.Stat(path); err == nil {
+		return "", nil // already present — never overwrite the user's file
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	data, err := yaml.Marshal(v)
+	if err != nil {
+		return "", err
 	}
 	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return false, path, err
+		return "", err
 	}
-	return true, path, nil
+	return path, nil
 }
 
 // EnsureGitignore writes ~/.gdaddon/.gitignore ignoring the bin/ dir if none
@@ -92,14 +124,14 @@ func EnsureGitignore() (created bool, path string, err error) {
 	return true, path, nil
 }
 
-// Load reads ~/.gdaddon/config.yml. A missing file is not an error — it returns
-// the zero Config. A malformed file returns the parse error.
+// Load reads ~/.gdaddon/config/config.yml. A missing file is not an error — it
+// returns the zero Config. A malformed file returns the parse error.
 func Load() (*Config, error) {
-	base, err := Dir()
+	dir, err := ConfigDir()
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(base, "config.yml"))
+	data, err := os.ReadFile(filepath.Join(dir, "config.yml"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &Config{}, nil
@@ -113,24 +145,46 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
-// SaveTheme persists name as current_theme in ~/.gdaddon/config.yml. It edits the
-// file surgically — only the current_theme key's value is set (or the key appended)
-// — so the user's archive_dir, sources block, and any comments survive untouched. A
+// LoadSources reads the provider rules from ~/.gdaddon/config/sources.yml. A
+// missing file is not an error — it returns an empty slice, so callers fall back
+// to DefaultSources. A malformed file returns the parse error.
+func LoadSources() ([]SourceConfig, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "sources.yml"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var f sourcesFile
+	if err := yaml.Unmarshal(data, &f); err != nil {
+		return nil, err
+	}
+	return f.Sources, nil
+}
+
+// SaveTheme persists name as current_theme in ~/.gdaddon/config/config.yml. It
+// edits the file surgically — only the current_theme key's value is set (or the key
+// appended) — so the user's archive_dir and any comments survive untouched. A
 // missing file is created from DefaultConfig (with the theme overridden), matching
 // Ensure's first-run shape.
 func SaveTheme(name string) error {
-	base, err := Dir()
+	dir, err := ConfigDir()
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(base, "config.yml")
+	path := filepath.Join(dir, "config.yml")
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		if err := os.MkdirAll(base, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 		def := DefaultConfig()
@@ -154,22 +208,22 @@ func SaveTheme(name string) error {
 	return os.WriteFile(path, out, 0o644)
 }
 
-// SaveLastSource persists name as last_search_source in ~/.gdaddon/config.yml,
+// SaveLastSource persists name as last_search_source in ~/.gdaddon/config/config.yml,
 // editing the file surgically like SaveTheme so the user's other keys and comments
 // survive untouched. A missing file is created from DefaultConfig with the field set.
 func SaveLastSource(name string) error {
-	base, err := Dir()
+	dir, err := ConfigDir()
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(base, "config.yml")
+	path := filepath.Join(dir, "config.yml")
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return err
 		}
-		if err := os.MkdirAll(base, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
 		def := DefaultConfig()

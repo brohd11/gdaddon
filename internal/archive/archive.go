@@ -26,7 +26,7 @@ import (
 // ArchivedSuffix marks an asset name as coming from the local archive.
 const ArchivedSuffix = " (archived)"
 
-// Dir resolves the archive root: ~/.gdaddon/config.yml's archive_dir if set,
+// Dir resolves the archive root: ~/.gdaddon/config/config.yml's archive_dir if set,
 // otherwise ~/.gdaddon/archive. A leading "~" in archive_dir is expanded.
 func Dir() (string, error) {
 	cfg, err := config.Load()

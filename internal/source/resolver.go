@@ -1,5 +1,5 @@
 // Package source resolves the available versions of an addon from its remote.
-// It is config-driven: each provider entry in ~/.gdaddon/config.yml may carry a
+// It is config-driven: each provider entry in ~/.gdaddon/config/sources.yml may carry a
 // vcs rule (config.VCSRule) keyed by host, describing the host's release/branch
 // API and archive-URL patterns. github.com and codeberg.org ship as defaults;
 // any host can be added in YAML. A host with no rule degrades to a single
@@ -49,8 +49,8 @@ type Listing struct {
 // claims the host.
 func ruleForHost(host string) (*config.VCSRule, bool) {
 	sources := config.DefaultSources()
-	if cfg, err := config.Load(); err == nil && len(cfg.Sources) > 0 {
-		sources = cfg.Sources
+	if srcs, err := config.LoadSources(); err == nil && len(srcs) > 0 {
+		sources = srcs
 	}
 	for _, s := range sources {
 		if s.VCS != nil && strings.EqualFold(s.VCS.Host, host) {

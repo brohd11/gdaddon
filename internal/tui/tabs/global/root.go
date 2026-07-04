@@ -22,8 +22,18 @@ type globalItem struct {
 	kind                          addon.Kind
 }
 
+// globalTitle is the list's base Title; the active sort mode is appended.
+const globalTitle = "Global Plugins"
+
+// globalSortModes is the Global tab's sort cycle: name A→Z then Z→A. There's no
+// install-state grouping here (these rows carry no state).
+var globalSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse}
+
 // GlobalScreen is the Global tab root.
-type GlobalScreen struct{ list list.Model }
+type GlobalScreen struct {
+	list list.Model
+	sort appctx.SortMode
+}
 
 var _ core.Filterer = (*GlobalScreen)(nil)
 var _ core.Receiver = (*GlobalScreen)(nil)
@@ -33,12 +43,14 @@ var _ core.Crumber = (*GlobalScreen)(nil)
 func (s *GlobalScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewGlobalScreen(sh *core.Shared) *GlobalScreen {
-	return &GlobalScreen{list: core.NewSelectList(globalItems(sh), "Global Plugins")}
+	l := core.NewSelectList(globalItems(sh, appctx.SortAlpha), globalTitle+" — "+appctx.SortAlpha.Label())
+	return &GlobalScreen{list: l}
 }
 
-// globalItems reads ~/.gdaddon/plugins.yml as self-dispatching rows: each Pick
-// opens that plugin's submenu. An empty/missing list shows an inert hint row.
-func globalItems(sh *core.Shared) []list.Item {
+// globalItems reads ~/.gdaddon/plugins.yml as self-dispatching rows, ordered per
+// mode: each Pick opens that plugin's submenu. An empty/missing list shows an inert
+// hint row.
+func globalItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	var items []list.Item
 	if path, err := addon.GlobalListPath(); err == nil {
 		if addons, err := addon.Parse(path); err == nil {
@@ -57,7 +69,9 @@ func globalItems(sh *core.Shared) []list.Item {
 			Name: "(no global plugins yet)",
 			Desc: "add one via Actions → New Plugin → Global",
 		})
+		return items
 	}
+	appctx.SortItemsByTitle(items, mode == appctx.SortReverse)
 	return items
 }
 
@@ -66,6 +80,14 @@ func (s *GlobalScreen) Init(*core.Shared) tea.Cmd { return nil }
 func (s *GlobalScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
+		sel := appctx.SelectedTitle(&s.list)
+		s.sort = appctx.NextSort(s.sort, globalSortModes)
+		s.list.SetItems(globalItems(sh, s.sort))
+		appctx.SelectByTitle(&s.list, sel)
+		s.list.Title = globalTitle + " — " + s.sort.Label()
+		return s, core.Action{}
+	}
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
@@ -78,7 +100,7 @@ func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.l
 func (s *GlobalScreen) Receive(sh *core.Shared, payload any) core.Action {
 	if _, ok := payload.(appctx.GlobalDirty); ok {
 		appctx.Of(sh).RefreshGlobal()
-		s.list.SetItems(globalItems(sh))
+		s.list.SetItems(globalItems(sh, s.sort))
 	}
 	return core.Action{}
 }

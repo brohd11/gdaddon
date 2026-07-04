@@ -14,10 +14,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// archiveTitle is the list's base Title; the active sort mode is appended.
+const archiveTitle = "Archived Packages"
+
+// archiveSortModes is the Archive tab's sort cycle: repo A→Z then Z→A (archived
+// repos carry no install state, so there's no status grouping).
+var archiveSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse}
+
 // ArchiveScreen is the Archive tab root. Its rows are self-dispatching
 // components.Item values, so it has no bespoke list logic: Update delegates to the
 // shared components.RootUpdate (the pushed pickers run their items' Pick closures).
-type ArchiveScreen struct{ list list.Model }
+type ArchiveScreen struct {
+	list list.Model
+	sort appctx.SortMode
+}
 
 var _ core.Filterer = (*ArchiveScreen)(nil)
 var _ core.Receiver = (*ArchiveScreen)(nil)
@@ -27,7 +37,15 @@ var _ core.Crumber = (*ArchiveScreen)(nil)
 func (s *ArchiveScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewArchiveScreen() *ArchiveScreen {
-	return &ArchiveScreen{list: core.NewSelectList(pck.RepoItems(archiveOpts), "Archived Packages")}
+	return &ArchiveScreen{list: core.NewSelectList(archiveItems(appctx.SortAlpha), archiveTitle+" — "+appctx.SortAlpha.Label())}
+}
+
+// archiveItems builds the repo rows, ordered per mode (the underlying
+// pck.RepoItems returns them ID-sorted; the sort toggle re-orders by row Title).
+func archiveItems(mode appctx.SortMode) []list.Item {
+	items := pck.RepoItems(archiveOpts)
+	appctx.SortItemsByTitle(items, mode == appctx.SortReverse)
+	return items
 }
 
 // archiveOpts is the Archive tab's browse config: the local archive, no HEAD, with the
@@ -39,6 +57,14 @@ func (s *ArchiveScreen) Init(*core.Shared) tea.Cmd { return nil }
 func (s *ArchiveScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
+		sel := appctx.SelectedTitle(&s.list)
+		s.sort = appctx.NextSort(s.sort, archiveSortModes)
+		s.list.SetItems(archiveItems(s.sort))
+		appctx.SelectByTitle(&s.list, sel)
+		s.list.Title = archiveTitle + " — " + s.sort.Label()
+		return s, core.Action{}
+	}
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
@@ -52,7 +78,7 @@ func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.
 func (s *ArchiveScreen) Receive(sh *core.Shared, payload any) core.Action {
 	if _, ok := payload.(appctx.ArchiveDirty); ok {
 		appctx.Of(sh).RefreshArchive()
-		s.list.SetItems(pck.RepoItems(archiveOpts))
+		s.list.SetItems(archiveItems(s.sort))
 	}
 	return core.Action{}
 }

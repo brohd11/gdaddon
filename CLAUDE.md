@@ -108,9 +108,9 @@ so the snapshot is reproducible — a "clone without git's utility". A commit-pi
 entry reads as `installed` (the `.git`-less snapshot can't be re-verified, so the
 recorded pin is trusted) and `CheckUpdate` returns `unknown` (a frozen snapshot has no
 semver latest to compare). The pin comes from per-host `commit_archive_url` +
-`branches.commit_path` in config.yml (github/codeberg defaults); a config lacking those
-(a host without the rules, or a config.yml predating them) degrades to the old floating
-branch-HEAD archive with no commit recorded — regen config.yml to pick up new defaults.
+`branches.commit_path` in config/sources.yml (github/codeberg defaults); a config lacking those
+(a host without the rules, or a sources.yml predating them) degrades to the old floating
+branch-HEAD archive with no commit recorded — regen sources.yml to pick up new defaults.
 
 An installed addon may declare its own dependencies in its `plugin.cfg`
 (`deps=["owner/repo@v1.0.0", "owner/repo"]` — host defaults to github.com,
@@ -137,9 +137,9 @@ cmd/
   paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
 internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), nested-repo walk (FindGitRepos) + dirty check (HasUncommittedChanges), ~/.gdaddon global list
-  source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
-  archive/           — local package archive (~/.gdaddon/archive or config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
-  config/            — ~/.gdaddon/config.yml (archive_dir, search sources, per-host VCS rules); `Ensure` dumps defaults on first run
+  source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
+  archive/           — local package archive (~/.gdaddon/archive or config/config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
+  config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, theme, last search source — Load) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
   restrule/          — generic config-driven REST query engine used by `source` to talk to host APIs
   gitcred/           — git credential/token resolution for clones
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
@@ -196,7 +196,7 @@ Key packages/functions:
 - `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing. For git checkouts (clone/submodule) it reads the live checked-out branch (`gitCheckedOutBranch`, exposed on `Status.LiveBranch`) and reports `StateBranchChanged` when it differs from the recorded `tag` — branch drift, reconciled by re-recording the tag via the per-addon **Update branch record** action. A present git checkout is never touched by `Install All` (it skips clones/submodules whether unversioned or drifted).
 - `addon.Install` / `addon.InstallAll` — fetch (`.zip` download / `.git` clone / **local `.zip` path** for archived packages), derive the install dir from the package's `plugin.cfg`/`version.cfg` (`internal/addon/cfg.go`), and report progress via a callback. `Install` returns the resolved path+version. Both take a leading `ctx context.Context` (as do `UpdateAll`/`InstallAllDeps`) — cancelling it aborts the in-flight download/clone (HTTP request + `git clone` are context-bound), which is how the TUI's task-abort works.
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` write single scalar lines the same way (empty value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha.
-- `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
+- `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails).
 - `archive.RemoveRepo` / `archive.Remove` — delete a repo's whole archive (used by Global → Remove "+ archive"), or one archived package by its local path, pruning emptied folders (the Archive tab).
 

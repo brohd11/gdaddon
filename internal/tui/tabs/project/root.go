@@ -12,10 +12,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// projectTitle is the browse list's base Title; the active sort mode is appended.
+const projectTitle = "Godot Addons"
+
 // browseScreen is the permanent root: the addon list with the pinned Actions
 // row. It shows the status line and output pane below the list.
 type ProjectScreen struct {
 	list list.Model
+	sort appctx.SortMode
 }
 
 var _ core.Filterer = (*ProjectScreen)(nil)
@@ -26,15 +30,16 @@ var _ core.Crumber = (*ProjectScreen)(nil)
 func (s *ProjectScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewProjectScreen(sh *core.Shared) *ProjectScreen {
-	l := list.New(projectListItems(sh), core.NewDelegate(), 0, 0)
-	l.Title = "Godot Addons"
+	l := list.New(projectListItems(sh, appctx.SortAlpha), core.NewDelegate(), 0, 0)
+	l.Title = projectTitle + " — " + appctx.SortAlpha.Label()
 	core.StyleList(&l)
 	// The browse short help is decluttered (see HelpView / ShortHelp); these extras
 	// only show in the full (?) help.
 	l.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			core.FullHint("select", core.Keys.Select),
-			core.FullHint("terminal (git)", key.NewBinding(key.WithKeys("t"))),
+			core.FullHint("sort", appctx.AppKeys.Sort),
+			core.FullHint("terminal (git)", appctx.AppKeys.Terminal),
 			core.FullHint("focus log", core.Keys.ToggleOutput),
 			core.FullHint("toggle log", core.Keys.Output),
 			core.FullHint("clear log", core.Keys.Clear),
@@ -50,7 +55,23 @@ func (s *ProjectScreen) Init(sh *core.Shared) tea.Cmd { return checkUpdatesCmd(s
 func (s *ProjectScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	// "i" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
+	// Gated behind the filter guard so it doesn't hijack filter typing.
+	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
+		s.cycleSort(sh)
+		return s, core.Action{}
+	}
 	return s, components.RootUpdate(sh, &s.list, msg)
+}
+
+// cycleSort advances the sort mode and rebuilds the list, keeping the cursor on the
+// same row and refreshing the Title suffix.
+func (s *ProjectScreen) cycleSort(sh *core.Shared) {
+	sel := appctx.SelectedTitle(&s.list)
+	s.sort = appctx.NextSort(s.sort, projectSortModes)
+	s.list.SetItems(projectListItems(sh, s.sort))
+	appctx.SelectByTitle(&s.list, sel)
+	s.list.Title = projectTitle + " — " + s.sort.Label()
 }
 
 // View renders just the addon list; the status line and output box are drawn by
@@ -73,13 +94,13 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
 		appctx.Of(sh).RefreshProject()
-		s.list.SetItems(projectListItems(sh))
+		s.list.SetItems(projectListItems(sh, s.sort))
 		// Re-run the update check against the refreshed manifest; the markers
 		// fill back in when its results broadcast.
 		return core.Async(checkUpdatesCmd(sh))
 	case updateChecksReady:
 		appctx.Of(sh).SetUpdateChecks(p.checks)
-		s.list.SetItems(projectListItems(sh))
+		s.list.SetItems(projectListItems(sh, s.sort))
 	}
 	return core.Action{}
 }

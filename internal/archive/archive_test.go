@@ -34,10 +34,11 @@ func TestDirDefaultAndConfig(t *testing.T) {
 	t.Run("config override with ~ expansion", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
-		if err := os.MkdirAll(filepath.Join(home, ".gdaddon"), 0o755); err != nil {
+		cfgDir := filepath.Join(home, ".gdaddon", "config")
+		if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		os.WriteFile(filepath.Join(home, ".gdaddon", "config.yml"), []byte("archive_dir: ~/pkgs\n"), 0o644)
+		os.WriteFile(filepath.Join(cfgDir, "config.yml"), []byte("archive_dir: ~/pkgs\n"), 0o644)
 		got, err := Dir()
 		if err != nil {
 			t.Fatal(err)
