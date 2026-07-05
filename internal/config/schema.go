@@ -8,7 +8,6 @@ package config
 type SourceConfig struct {
 	Name   string      `yaml:"name"`           // display label in the source picker
 	Type   string      `yaml:"type,omitempty"` // "json" for search providers; omitted for vcs-only entries
-	Auth   string      `yaml:"auth,omitempty"` // "" | "github" → send Bearer $GITHUB_TOKEN (search)
 	Search *SearchRule `yaml:"search,omitempty"`
 	Detail *DetailRule `yaml:"detail,omitempty"`
 	VCS    *VCSRule    `yaml:"vcs,omitempty"`
@@ -19,8 +18,7 @@ type SourceConfig struct {
 // resolves to the rule whose Host matches the URL's domain. Templates use the
 // placeholders {owner} {repo} {tag} {branch} {commit}, substituted verbatim.
 type VCSRule struct {
-	Host             string       `yaml:"host"`           // index key, e.g. "github.com"
-	Auth             string       `yaml:"auth,omitempty"` // "github" → Bearer $GITHUB_TOKEN
+	Host             string       `yaml:"host"` // index key, e.g. "github.com"
 	Releases         ReleasesRule `yaml:"releases"`
 	Branches         BranchesRule `yaml:"branches,omitempty"`
 	SourceArchive    ArchiveSpec  `yaml:"source_archive,omitempty"`     // appended to every release

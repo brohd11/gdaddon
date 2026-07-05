@@ -64,7 +64,7 @@ type Release struct {
 // Releases fetches an asset's releases (newest-first, as the API returns them).
 func Releases(ctx context.Context, id string) ([]Release, error) {
 	var releases []Release
-	if err := restrule.GetJSON(ctx, base+"/api/v1/releases/"+id+"/", "", &releases); err != nil {
+	if err := restrule.GetJSON(ctx, base+"/api/v1/releases/"+id+"/", &releases); err != nil {
 		return nil, err
 	}
 	return releases, nil

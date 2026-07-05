@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"gdaddon/internal/restrule"
 	"gdaddon/internal/store"
 )
 
@@ -65,7 +66,7 @@ func (assetStore) Search(ctx context.Context, query, godotVersion string, page i
 			} `json:"asset"`
 		} `json:"hits"`
 	}
-	if err := getJSON(ctx, endpoint, &raw); err != nil {
+	if err := restrule.GetJSON(ctx, endpoint, &raw); err != nil {
 		return nil, err
 	}
 
@@ -107,7 +108,7 @@ func (assetStore) Detail(ctx context.Context, id string) (*Detail, error) {
 			Name string `json:"name"`
 		} `json:"publisher"`
 	}
-	if err := getJSON(ctx, assetStoreBase+"/api/v1/assets/"+id+"/", &asset); err != nil {
+	if err := restrule.GetJSON(ctx, assetStoreBase+"/api/v1/assets/"+id+"/", &asset); err != nil {
 		return nil, err
 	}
 

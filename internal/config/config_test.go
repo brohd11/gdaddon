@@ -141,7 +141,6 @@ func TestLoadSources(t *testing.T) {
 sources:
   - name: My Store
     type: json
-    auth: github
     search:
       url: "https://ex.com/search?q={query}&page={page}"
       page_base: 1
@@ -165,7 +164,7 @@ sources:
 		t.Fatalf("got %d sources, want 1", len(srcs))
 	}
 	s := srcs[0]
-	if s.Name != "My Store" || s.Type != "json" || s.Auth != "github" {
+	if s.Name != "My Store" || s.Type != "json" {
 		t.Fatalf("source header mismatch: %+v", s)
 	}
 	if s.Search.PageBase != 1 || s.Search.ResultsPath != "items" || s.Search.Fields.ID != "full_name" {

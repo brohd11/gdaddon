@@ -150,7 +150,7 @@ func resolveReleases(ctx context.Context, rule *config.VCSRule, owner, repo stri
 	endpoint := restrule.Render(r.URL, vars(owner, repo, "", ""))
 
 	var root any
-	if err := restrule.GetJSON(ctx, endpoint, rule.Auth, &root); err != nil {
+	if err := restrule.GetJSON(ctx, endpoint, &root); err != nil {
 		return nil, err
 	}
 	arr, _ := restrule.GetPath(root, r.ResultsPath)
@@ -195,7 +195,7 @@ func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo stri
 	endpoint := restrule.Render(b.URL, vars(owner, repo, "", ""))
 
 	var root any
-	if err := restrule.GetJSON(ctx, endpoint, rule.Auth, &root); err != nil {
+	if err := restrule.GetJSON(ctx, endpoint, &root); err != nil {
 		return nil, err
 	}
 	arr, _ := restrule.GetPath(root, b.ResultsPath)

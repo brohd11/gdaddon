@@ -40,7 +40,7 @@ func (s configSource) Search(ctx context.Context, query, godotVersion string, pa
 	endpoint := renderSearchURL(r.URL, query, godotVersion, page, r.PageBase, r.OmitIfEmpty)
 
 	var root any
-	if err := restrule.GetJSON(ctx, endpoint, s.cfg.Auth, &root); err != nil {
+	if err := restrule.GetJSON(ctx, endpoint, &root); err != nil {
 		return nil, err
 	}
 
@@ -84,7 +84,7 @@ func (s configSource) Detail(ctx context.Context, id string) (*Detail, error) {
 	endpoint := renderDetailURL(r.URL, id)
 
 	var root any
-	if err := restrule.GetJSON(ctx, endpoint, s.cfg.Auth, &root); err != nil {
+	if err := restrule.GetJSON(ctx, endpoint, &root); err != nil {
 		return nil, err
 	}
 

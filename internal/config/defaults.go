@@ -20,7 +20,6 @@ func DefaultSources() []SourceConfig {
 		{
 			Name: "GitHub",
 			Type: "json",
-			Auth: "github",
 			Search: &SearchRule{
 				URL:         "https://api.github.com/search/repositories?q={query}&per_page=20&page={page}",
 				PageBase:    1,
@@ -43,7 +42,6 @@ func DefaultSources() []SourceConfig {
 			},
 			VCS: &VCSRule{
 				Host: "github.com",
-				Auth: "github",
 				Releases: ReleasesRule{
 					URL:            "https://api.github.com/repos/{owner}/{repo}/releases?per_page=30",
 					TagPath:        "tag_name",

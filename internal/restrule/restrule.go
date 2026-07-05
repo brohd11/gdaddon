@@ -20,39 +20,21 @@ import (
 )
 
 // GetJSON performs a GET and decodes the JSON body into out, with a shared
-// timeout and User-Agent. auth == "github" adds a Bearer token for the host
-// (GITHUB_TOKEN, else the user's git credential helper — see gitcred), which
-// raises GitHub's API rate limit and reaches private repos. The body is decoded
-// with UseNumber so numeric ids and pagination fields coerce cleanly when out is
-// an any.
-func GetJSON(ctx context.Context, endpoint, auth string, out any) error {
+// timeout and User-Agent. It adds a Bearer token whenever gitcred can resolve one
+// for the host (GITHUB_TOKEN, else the user's git credential helper — see gitcred),
+// which raises the API rate limit and reaches private repos; hosts with no stored
+// credential are fetched anonymously. The body is decoded with UseNumber so numeric
+// ids and pagination fields coerce cleanly when out is an any.
+func GetJSON(ctx context.Context, endpoint string, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "gdaddon")
-	if auth == "github" {
-		if tok := gitcred.Token(ctx, req.URL.Hostname()); tok != "" {
-			req.Header.Set("Authorization", "Bearer "+tok)
-		}
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := authedGet(ctx, endpoint, "application/json", gitcred.TokenForURL(ctx, endpoint))
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-		return fmt.Errorf("request to %s rate-limited (set GITHUB_TOKEN to raise the limit)", req.URL.Host)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s returned %s", req.URL.Host, resp.Status)
-	}
 	dec := json.NewDecoder(resp.Body)
 	dec.UseNumber()
 	return dec.Decode(out)
@@ -65,12 +47,23 @@ func GetJSON(ctx context.Context, endpoint, auth string, out any) error {
 // the caller's ctx. Non-2xx responses (and 403/429 rate-limits) return an error
 // with the body already closed, so callers don't re-check the status.
 func Get(ctx context.Context, url string) (*http.Response, error) {
+	return authedGet(ctx, url, "", gitcred.TokenForURL(ctx, url))
+}
+
+// authedGet builds a GET with the shared User-Agent, an optional Accept header, and
+// (when tok != "") a Bearer token, sends it, and returns the response only for a
+// 2xx status — closing the body and erroring on a 403/429 rate-limit or any other
+// non-2xx, so callers don't re-check. It's the shared core of Get and GetJSON.
+func authedGet(ctx context.Context, url, accept, tok string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", "gdaddon")
-	if tok := gitcred.TokenForURL(ctx, url); tok != "" {
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	if tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 
