@@ -228,6 +228,60 @@ func resolveUpdateAsset(currentURL string, releases []source.Release, latest sou
 	return latest.Assets[len(latest.Assets)-1], true
 }
 
+// maxConcurrentChecks caps how many release-listing fetches forInstalled runs at
+// once, so a large manifest can't fire hundreds of parallel requests (and trip host
+// rate limits). For a typical manifest it's effectively parallel.
+const maxConcurrentChecks = 8
+
+// forInstalled runs fn concurrently over every installed, url-bearing addon in
+// statuses and collects the results fn keeps (ok == true). Not-installed or url-less
+// entries are skipped (nothing to compare). It's the shared fan-out behind
+// CheckUpdates and ResolveUpdatePlans; fn honors ctx (cancel/deadline) itself so a
+// slow host can't stall the caller, and in-flight fetches are capped at
+// maxConcurrentChecks. Result order is unspecified — callers that need determinism sort.
+func forInstalled[T any](statuses []Status, fn func(a Addon, local string) (T, bool)) []T {
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxConcurrentChecks)
+	var out []T
+	for _, s := range statuses {
+		if !s.Present() || s.Addon.URL == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(a Addon, local string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if v, ok := fn(a, local); ok {
+				mu.Lock()
+				out = append(out, v)
+				mu.Unlock()
+			}
+		}(s.Addon, s.LocalVersion)
+	}
+	wg.Wait()
+	return out
+}
+
+// CheckUpdates resolves the update state of every installed, url-bearing addon in
+// statuses concurrently, keyed by addon name. Each entry runs the same CheckUpdate a
+// single addon uses; ctx bounds the whole batch.
+func CheckUpdates(ctx context.Context, statuses []Status) map[string]UpdateInfo {
+	type nameInfo struct {
+		name string
+		info UpdateInfo
+	}
+	results := forInstalled(statuses, func(a Addon, _ string) (nameInfo, bool) {
+		return nameInfo{a.Name, CheckUpdate(ctx, a)}, true
+	})
+	checks := make(map[string]UpdateInfo, len(results))
+	for _, r := range results {
+		checks[r.name] = r.info
+	}
+	return checks
+}
+
 // ResolveUpdatePlans inspects the manifest and resolves an update plan for every
 // installed addon that has a newer release than the one installed. Not-installed
 // or url-less entries are skipped (nothing to compare). Fetches run concurrently
@@ -238,25 +292,9 @@ func ResolveUpdatePlans(ctx context.Context, manifestPath, baseDir string) ([]Up
 	if err != nil {
 		return nil, err
 	}
-
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	plans := make([]UpdatePlan, 0)
-	for _, s := range statuses {
-		if !s.Present() || s.Addon.URL == "" {
-			continue
-		}
-		wg.Add(1)
-		go func(a Addon, local string) {
-			defer wg.Done()
-			if plan, ok := ResolveUpdate(ctx, a, local); ok {
-				mu.Lock()
-				plans = append(plans, plan)
-				mu.Unlock()
-			}
-		}(s.Addon, s.LocalVersion)
-	}
-	wg.Wait()
+	plans := forInstalled(statuses, func(a Addon, local string) (UpdatePlan, bool) {
+		return ResolveUpdate(ctx, a, local)
+	})
 	sort.Slice(plans, func(i, j int) bool { return plans[i].Addon.Name < plans[j].Addon.Name })
 	return plans, nil
 }

@@ -2,7 +2,6 @@ package project
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"gdaddon/internal/addon"
@@ -43,23 +42,7 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
 		defer cancel()
 
-		checks := make(map[string]addon.UpdateInfo)
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		for _, s := range statuses {
-			if !s.Present() || s.Addon.URL == "" {
-				continue
-			}
-			wg.Add(1)
-			go func(a addon.Addon) {
-				defer wg.Done()
-				info := addon.CheckUpdate(ctx, a)
-				mu.Lock()
-				checks[a.Name] = info
-				mu.Unlock()
-			}(s.Addon)
-		}
-		wg.Wait()
+		checks := addon.CheckUpdates(ctx, statuses)
 		return core.PropagateAll(updateChecksReady{checks: checks})
 	}
 }

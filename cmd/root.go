@@ -174,6 +174,13 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 		manifestAddons = append(manifestAddons, s.Addon)
 	}
 
+	// Resolve every addon's update state up front and concurrently (only when asked,
+	// since it's network-bound); the per-entry loop below reads the cached result.
+	var checks map[string]addon.UpdateInfo
+	if checkUpdatesFlag {
+		checks = addon.CheckUpdates(context.Background(), statuses)
+	}
+
 	entries := make([]listEntryJSON, 0, len(statuses))
 	for _, s := range statuses {
 		deps := make([]missDepJSON, 0)
@@ -191,7 +198,7 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 		case s.Addon.Lock:
 			update = addon.UpdateLocked.String()
 		case checkUpdatesFlag:
-			info := addon.CheckUpdate(context.Background(), s.Addon)
+			info := checks[s.Addon.Name]
 			update, latestTag = info.State.String(), info.LatestTag
 		}
 
