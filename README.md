@@ -44,6 +44,8 @@ After install you can delete the download folder.
 Each addon has an entry in the manifest. This editable via the TUI, or by hand.
 The path field is for installing repos that are in the submodule format, where it is difficult to infer the plugin directory name.
 
+A branch can be installed as a live git clone (`kind: clone`) or as a commit-pinned package snapshot — the latter records the branch's HEAD `commit:` sha and installs that commit's archive, so it's reproducible. See the [docs](doc/docs.md) for details.
+
 ```
 MyAddon:
     tag: "v1.0.0-stable"

@@ -29,12 +29,14 @@ gdaddon --list --json --check-updates   # also resolve each addon's update state
 ```
 
 `--json` emits one object per manifest entry with stable, snake_case keys: `name`,
-`state` (`missing`/`installed`/`mismatch`/`unversioned`/`invalid`), `kind`
-(`package`/`clone`/`submodule`), `path` (manifest-relative), `full_path` (absolute
-install dir), `local_version`, `pinned_version`, `tag`, `url`, `update`
-(`unknown`/`current`/`available`), `latest_tag`, and `missing_deps` (an array of
-`{repo_id, tag, url}`, empty when satisfied). It's always valid JSON — an empty
-manifest prints `[]`.
+`state` (`missing`/`installed`/`mismatch`/`unversioned`/`branch_changed`/`invalid`),
+`kind` (`package`/`clone`/`submodule`), `path` (manifest-relative), `full_path`
+(absolute install dir), `local_version`, `pinned_version`, `tag`, `commit` (a branch
+package's pinned HEAD sha; `""` otherwise), `live_branch` (a git checkout's current
+branch; `""` for non-git entries), `url`, `lock` (bool; the entry is version-pinned, so
+no update alerts), `update` (`unknown`/`current`/`available`), `latest_tag`, and
+`missing_deps` (an array of `{repo_id, tag, url}`, empty when satisfied). It's always
+valid JSON — an empty manifest prints `[]`.
 
 Everything in `--json` is computed locally and instantly **except** `update`/
 `latest_tag`, which require a network round-trip per addon and so stay `"unknown"`
@@ -61,11 +63,16 @@ MyAddon:
     path: addons/my_addon                    # install dir, relative to the project root
     version: "1.2.3"                         # the plugin.cfg version currently installed
     tag: "v1.2.3"                            # the release tag it was installed from
+    # kind: clone                            # optional; a live git checkout (clone/submodule)
+    # commit: "abc1234…"                     # optional; a branch package pinned to this HEAD sha
 ```
 
-- **`url`** — where the package comes from. A `.git` url clones; a release/raw `.zip`
-  url downloads and unzips. Different url forms for the same repo (a `.git`, a release
-  asset, a generated source archive) are recognized as the same repo, so you never get
+- **`url`** — where the package comes from. A release/raw `.zip` url downloads and
+  unzips. A branch can be installed two ways: as a **live clone** (a `.git` url, kept as
+  a working copy) or as a **commit-pinned package** — a snapshot whose url is the
+  branch's HEAD commit archive (`.../archive/<sha>.zip`), with the sha recorded in
+  `commit:`. Different url forms for the same repo (a `.git`, a release asset, a
+  generated source archive) are recognized as the same repo, so you never get
   duplicates.
 - **`path`** — the install directory, relative to the project root. You usually don't
   need to set this by hand. gdaddon derives it from the package's own
@@ -77,7 +84,13 @@ MyAddon:
   `plugin.cfg`. If it already matches, install is skipped.
 - **`tag`** — the release tag the package came from. This is the release *identity*
   and is what dependency specs match against. It can diverge from `version` (authors
-  don't always keep them in sync), which is why dependency resolution uses `tag`.
+  don't always keep them in sync), which is why dependency resolution uses `tag`. For a
+  clone this holds the tracked *branch* instead.
+- **`kind`** — set to `clone` or `submodule` for a live git checkout; absent for an
+  ordinary unzipped package. gdaddon never overwrites a present clone/submodule.
+- **`commit`** — a branch package's pinned HEAD sha (the `url` is that commit's
+  archive). It gives an otherwise-floating branch snapshot a durable identity, so the
+  entry reads as *installed* and is never nagged for updates.
 
 The file is editable by hand or entirely through the TUI (each plugin's **Edit
 Manifest** action). The **Project** tab lists every entry with its live state:
@@ -176,16 +189,21 @@ pick exactly what to install:
 
 - a tagged **release** and one of its assets (an uploaded `.zip`, or the host's
   generated *Source code.zip* that every release offers),
-- a **branch** HEAD (downloaded as a snapshot `.zip`),
-- a branch installed as a **live git clone** (keeps `.git`, so you can develop against
-  it and `git pull` updates yourself), or
+- a **branch**, which offers a Clone-vs-Package choice:
+  - **Clone** (default) — a **live git clone** that keeps `.git`, so you can develop
+    against it and `git pull` updates yourself.
+  - **Package** — a **commit-pinned snapshot**: gdaddon resolves the branch's current
+    HEAD to a commit sha, downloads that commit's archive (`.../archive/<sha>.zip`), and
+    records `commit: <sha>`. It's a "clone without git's utility" — a reproducible
+    snapshot with no `.git` and no auto-update; re-install to move the pin.
 - a locally **archived** copy (see [Archiving](#archiving)).
 
 gdaddon downloads/clones, derives the install directory from the package's own
 `plugin.cfg`/`version.cfg`, unpacks it into place, and then pins the result back into
 the manifest — url, resolved path, installed version, and release tag. A clone records
 the canonical `.git` url and tracked branch instead of a version, so re-cloning targets
-the right branch.
+the right branch; a commit-pinned package records its `commit` sha (and carries no
+release version/tag).
 
 **Install/Update All** runs the whole manifest non-interactively: each entry is
 installed if missing, updated if its pin changed, and skipped if it's already at the
@@ -243,6 +261,9 @@ prereleases). The result decorates the Project rows with `⚠ [update]`.
   semver `>=` comparison of the installed tag/version against the latest tag.
 - Branch-tracked installs and live clones follow a moving HEAD with no release tag to
   compare against, so they're never flagged — you update those with `git` yourself.
+- A **commit-pinned package** reads as *installed* and is never flagged: a frozen
+  snapshot has no semver latest to compare against, so its update state stays
+  **unknown** by design. Re-install the branch to move the pin to a newer commit.
 - Anything unfetchable, releaseless, or with an uncomparable version (a date stamp, no
   version) stays **unknown** rather than showing a false update.
 
