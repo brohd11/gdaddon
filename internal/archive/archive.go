@@ -7,18 +7,15 @@ package archive
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"gdaddon/internal/config"
-	"gdaddon/internal/gitcred"
+	"gdaddon/internal/restrule"
 	"gdaddon/internal/source"
 
 	"gopkg.in/yaml.v3"
@@ -77,24 +74,11 @@ func Archive(ctx context.Context, repoID, tag string, asset source.Asset) error 
 		return nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "gdaddon")
-	if tok := gitcred.TokenForURL(ctx, asset.URL); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
-	}
-
-	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := restrule.Get(ctx, asset.URL)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download failed: %s", resp.Status)
-	}
 
 	// A commit-pinned branch package has no release tag; fold the sha into the tag
 	// dir (<branch>@<sha>) so distinct commits of the same branch don't overwrite and

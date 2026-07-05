@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/installer"
+	"gdaddon/internal/restrule"
 	"gdaddon/internal/source"
 )
 
@@ -154,7 +154,7 @@ func downloadBinary(ctx context.Context, url string) (binPath string, cleanup fu
 	cleanup = func() { os.RemoveAll(tmpDir) }
 
 	zipPath := filepath.Join(tmpDir, "release.zip")
-	if err := downloadFile(ctx, url, zipPath); err != nil {
+	if err := restrule.Download(ctx, url, zipPath); err != nil {
 		cleanup()
 		return "", func() {}, err
 	}
@@ -165,34 +165,6 @@ func downloadBinary(ctx context.Context, url string) (binPath string, cleanup fu
 		return "", func() {}, err
 	}
 	return binPath, cleanup, nil
-}
-
-// downloadFile streams url to dst, erroring on a non-2xx response.
-func downloadFile(ctx context.Context, url, dst string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("download %s: %s", url, resp.Status)
-	}
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	if _, err := io.Copy(out, resp.Body); err != nil {
-		out.Close()
-		return err
-	}
-	return out.Close()
 }
 
 // extractBinary writes the zip's gdaddon binary entry (matched by base name) into

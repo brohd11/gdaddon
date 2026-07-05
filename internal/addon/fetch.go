@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"gdaddon/internal/gitcred"
+	"gdaddon/internal/restrule"
 )
 
 // fetchToStaging downloads (.zip) or clones (.git) the addon into a temporary
@@ -88,16 +87,7 @@ func obtainZip(ctx context.Context, url, addonName string, report Reporter) (zip
 	}
 
 	report("[%s] Downloading ZIP from %s...", addonName, url)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return "", func() {}, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	if tok := gitcred.TokenForURL(ctx, url); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := restrule.Get(ctx, url)
 	if err != nil {
 		return "", func() {}, err
 	}

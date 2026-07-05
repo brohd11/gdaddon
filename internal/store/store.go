@@ -4,18 +4,18 @@
 // (internal/tui/flows/packages). A store asset is identified in the manifest by its
 // canonical URL "https://store.godotengine.org/<publisher>/<slug>"; the actual
 // download is resolved from the API at install/browse time. It imports only
-// internal/source (for the shared Listing/Release/Asset shapes) and the stdlib, so
-// it sits below the consumers with no cycles.
+// internal/source (for the shared Listing/Release/Asset shapes), internal/restrule
+// (the shared authenticated JSON GET), and the stdlib, so it sits below the
+// consumers with no cycles.
 package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
+	"gdaddon/internal/restrule"
 	"gdaddon/internal/source"
 )
 
@@ -63,20 +63,8 @@ type Release struct {
 
 // Releases fetches an asset's releases (newest-first, as the API returns them).
 func Releases(ctx context.Context, id string) ([]Release, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", base+"/api/v1/releases/"+id+"/", nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
 	var releases []Release
-	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+	if err := restrule.GetJSON(ctx, base+"/api/v1/releases/"+id+"/", "", &releases); err != nil {
 		return nil, err
 	}
 	return releases, nil

@@ -9,7 +9,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -54,6 +56,56 @@ func GetJSON(ctx context.Context, endpoint, auth string, out any) error {
 	dec := json.NewDecoder(resp.Body)
 	dec.UseNumber()
 	return dec.Decode(out)
+}
+
+// Get performs an authenticated GET and returns the response for the caller to
+// stream and close. It sets the shared User-Agent and, for a host gitcred knows,
+// a Bearer token (raising rate limits / reaching private repos). Unlike GetJSON
+// there's no internal timeout — downloads can be large, so cancellation is left to
+// the caller's ctx. Non-2xx responses (and 403/429 rate-limits) return an error
+// with the body already closed, so callers don't re-check the status.
+func Get(ctx context.Context, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "gdaddon")
+	if tok := gitcred.TokenForURL(ctx, url); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		resp.Body.Close()
+		return nil, fmt.Errorf("request to %s rate-limited (set GITHUB_TOKEN to raise the limit)", req.URL.Host)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("%s returned %s", req.URL.Host, resp.Status)
+	}
+	return resp, nil
+}
+
+// Download streams url's body into dst (created/truncated) via Get.
+func Download(ctx context.Context, url, dst string) error {
+	resp, err := Get(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, resp.Body); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // GetPath walks dot-separated keys over JSON decoded into any (map[string]any /
