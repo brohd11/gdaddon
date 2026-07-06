@@ -48,11 +48,7 @@ type Listing struct {
 // empty, mirroring search.Sources). The second result is false when no provider
 // claims the host.
 func ruleForHost(host string) (*config.VCSRule, bool) {
-	sources := config.DefaultSources()
-	if srcs, err := config.LoadSources(); err == nil && len(srcs) > 0 {
-		sources = srcs
-	}
-	for _, s := range sources {
+	for _, s := range config.Sources() {
 		if s.VCS != nil && strings.EqualFold(s.VCS.Host, host) {
 			return s.VCS, true
 		}

@@ -74,30 +74,33 @@ func parseDependency(item string) (Dependency, bool) {
 	if at := strings.LastIndex(item, "@"); at >= 0 {
 		repoPart, tag = item[:at], strings.TrimSpace(item[at+1:])
 	}
-	repoPart = strings.Trim(strings.TrimSpace(repoPart), "/")
-	if repoPart == "" {
+	host, owner, repo, repoURL, ok := parseRepoShorthand(repoPart)
+	if !ok {
 		return Dependency{}, false
 	}
-
-	var host, owner, repo string
-	switch parts := strings.Split(repoPart, "/"); len(parts) {
-	case 2:
-		host, owner, repo = defaultDepHost, parts[0], parts[1]
-	case 3:
-		host, owner, repo = parts[0], parts[1], parts[2]
-	default:
-		return Dependency{}, false
-	}
-	if owner == "" || repo == "" {
-		return Dependency{}, false
-	}
-
-	repoURL := fmt.Sprintf("https://%s/%s/%s", host, owner, repo)
 	id, err := source.RepoID(repoURL)
 	if err != nil {
 		return Dependency{}, false
 	}
 	return Dependency{Host: host, Owner: owner, Repo: repo, Tag: tag, RepoURL: repoURL, RepoID: id}, true
+}
+
+// parseRepoShorthand splits owner/repo or host/owner/repo shorthand, defaulting the
+// host to defaultDepHost (github.com) for the 2-part form, and returns the canonical
+// https url. ok is false for any other shape or an empty owner/repo.
+func parseRepoShorthand(s string) (host, owner, repo, url string, ok bool) {
+	switch parts := strings.Split(strings.Trim(s, "/"), "/"); len(parts) {
+	case 2:
+		host, owner, repo = defaultDepHost, parts[0], parts[1]
+	case 3:
+		host, owner, repo = parts[0], parts[1], parts[2]
+	default:
+		return "", "", "", "", false
+	}
+	if owner == "" || repo == "" {
+		return "", "", "", "", false
+	}
+	return host, owner, repo, fmt.Sprintf("https://%s/%s/%s", host, owner, repo), true
 }
 
 // MissingDeps returns the dependencies addon a declares (in its installed

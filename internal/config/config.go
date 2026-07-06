@@ -167,12 +167,22 @@ func LoadSources() ([]SourceConfig, error) {
 	return f.Sources, nil
 }
 
-// SaveTheme persists name as current_theme in ~/.gdaddon/config/config.yml. It
-// edits the file surgically — only the current_theme key's value is set (or the key
-// appended) — so the user's archive_dir and any comments survive untouched. A
-// missing file is created from DefaultConfig (with the theme overridden), matching
-// Ensure's first-run shape.
-func SaveTheme(name string) error {
+// Sources is the effective provider list: the user's sources.yml when present and
+// non-empty, else the built-in DefaultSources. It centralizes the "start from
+// defaults, override with the file when it has entries" precedence used by both
+// search and vcs resolution (an unreadable/malformed file falls back to defaults).
+func Sources() []SourceConfig {
+	if srcs, err := LoadSources(); err == nil && len(srcs) > 0 {
+		return srcs
+	}
+	return DefaultSources()
+}
+
+// saveConfigKey sets key=value in ~/.gdaddon/config/config.yml surgically — only that
+// key's value is set (or the key appended) — so the user's other keys and comments
+// survive untouched. A missing file is seeded from DefaultConfig (so the other
+// defaults are still written), then the key is set, matching Ensure's first-run shape.
+func saveConfigKey(key, value string) error {
 	dir, err := ConfigDir()
 	if err != nil {
 		return err
@@ -187,20 +197,16 @@ func SaveTheme(name string) error {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		def := DefaultConfig()
-		def.CurrentTheme = name
-		out, err := yaml.Marshal(def)
-		if err != nil {
+		if data, err = yaml.Marshal(DefaultConfig()); err != nil {
 			return err
 		}
-		return os.WriteFile(path, out, 0o644)
 	}
 
 	var doc yaml.Node
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return err
 	}
-	setMappingScalar(&doc, "current_theme", name)
+	setMappingScalar(&doc, key, value)
 	out, err := yaml.Marshal(&doc)
 	if err != nil {
 		return err
@@ -208,44 +214,13 @@ func SaveTheme(name string) error {
 	return os.WriteFile(path, out, 0o644)
 }
 
-// SaveLastSource persists name as last_search_source in ~/.gdaddon/config/config.yml,
-// editing the file surgically like SaveTheme so the user's other keys and comments
-// survive untouched. A missing file is created from DefaultConfig with the field set.
-func SaveLastSource(name string) error {
-	dir, err := ConfigDir()
-	if err != nil {
-		return err
-	}
-	path := filepath.Join(dir, "config.yml")
+// SaveTheme persists name as current_theme in ~/.gdaddon/config/config.yml (surgical
+// edit — see saveConfigKey).
+func SaveTheme(name string) error { return saveConfigKey("current_theme", name) }
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		def := DefaultConfig()
-		def.LastSearchSource = name
-		out, err := yaml.Marshal(def)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(path, out, 0o644)
-	}
-
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return err
-	}
-	setMappingScalar(&doc, "last_search_source", name)
-	out, err := yaml.Marshal(&doc)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, out, 0o644)
-}
+// SaveLastSource persists name as last_search_source in ~/.gdaddon/config/config.yml
+// (surgical edit — see saveConfigKey).
+func SaveLastSource(name string) error { return saveConfigKey("last_search_source", name) }
 
 // setMappingScalar sets key=value on the top-level mapping of a parsed YAML
 // document, overwriting an existing key's value or appending the pair when absent.

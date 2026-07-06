@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"gdaddon/internal/config"
 	"gdaddon/internal/source"
 )
 
@@ -14,11 +15,11 @@ import (
 // writes here; Import Plugin reads from it. The folder is git-committable and is
 // the future home for archived/downloaded assets.
 func GlobalListPath() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".gdaddon", "plugins.yml"), nil
+	return filepath.Join(dir, "plugins.yml"), nil
 }
 
 // FindByRepo returns the entry whose URL is the same repo as url — matched by

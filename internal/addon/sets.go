@@ -6,17 +6,19 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"gdaddon/internal/config"
 )
 
 // SetsDir is the directory holding saved "sets": manifest-shaped YAML files the
 // user can populate with plugins and later import wholesale into a project. It
 // lives under ~/.gdaddon/sets, alongside the global plugin list and the archive.
 func SetsDir() (string, error) {
-	home, err := os.UserHomeDir()
+	dir, err := config.Dir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".gdaddon", "sets"), nil
+	return filepath.Join(dir, "sets"), nil
 }
 
 // SetPath returns the file path for the set named name (<SetsDir>/<name>.yml).

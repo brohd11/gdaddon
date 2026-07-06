@@ -68,13 +68,8 @@ type AssetURLer interface {
 // is skipped, not fatal; a missing or unreadable file falls back to the built-in
 // defaults so search always works.
 func Sources() []Source {
-	rules := config.DefaultSources()
-	if srcs, err := config.LoadSources(); err == nil && len(srcs) > 0 {
-		rules = srcs
-	}
-
 	var srcs []Source
-	for _, sc := range rules {
+	for _, sc := range config.Sources() {
 		if cs := (configSource{cfg: sc}); cs.validate() == nil {
 			srcs = append(srcs, cs)
 		}

@@ -1,7 +1,6 @@
 package addon
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,19 +121,11 @@ func normalizeSource(raw string) string {
 		return NormalizeRepoURL(raw)
 	}
 
-	var host, owner, repo string
-	switch parts := strings.Split(strings.Trim(raw, "/"), "/"); len(parts) {
-	case 2:
-		host, owner, repo = defaultDepHost, parts[0], parts[1]
-	case 3:
-		host, owner, repo = parts[0], parts[1], parts[2]
-	default:
+	_, _, _, url, ok := parseRepoShorthand(raw)
+	if !ok {
 		return ""
 	}
-	if owner == "" || repo == "" {
-		return ""
-	}
-	return fmt.Sprintf("https://%s/%s/%s", host, owner, repo)
+	return url
 }
 
 // canonicalRepoURL reduces an install url to its canonical https://host/owner/repo

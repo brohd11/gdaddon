@@ -29,7 +29,7 @@ func FindManifest(start string) (string, error) {
 			if path != start && d.Name() == ".godot" {
 				return filepath.SkipDir
 			}
-			if manifestDepth(start, path) > MaxManifestDepth {
+			if pathDepth(start, path) > MaxManifestDepth {
 				return filepath.SkipDir
 			}
 			return nil
@@ -55,14 +55,5 @@ func WithinManifestDepth(root, dir string) bool {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
-	return manifestDepth(root, dir) <= MaxManifestDepth
-}
-
-// manifestDepth returns how many directory levels path is below base.
-func manifestDepth(base, path string) int {
-	rel, err := filepath.Rel(base, path)
-	if err != nil || rel == "." {
-		return 0
-	}
-	return len(strings.Split(rel, string(filepath.Separator)))
+	return pathDepth(root, dir) <= MaxManifestDepth
 }

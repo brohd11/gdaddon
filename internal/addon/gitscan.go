@@ -92,7 +92,7 @@ func FindGitRepos(base string, maxDepth int) ([]string, error) {
 		if d.Name() == ".git" {
 			return filepath.SkipDir
 		}
-		if manifestDepth(base, path) > maxDepth {
+		if pathDepth(base, path) > maxDepth {
 			return filepath.SkipDir
 		}
 		if path == base {
