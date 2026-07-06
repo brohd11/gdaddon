@@ -17,7 +17,7 @@ import (
 // store url prefilled (focus on Name), editable name/path, and the Project/Global
 // target toggle. It is store-aware on commit (commitStoreAsset): the store url is
 // preserved as-is (never NormalizeRepoURL'd into a .git url), and a project add pins
-// the store release version. The Search tab opens this for a chosen store asset.
+// the store release identity as the tag. The Search tab opens this for a chosen store asset.
 func NewStoreForm(url, version string) *components.FormScreen {
 	urlF := components.NewTextField("url", "URL:     ", "https://store.godotengine.org/publisher/slug")
 	nameF := components.NewTextField("name", "Name:    ", "(optional — derived from url)")
@@ -87,8 +87,9 @@ func storeConfirmBody(sh *core.Shared, name, url, path, version string, addTarge
 }
 
 // commitStoreAsset writes the store entry to the project manifest (pinning the store
-// release version) or the global list (url-only, like a git global entry, so it can
-// be imported into any project), then unwinds to the matching tab.
+// release identity as the tag; the real version is read from plugin.cfg on install) or
+// the global list (url-only, like a git global entry, so it can be imported into any
+// project), then unwinds to the matching tab.
 func commitStoreAsset(sh *core.Shared, name, url, path, version string, addTarget int) core.Action {
 	if addTarget == targetGlobal {
 		globalPath, err := addon.GlobalListPath()
@@ -105,7 +106,7 @@ func commitStoreAsset(sh *core.Shared, name, url, path, version string, addTarge
 		)
 	}
 
-	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, addon.Addon{Name: name, URL: url, Path: path, Version: version}); err != nil {
+	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, addon.Addon{Name: name, URL: url, Path: path, Tag: version}); err != nil {
 		return core.Seq(
 			core.SetStatus("error: "+err.Error()),
 			core.ResetToRoot(),

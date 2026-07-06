@@ -69,13 +69,14 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 
 // newStoreInstallTask installs the chosen Asset Store version. Store assets have no
 // git asset/clone variants: the target carries the canonical store url + the picked
-// version, and addon.Install (→ storeInstall) resolves that release's download and
-// unzips it. On success it pins the chosen store version + resolved path (url left
-// untouched) and lands on Project, handing off to the location form when the
-// resolved path differs, exactly like newInstallTask.
+// release (the store release identity, e.g. "v3.10.2", carried as the tag), and
+// addon.Install (→ storeInstall) resolves that release's download and unzips it. On
+// success it pins the installed plugin.cfg version + the release tag + resolved path
+// (url left untouched), mirroring pinInstall's version/tag split, and lands on Project,
+// handing off to the location form when the resolved path differs, like newInstallTask.
 func newStoreInstallTask(selected addon.Addon, local, version string) *components.TaskScreen {
 	target := selected
-	target.Version = version
+	target.Tag = version
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
 		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
@@ -90,11 +91,11 @@ func newStoreInstallTask(selected addon.Addon, local, version string) *component
 		}
 		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
 		res, _ := ev.Payload.(installResult)
-		// Pin the chosen store version (the release identity) + resolved path; leave
-		// url empty so the canonical store url is untouched.
-		_ = addon.UpdateEntry(appctx.Of(sh).ManifestPath, selected.Name, "", res.Path, version, "")
+		// Pin the installed plugin.cfg version + the store release identity (tag) +
+		// resolved path; leave url empty so the canonical store url is untouched.
+		_ = addon.UpdateEntry(appctx.Of(sh).ManifestPath, selected.Name, "", res.Path, res.Version, version)
 		if res.Path != "" && res.Path != selected.Path {
-			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: version}
+			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: res.Version}
 			return core.Replace(postinstall.New(sh, []postinstall.Target{t}))
 		}
 		return core.Seq(
