@@ -53,7 +53,7 @@ func Check(ctx context.Context, current string) (Info, error) {
 	if listing == nil {
 		return info, nil
 	}
-	latest, ok := latestRelease(listing.Releases)
+	latest, ok := addon.LatestRelease(listing.Releases)
 	if !ok {
 		return info, nil
 	}
@@ -126,21 +126,6 @@ func platformAsset(rel source.Release) (source.Asset, bool) {
 		}
 	}
 	return source.Asset{}, false
-}
-
-// latestRelease picks the newest non-prerelease (releases come newest-first),
-// falling back to the newest release when every one is a prerelease. Mirrors the
-// unexported addon.latestRelease.
-func latestRelease(releases []source.Release) (source.Release, bool) {
-	if len(releases) == 0 {
-		return source.Release{}, false
-	}
-	for _, r := range releases {
-		if !r.Prerelease {
-			return r, true
-		}
-	}
-	return releases[0], true
 }
 
 // downloadBinary fetches the release zip and extracts just the gdaddon binary entry

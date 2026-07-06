@@ -84,7 +84,7 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 		}
 	}
 
-	latest, ok := latestRelease(listing.Releases)
+	latest, ok := LatestRelease(listing.Releases)
 	if !ok {
 		return UpdateInfo{}
 	}
@@ -173,7 +173,7 @@ func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePla
 			}
 		}
 	}
-	latest, ok := latestRelease(listing.Releases)
+	latest, ok := LatestRelease(listing.Releases)
 	if !ok {
 		return UpdatePlan{}, false
 	}
@@ -333,9 +333,10 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 	return outcomes, nil
 }
 
-// latestRelease picks the newest non-prerelease (releases come newest-first),
-// falling back to the newest release when every one is a prerelease.
-func latestRelease(releases []source.Release) (source.Release, bool) {
+// LatestRelease picks the newest non-prerelease (releases come newest-first),
+// falling back to the newest release when every one is a prerelease. Shared by the
+// per-addon update check and selfupdate.
+func LatestRelease(releases []source.Release) (source.Release, bool) {
 	if len(releases) == 0 {
 		return source.Release{}, false
 	}

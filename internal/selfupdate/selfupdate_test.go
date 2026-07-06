@@ -43,28 +43,6 @@ func TestPlatformAssetNoMatch(t *testing.T) {
 	}
 }
 
-func TestLatestRelease(t *testing.T) {
-	tests := []struct {
-		name     string
-		releases []source.Release
-		wantTag  string
-		wantOK   bool
-	}{
-		{"empty", nil, "", false},
-		{"first stable", []source.Release{{Tag: "v2.0.0"}, {Tag: "v1.0.0"}}, "v2.0.0", true},
-		{"skips prerelease", []source.Release{{Tag: "v3.0.0", Prerelease: true}, {Tag: "v2.0.0"}}, "v2.0.0", true},
-		{"all prerelease falls back to newest", []source.Release{{Tag: "v3.0.0", Prerelease: true}, {Tag: "v2.0.0", Prerelease: true}}, "v3.0.0", true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, ok := latestRelease(tt.releases)
-			if ok != tt.wantOK || got.Tag != tt.wantTag {
-				t.Fatalf("latestRelease(%v) = (%q, %v), want (%q, %v)", tt.releases, got.Tag, ok, tt.wantTag, tt.wantOK)
-			}
-		})
-	}
-}
-
 // evaluate mirrors Check's version/asset decision (without the network fetch) so the
 // "dev build / already current / available" branches can be asserted directly.
 func evaluate(current string, latest source.Release) Info {

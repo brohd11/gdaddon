@@ -33,7 +33,7 @@ func TestLockedSkipsUpdateCheck(t *testing.T) {
 
 func TestLatestRelease(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
-		if _, ok := latestRelease(nil); ok {
+		if _, ok := LatestRelease(nil); ok {
 			t.Errorf("expected ok=false for no releases")
 		}
 	})
@@ -43,7 +43,7 @@ func TestLatestRelease(t *testing.T) {
 			{Tag: "v2.0.0-rc1", Prerelease: true},
 			{Tag: "v1.0.0"},
 		}
-		got, ok := latestRelease(releases)
+		got, ok := LatestRelease(releases)
 		if !ok || got.Tag != "v1.0.0" {
 			t.Errorf("got %q ok=%v, want v1.0.0", got.Tag, ok)
 		}
@@ -54,7 +54,7 @@ func TestLatestRelease(t *testing.T) {
 			{Tag: "v2.0.0-rc2", Prerelease: true},
 			{Tag: "v2.0.0-rc1", Prerelease: true},
 		}
-		got, ok := latestRelease(releases)
+		got, ok := LatestRelease(releases)
 		if !ok || got.Tag != "v2.0.0-rc2" {
 			t.Errorf("got %q ok=%v, want v2.0.0-rc2", got.Tag, ok)
 		}
