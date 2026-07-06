@@ -45,6 +45,18 @@ func SelectByTitle(l *list.Model, title string) {
 	}
 }
 
+// CycleSort advances *sort to the next mode in modes and rebuilds l from items(*sort),
+// keeping the cursor on the same row and retitling via SortTitle(base, *sort). The
+// shared body of every tab root's sort toggle; items adapts each tab's row builder to
+// the (mode) signature.
+func CycleSort(l *list.Model, sort *SortMode, modes []SortMode, base string, items func(SortMode) []list.Item) {
+	sel := SelectedTitle(l)
+	*sort = NextSort(*sort, modes)
+	l.SetItems(items(*sort))
+	SelectByTitle(l, sel)
+	l.Title = SortTitle(base, *sort)
+}
+
 func itemTitle(it list.Item) string {
 	if t, ok := it.(interface{ Title() string }); ok {
 		return t.Title()

@@ -43,7 +43,7 @@ var _ core.Crumber = (*GlobalScreen)(nil)
 func (s *GlobalScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewGlobalScreen(sh *core.Shared) *GlobalScreen {
-	l := core.NewSelectList(globalItems(sh, appctx.SortAlpha), globalTitle+" — "+appctx.SortAlpha.Label())
+	l := core.NewSelectList(globalItems(sh, appctx.SortAlpha), appctx.SortTitle(globalTitle, appctx.SortAlpha))
 	return &GlobalScreen{list: l}
 }
 
@@ -75,11 +75,8 @@ func (s *GlobalScreen) Filtering() bool { return s.list.FilterState() == list.Fi
 
 func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
 	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
-		sel := appctx.SelectedTitle(&s.list)
-		s.sort = appctx.NextSort(s.sort, globalSortModes)
-		s.list.SetItems(globalItems(sh, s.sort))
-		appctx.SelectByTitle(&s.list, sel)
-		s.list.Title = globalTitle + " — " + s.sort.Label()
+		appctx.CycleSort(&s.list, &s.sort, globalSortModes, globalTitle,
+			func(m appctx.SortMode) []list.Item { return globalItems(sh, m) })
 		return s, core.Action{}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)

@@ -37,7 +37,7 @@ var _ core.Crumber = (*ArchiveScreen)(nil)
 func (s *ArchiveScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
 
 func NewArchiveScreen() *ArchiveScreen {
-	return &ArchiveScreen{list: core.NewSelectList(archiveItems(appctx.SortAlpha), archiveTitle+" — "+appctx.SortAlpha.Label())}
+	return &ArchiveScreen{list: core.NewSelectList(archiveItems(appctx.SortAlpha), appctx.SortTitle(archiveTitle, appctx.SortAlpha))}
 }
 
 // archiveItems builds the repo rows, ordered per mode (the underlying
@@ -58,11 +58,8 @@ func (s *ArchiveScreen) Filtering() bool { return s.list.FilterState() == list.F
 
 func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
 	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
-		sel := appctx.SelectedTitle(&s.list)
-		s.sort = appctx.NextSort(s.sort, archiveSortModes)
-		s.list.SetItems(archiveItems(s.sort))
-		appctx.SelectByTitle(&s.list, sel)
-		s.list.Title = archiveTitle + " — " + s.sort.Label()
+		appctx.CycleSort(&s.list, &s.sort, archiveSortModes, archiveTitle,
+			func(m appctx.SortMode) []list.Item { return archiveItems(m) })
 		return s, core.Action{}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)

@@ -31,7 +31,7 @@ func (s *ProjectScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title
 
 func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 	l := list.New(projectListItems(sh, appctx.SortAlpha), core.NewDelegate(), 0, 0)
-	l.Title = projectTitle + " — " + appctx.SortAlpha.Label()
+	l.Title = appctx.SortTitle(projectTitle, appctx.SortAlpha)
 	core.StyleList(&l)
 	// The browse short help is decluttered (see HelpView / ShortHelp); these extras
 	// only show in the full (?) help.
@@ -58,20 +58,11 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 	// "i" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
 	// Gated behind the filter guard so it doesn't hijack filter typing.
 	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
-		s.cycleSort(sh)
+		appctx.CycleSort(&s.list, &s.sort, projectSortModes, projectTitle,
+			func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })
 		return s, core.Action{}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)
-}
-
-// cycleSort advances the sort mode and rebuilds the list, keeping the cursor on the
-// same row and refreshing the Title suffix.
-func (s *ProjectScreen) cycleSort(sh *core.Shared) {
-	sel := appctx.SelectedTitle(&s.list)
-	s.sort = appctx.NextSort(s.sort, projectSortModes)
-	s.list.SetItems(projectListItems(sh, s.sort))
-	appctx.SelectByTitle(&s.list, sel)
-	s.list.Title = projectTitle + " — " + s.sort.Label()
 }
 
 // View renders just the addon list; the status line and output box are drawn by
