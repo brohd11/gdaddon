@@ -1,4 +1,4 @@
-package actions
+package sets
 
 import (
 	"gdaddon/internal/addon"

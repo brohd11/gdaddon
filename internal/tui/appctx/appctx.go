@@ -240,6 +240,7 @@ func (c *Ctx) Receive(sh *core.Shared, payload any) core.Action {
 const (
 	TitleProject = "Project"
 	TitleGlobal  = "Global"
+	TitleSets    = "Sets"
 	TitleArchive = "Archive"
 	TitleActions = "Actions"
 	TitleSearch  = "Search"

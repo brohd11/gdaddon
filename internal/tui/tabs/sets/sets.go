@@ -1,4 +1,7 @@
-package actions
+// Package sets is the Sets tab: reusable groups of plugins stored as manifest-shaped
+// YAML under ~/.gdaddon/sets. The root lists the saved sets; drilling into one manages
+// its members (add/remove/pin) or imports the whole set into the project manifest.
+package sets
 
 import (
 	"fmt"
@@ -15,35 +18,39 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// SetListScreen is the Sets submenu (Actions ▸ Sets): a "+ New set" row at the top
-// followed by one row per saved set under ~/.gdaddon/sets. It is a pushed screen
-// (Back pops it) and a Receiver, so it reloads its list after a set is created,
-// edited, or deleted (the SetsDirty broadcast).
-type SetListScreen struct{ list list.Model }
+// setsTitle is the set list's base Title; the active sort mode is appended.
+const setsTitle = "Sets"
 
-var _ core.Filterer = (*SetListScreen)(nil)
-var _ core.Receiver = (*SetListScreen)(nil)
-var _ core.Crumber = (*ActionsScreen)(nil)
+// setsSortModes is the sort cycle used by both the set list and the per-set member
+// list: name A→Z then Z→A (sets/members carry no install state, so no status grouping).
+var setsSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse}
 
-// CrumbLabel anchors the breadcrumb at the Actions root.
-func (s *SetListScreen) CrumbLabel(bool) string { return "Sets" } // s.list.Title }
-
-func newSetListScreen() *SetListScreen {
-	return &SetListScreen{list: core.NewSelectList(setListItems(), "Sets")}
+// SetsScreen is the Sets tab root: a "+ New set" row pinned at the top followed by one
+// row per saved set under ~/.gdaddon/sets. It is a Receiver, so it reloads its list
+// after a set is created, edited, or deleted (the SetsDirty broadcast).
+type SetsScreen struct {
+	list list.Model
+	sort appctx.SortMode
 }
 
-// setListItems builds the Sets submenu rows: "+ New set" plus a self-dispatching
-// row per saved set (its description is the plugin count). Selecting a set opens
-// its options submenu.
-func setListItems() []list.Item {
-	items := []list.Item{
-		components.Item{
-			Name: "+ New set",
-			Desc: "create a new set under ~/.gdaddon/sets",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newSetForm(sh)) },
-		},
-	}
+var _ core.Filterer = (*SetsScreen)(nil)
+var _ core.Receiver = (*SetsScreen)(nil)
+var _ core.Crumber = (*SetsScreen)(nil)
+
+// CrumbLabel anchors the breadcrumb at the Sets root.
+func (s *SetsScreen) CrumbLabel(bool) string { return "Tab" }
+
+func NewSetsScreen(sh *core.Shared) *SetsScreen {
+	return &SetsScreen{list: core.NewSelectList(setListItems(appctx.SortAlpha), appctx.SortTitle(setsTitle, appctx.SortAlpha))}
+}
+
+// setListItems builds the Sets rows: a fixed "+ New set" row on top, then a
+// self-dispatching row per saved set (its description is the plugin count), ordered by
+// mode. Only the set rows are sorted — "+ New set" stays pinned first. Selecting a set
+// opens its options submenu.
+func setListItems(mode appctx.SortMode) []list.Item {
 	names, _ := addon.ListSets()
+	setRows := make([]list.Item, 0, len(names))
 	for _, name := range names {
 		name := name
 		desc := "set"
@@ -52,45 +59,51 @@ func setListItems() []list.Item {
 				desc = fmt.Sprintf("%d plugins", len(addons))
 			}
 		}
-		items = append(items, components.Item{
+		setRows = append(setRows, components.Item{
 			Name: name,
 			Desc: desc,
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newSetOptions(sh, name)) },
 		})
 	}
-	return items
+	appctx.SortItemsByTitle(setRows, mode == appctx.SortReverse)
+	items := []list.Item{
+		components.Item{
+			Name: "+ New set",
+			Desc: "create a new set under ~/.gdaddon/sets",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newSetForm(sh)) },
+		},
+	}
+	return append(items, setRows...)
 }
 
-func (s *SetListScreen) Init(*core.Shared) tea.Cmd { return nil }
+func (s *SetsScreen) Init(*core.Shared) tea.Cmd { return nil }
 
-func (s *SetListScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
+func (s *SetsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
-// Update reuses the shared root key-handling (filter/select/list), adding only
-// Back ▸ Pop since this is a pushed screen rather than a tab root.
-func (s *SetListScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	if !s.Filtering() {
-		if km, ok := msg.(tea.KeyMsg); ok && core.MatchKey(km.String(), core.Keys.Back) {
-			return s, core.Pop()
-		}
+func (s *SetsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
+	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
+		appctx.CycleSort(&s.list, &s.sort, setsSortModes, setsTitle,
+			func(m appctx.SortMode) []list.Item { return setListItems(m) })
+		return s, core.Action{}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *SetListScreen) View(*core.Shared) string { return s.list.View() }
-func (s *SetListScreen) HelpView(*core.Shared) string {
-	return core.ShortHelp(s.list, core.HelpMinimal)
+func (s *SetsScreen) View(*core.Shared) string { return s.list.View() }
+func (s *SetsScreen) HelpView(*core.Shared) string {
+	return core.ShortHelp(s.list, core.HelpTabbed)
 }
 
 // Receive reloads the set list from disk on a SetsDirty broadcast (after a set is
-// created/edited/deleted), so the submenu reflects the change.
-func (s *SetListScreen) Receive(sh *core.Shared, payload any) core.Action {
+// created/edited/deleted), so the tab reflects the change.
+func (s *SetsScreen) Receive(sh *core.Shared, payload any) core.Action {
 	if _, ok := payload.(appctx.SetsDirty); ok {
-		s.list.SetItems(setListItems())
+		s.list.SetItems(setListItems(s.sort))
 	}
 	return core.Action{}
 }
 
-func (s *SetListScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
+func (s *SetsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 	s.list.SetSize(width, bodyHeight)
 }
 
@@ -195,8 +208,8 @@ func newSetOptions(sh *core.Shared, setName string) *components.PickerScreen {
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Set", Title: setName, PopStop: true})
 }
 
-// The set sub-flows — add entry, the member list, version pinning, remove, and
-// import-to-project — live in sets_flows.go.
+// The set sub-flows — the member list (sets_members.go), add entry + version pinning
+// (sets_add.go), and import-to-project (sets_import.go) — live alongside this file.
 
 // ---------- delete ----------
 

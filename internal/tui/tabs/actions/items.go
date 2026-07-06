@@ -38,11 +38,6 @@ func actionItems(sh *core.Shared) []list.Item {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newplugin.NewNewPluginForm()) },
 		},
 		components.Item{
-			Name: "⛁ Sets",
-			Desc: "save and import reusable groups of plugins",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newSetListScreen()) },
-		},
-		components.Item{
 			Name: "⌖ Paths",
 			Desc: "open path in the file manager",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newPathsPicker(sh)) },

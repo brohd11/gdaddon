@@ -9,6 +9,7 @@ import (
 	"gdaddon/internal/tui/tabs/global"
 	"gdaddon/internal/tui/tabs/project"
 	"gdaddon/internal/tui/tabs/search"
+	"gdaddon/internal/tui/tabs/sets"
 
 	"github.com/brohd11/bubblestack"
 	"github.com/brohd11/bubblestack/components"
@@ -35,6 +36,7 @@ func Run(projectRoot, version string) error {
 		Tabs: []bubblestack.TabEntry{
 			{Title: appctx.TitleProject, New: func(sh *bubblestack.Shared) bubblestack.Screen { return project.NewProjectScreen(sh) }},
 			{Title: appctx.TitleGlobal, New: func(sh *bubblestack.Shared) bubblestack.Screen { return global.NewGlobalScreen(sh) }},
+			{Title: appctx.TitleSets, New: func(sh *bubblestack.Shared) bubblestack.Screen { return sets.NewSetsScreen(sh) }},
 			{Title: appctx.TitleArchive, New: func(sh *bubblestack.Shared) bubblestack.Screen { return archive.NewArchiveScreen() }},
 			{Title: appctx.TitleActions, New: func(sh *bubblestack.Shared) bubblestack.Screen { return actions.NewActionsScreen(sh) }},
 			{Title: appctx.TitleSearch, New: func(sh *bubblestack.Shared) bubblestack.Screen { return search.NewSearchScreen() }},
