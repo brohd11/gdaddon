@@ -211,142 +211,75 @@ func AddEntryFull(manifestPath string, a Addon) error {
 	return nil
 }
 
-// SetKind sets (or clears) the `kind:` line on an entry, in place, using the same
-// flat-shape block scan as UpdateEntry. For KindClone/KindSubmodule it inserts/updates
-// `kind: <value>`; for KindPackage it removes any existing kind line. Kept separate
-// from UpdateEntry so its string-field "empty means leave untouched" convention isn't
-// muddied by this enum's "empty means package".
+// setScalarField sets, updates, or removes a single scalar field line (identified by
+// key) on the entry named name, in place — the shared body behind SetKind/SetLock/
+// SetCommit. keep == true inserts-after-the-key-line or updates in place with
+// `<indent>field` (field is the already-rendered "key: value" text); keep == false
+// removes any existing key line. Every other line stays byte-for-byte intact.
+func setScalarField(manifestPath, name, key, field string, keep bool) error {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(string(data), "\n")
+
+	keyIdx, end, ok := findEntryBlock(lines, name)
+	if !ok {
+		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
+	}
+
+	indent := "    "
+	fieldIdx := -1
+	for i := keyIdx + 1; i < end; i++ {
+		ind, k, ok := splitField(lines[i])
+		if !ok {
+			continue
+		}
+		indent = ind
+		if k == key {
+			fieldIdx = i
+		}
+	}
+
+	switch {
+	case !keep:
+		if fieldIdx != -1 {
+			lines = append(lines[:fieldIdx], lines[fieldIdx+1:]...)
+		}
+	case fieldIdx != -1:
+		lines[fieldIdx] = indent + field
+	default:
+		tail := append([]string{indent + field}, lines[keyIdx+1:]...)
+		lines = append(lines[:keyIdx+1], tail...)
+	}
+
+	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+// SetKind sets (or clears) the `kind:` line on an entry, in place. For
+// KindClone/KindSubmodule it inserts/updates `kind: <value>`; for KindPackage it
+// removes any existing kind line. Kept separate from UpdateEntry so its string-field
+// "empty means leave untouched" convention isn't muddied by this enum's "empty means
+// package".
 func SetKind(manifestPath, name string, kind Kind) error {
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(data), "\n")
-
-	keyIdx, end, ok := findEntryBlock(lines, name)
-	if !ok {
-		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
-	}
-
-	indent := "    "
-	kindIdx := -1
-	for i := keyIdx + 1; i < end; i++ {
-		ind, key, ok := splitField(lines[i])
-		if !ok {
-			continue
-		}
-		indent = ind
-		if key == "kind" {
-			kindIdx = i
-		}
-	}
-
-	switch {
-	case kind == KindPackage:
-		if kindIdx != -1 {
-			lines = append(lines[:kindIdx], lines[kindIdx+1:]...)
-		}
-	case kindIdx != -1:
-		lines[kindIdx] = indent + "kind: " + string(kind)
-	default:
-		tail := append([]string{indent + "kind: " + string(kind)}, lines[keyIdx+1:]...)
-		lines = append(lines[:keyIdx+1], tail...)
-	}
-
-	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+	return setScalarField(manifestPath, name, "kind", "kind: "+string(kind), kind != KindPackage)
 }
 
-// SetLock sets (or clears) the `lock:` line on an entry, in place, using the same
-// flat-shape block scan as SetKind. For lock=true it inserts/updates `lock: true`;
-// for lock=false it removes any existing lock line (an absent line reads as
-// unlocked, so the manifest stays minimal). Kept separate from EditEntry's
-// string-field semantics since this is a bool whose absence is the zero value.
+// SetLock sets (or clears) the `lock:` line on an entry, in place. For lock=true it
+// inserts/updates `lock: true`; for lock=false it removes any existing lock line (an
+// absent line reads as unlocked, so the manifest stays minimal). Kept separate from
+// EditEntry's string-field semantics since this is a bool whose absence is the zero value.
 func SetLock(manifestPath, name string, lock bool) error {
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(data), "\n")
-
-	keyIdx, end, ok := findEntryBlock(lines, name)
-	if !ok {
-		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
-	}
-
-	indent := "    "
-	lockIdx := -1
-	for i := keyIdx + 1; i < end; i++ {
-		ind, key, ok := splitField(lines[i])
-		if !ok {
-			continue
-		}
-		indent = ind
-		if key == "lock" {
-			lockIdx = i
-		}
-	}
-
-	switch {
-	case !lock:
-		if lockIdx != -1 {
-			lines = append(lines[:lockIdx], lines[lockIdx+1:]...)
-		}
-	case lockIdx != -1:
-		lines[lockIdx] = indent + "lock: true"
-	default:
-		tail := append([]string{indent + "lock: true"}, lines[keyIdx+1:]...)
-		lines = append(lines[:keyIdx+1], tail...)
-	}
-
-	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+	return setScalarField(manifestPath, name, "lock", "lock: true", lock)
 }
 
-// SetCommit sets (or clears) the `commit:` line on an entry, in place, using the
-// same flat-shape block scan as SetLock. A non-empty sha inserts/updates
-// `commit: "<sha>"`; an empty sha removes any existing commit line. Kept separate
-// from UpdateEntry so a branch package's pin isn't muddled with the tag/version
+// SetCommit sets (or clears) the `commit:` line on an entry, in place. A non-empty sha
+// inserts/updates `commit: "<sha>"`; an empty sha removes any existing commit line. Kept
+// separate from UpdateEntry so a branch package's pin isn't muddled with the tag/version
 // fields (a sha is deliberately not stored in tag, which deps compare via semver).
 func SetCommit(manifestPath, name, commit string) error {
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(data), "\n")
-
-	keyIdx, end, ok := findEntryBlock(lines, name)
-	if !ok {
-		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
-	}
-
-	indent := "    "
-	commitIdx := -1
-	for i := keyIdx + 1; i < end; i++ {
-		ind, key, ok := splitField(lines[i])
-		if !ok {
-			continue
-		}
-		indent = ind
-		if key == "commit" {
-			commitIdx = i
-		}
-	}
-
-	switch {
-	case commit == "":
-		if commitIdx != -1 {
-			lines = append(lines[:commitIdx], lines[commitIdx+1:]...)
-		}
-	case commitIdx != -1:
-		lines[commitIdx] = indent + "commit: \"" + commit + "\""
-	default:
-		tail := append([]string{indent + "commit: \"" + commit + "\""}, lines[keyIdx+1:]...)
-		lines = append(lines[:keyIdx+1], tail...)
-	}
-
-	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+	return setScalarField(manifestPath, name, "commit", `commit: "`+commit+`"`, commit != "")
 }
 
 // RemoveEntry deletes a manifest entry — its key line and the indented block

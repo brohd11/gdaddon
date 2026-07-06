@@ -198,6 +198,60 @@ func TestSetLock(t *testing.T) {
 	}
 }
 
+func TestSetCommit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sha := "abc1234def5678"
+
+	// A non-empty sha inserts a quoted commit line, leaving other entries intact.
+	if err := SetCommit(path, "Terrain3D", sha); err != nil {
+		t.Fatal(err)
+	}
+	got := string(mustRead(t, path))
+	if !strings.Contains(got, "\n    commit: \""+sha+"\"") {
+		t.Fatalf("commit line not inserted; got:\n%s", got)
+	}
+	if !strings.Contains(got, `version: "0.1.0"`) {
+		t.Errorf("other entry mutated; got:\n%s", got)
+	}
+
+	// Parse reads it back onto the right entry only.
+	addons, err := Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range addons {
+		if a.Name == "Terrain3D" && a.Commit != sha {
+			t.Errorf("Terrain3D commit = %q, want %q", a.Commit, sha)
+		}
+		if a.Name == "PluginDevTools" && a.Commit != "" {
+			t.Errorf("commit leaked onto another entry")
+		}
+	}
+
+	// Re-setting updates in place rather than duplicating.
+	if err := SetCommit(path, "Terrain3D", "newsha99"); err != nil {
+		t.Fatal(err)
+	}
+	got = string(mustRead(t, path))
+	if strings.Count(got, "commit:") != 1 {
+		t.Errorf("commit line duplicated; got:\n%s", got)
+	}
+
+	// An empty sha removes the line.
+	if err := SetCommit(path, "Terrain3D", ""); err != nil {
+		t.Fatal(err)
+	}
+	got = string(mustRead(t, path))
+	if strings.Contains(got, "commit:") {
+		t.Errorf("commit line not removed; got:\n%s", got)
+	}
+}
+
 func TestAddEntryFullCarriesLock(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")
