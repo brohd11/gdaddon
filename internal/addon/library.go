@@ -21,19 +21,40 @@ func GlobalListPath() (string, error) {
 	return filepath.Join(home, ".gdaddon", "plugins.yml"), nil
 }
 
+// FindByRepo returns the entry whose URL is the same repo as url — matched by
+// source.RepoID, so .git vs release-zip forms collapse. ok is false when url is
+// unparseable or nothing matches. The target id is resolved once, then compared
+// against each entry's RepoID.
+func FindByRepo(entries []Addon, url string) (Addon, bool) {
+	id, err := source.RepoID(url)
+	if err != nil {
+		return Addon{}, false
+	}
+	for _, e := range entries {
+		if eid, err := source.RepoID(e.URL); err == nil && eid == id {
+			return e, true
+		}
+	}
+	return Addon{}, false
+}
+
+// IndexByRepo maps each parseable entry's source.RepoID to the entry, for repeated
+// by-repo lookups (later duplicates win). Unparseable urls are skipped.
+func IndexByRepo(entries []Addon) map[string]Addon {
+	m := make(map[string]Addon, len(entries))
+	for _, e := range entries {
+		if id, err := source.RepoID(e.URL); err == nil {
+			m[id] = e
+		}
+	}
+	return m
+}
+
 // InGlobal reports whether this addon's repo is already present in a pre-loaded
 // global addon list (matched by source.RepoID so .git vs release-zip collapse).
 func (s Status) InGlobal(globals []Addon) bool {
-	id, err := source.RepoID(s.Addon.URL)
-	if err != nil {
-		return false
-	}
-	for _, g := range globals {
-		if gid, err := source.RepoID(g.URL); err == nil && gid == id {
-			return true
-		}
-	}
-	return false
+	_, ok := FindByRepo(globals, s.Addon.URL)
+	return ok
 }
 
 // Archived reports whether this addon's repo has any locally archived packages,
@@ -59,20 +80,12 @@ func InGlobalList(url string) bool {
 	if err != nil {
 		return false
 	}
-	id, err := source.RepoID(url)
-	if err != nil {
-		return false
-	}
 	entries, err := Parse(globalPath)
 	if err != nil { // includes file-not-exist → empty list
 		return false
 	}
-	for _, e := range entries {
-		if eid, err := source.RepoID(e.URL); err == nil && eid == id {
-			return true
-		}
-	}
-	return false
+	_, ok := FindByRepo(entries, url)
+	return ok
 }
 
 // UpsertEntry updates the existing entry for a.URL's repo (matched by source.RepoID)
@@ -84,14 +97,9 @@ func InGlobalList(url string) bool {
 // cleared here).
 func UpsertEntry(manifestPath string, a Addon) error {
 	existingName := ""
-	if id, err := source.RepoID(a.URL); err == nil {
-		if entries, err := Parse(manifestPath); err == nil {
-			for _, e := range entries {
-				if eid, err := source.RepoID(e.URL); err == nil && eid == id {
-					existingName = e.Name
-					break
-				}
-			}
+	if entries, err := Parse(manifestPath); err == nil {
+		if e, ok := FindByRepo(entries, a.URL); ok {
+			existingName = e.Name
 		}
 	}
 	if existingName == "" {
@@ -154,18 +162,14 @@ func AddEntry(manifestPath, name, url, path string) error {
 
 	// Reject duplicates by repo identity first (names are just labels — the same
 	// repo can appear as a .git or a release .zip), then by literal key.
-	newID, idErr := source.RepoID(url)
 	if len(existing) > 0 {
 		entries, perr := Parse(manifestPath)
 		if perr != nil {
 			return perr
 		}
-		for _, e := range entries {
-			if idErr == nil {
-				if id, err := source.RepoID(e.URL); err == nil && id == newID {
-					return fmt.Errorf("already added from %s (as %q)", id, e.Name)
-				}
-			}
+		if e, ok := FindByRepo(entries, url); ok {
+			id, _ := source.RepoID(url)
+			return fmt.Errorf("already added from %s (as %q)", id, e.Name)
 		}
 	}
 	for _, ln := range strings.Split(string(existing), "\n") {

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"gdaddon/internal/addon"
-	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
@@ -76,12 +75,7 @@ func resolveDepsCmd(manifestPath, addonDir string) func(context.Context) tea.Cmd
 			if err != nil {
 				return depPlan{err: err}
 			}
-			byRepo := make(map[string]addon.Addon, len(entries))
-			for _, e := range entries {
-				if id, err := source.RepoID(e.URL); err == nil {
-					byRepo[id] = e
-				}
-			}
+			byRepo := addon.IndexByRepo(entries)
 
 			ctx, cancel := context.WithTimeout(parent, depsResolveTimeout)
 			defer cancel()

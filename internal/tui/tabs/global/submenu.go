@@ -2,7 +2,6 @@ package global
 
 import (
 	"gdaddon/internal/addon"
-	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/editmanifest"
 	pck "gdaddon/internal/tui/flows/packages"
@@ -17,16 +16,8 @@ import (
 // InProject reports whether this global plugin's repo is already present in the
 // given project addon list (matched by source.RepoID).
 func (g globalItem) InProject(addons []addon.Addon) bool {
-	id, err := source.RepoID(g.url)
-	if err != nil {
-		return false
-	}
-	for _, a := range addons {
-		if aid, err := source.RepoID(a.URL); err == nil && aid == id {
-			return true
-		}
-	}
-	return false
+	_, ok := addon.FindByRepo(addons, g.url)
+	return ok
 }
 
 // newSubmenuScreen builds the per-plugin command submenu as a reusable picker.

@@ -206,14 +206,8 @@ func globalActionMsg(c *appctx.Ctx, t Target) string {
 // globalEntry reports whether url's repo is already in the global list and, if so, the
 // key name of that entry (matched by canonical repo id, since names are labels).
 func globalEntry(url string, globals []addon.Addon) (bool, string) {
-	id, err := source.RepoID(url)
-	if err != nil {
-		return false, ""
-	}
-	for _, g := range globals {
-		if gid, err := source.RepoID(g.URL); err == nil && gid == id {
-			return true, g.Name
-		}
+	if e, ok := addon.FindByRepo(globals, url); ok {
+		return true, e.Name
 	}
 	return false, ""
 }

@@ -117,12 +117,7 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 		return nil, err
 	}
 
-	byRepo := make(map[string]Addon, len(manifest))
-	for _, e := range manifest {
-		if id, err := source.RepoID(e.URL); err == nil {
-			byRepo[id] = e
-		}
-	}
+	byRepo := IndexByRepo(manifest)
 
 	var missing []Dependency
 	for _, d := range deps {

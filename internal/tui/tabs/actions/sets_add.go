@@ -2,7 +2,6 @@ package actions
 
 import (
 	"gdaddon/internal/addon"
-	"gdaddon/internal/source"
 	"gdaddon/internal/tui/appctx"
 	pck "gdaddon/internal/tui/flows/packages"
 
@@ -117,18 +116,10 @@ func setVersionEndpoint(setName, setPath, pluginName, path string) pck.Endpoint 
 // inSet reports whether the set already has an entry for url's repo (matched by
 // source.RepoID, so .git vs release-zip forms collapse).
 func inSet(setPath, url string) bool {
-	id, err := source.RepoID(url)
-	if err != nil {
-		return false
-	}
 	entries, err := addon.Parse(setPath)
 	if err != nil {
 		return false
 	}
-	for _, e := range entries {
-		if eid, err := source.RepoID(e.URL); err == nil && eid == id {
-			return true
-		}
-	}
-	return false
+	_, ok := addon.FindByRepo(entries, url)
+	return ok
 }
