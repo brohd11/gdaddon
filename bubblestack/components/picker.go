@@ -117,6 +117,9 @@ func (s *PickerScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.A
 					return s, act
 				}
 			}
+			if WrapNav(&s.list, k) {
+				return s, core.Action{}
+			}
 		}
 	}
 	var cmd tea.Cmd

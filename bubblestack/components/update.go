@@ -84,9 +84,34 @@ func RootUpdate(sh *core.Shared, l *list.Model, msg tea.Msg) core.Action {
 					return act
 				}
 			}
+			if WrapNav(l, k) {
+				return core.Action{}
+			}
 		}
 	}
 	var cmd tea.Cmd
 	*l, cmd = l.Update(msg)
 	return core.Async(cmd)
+}
+
+// WrapNav wraps the cursor at a list boundary: up on the first row selects the
+// last, down on the last selects the first. Returns handled=true when it wrapped
+// (caller skips forwarding the key to the list). Call only when not filtering, so
+// len(l.Items()) is the visible count. Uses the central core.Keys bindings, so the
+// wrap follows any added scheme (e.g. wasd); l.Select adjusts pagination itself, so
+// wrapping works across pages.
+func WrapNav(l *list.Model, k string) bool {
+	n := len(l.Items())
+	if n < 2 {
+		return false
+	}
+	switch {
+	case core.MatchKey(k, core.Keys.Up) && l.Index() == 0:
+		l.Select(n - 1)
+		return true
+	case core.MatchKey(k, core.Keys.Down) && l.Index() == n-1:
+		l.Select(0)
+		return true
+	}
+	return false
 }
