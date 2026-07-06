@@ -56,7 +56,7 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 		Pick: func(sh *core.Shared) core.Action {
 			gp, err := addon.GlobalListPath()
 			if err != nil {
-				return core.SetStatusAndLog("error: " + err.Error())
+				return core.StatusErr(err)
 			}
 			a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Kind: g.kind}
 			return core.Push(editmanifest.New(gp, a, appctx.GlobalDirty{}, true))
@@ -83,10 +83,7 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 func importToProject(sh *core.Shared, g globalItem) core.Action {
 	a := addon.Addon{Name: g.name, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Kind: g.kind}
 	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, a); err != nil {
-		return core.Seq(
-			core.SetStatusAndLog("error: "+err.Error()),
-			core.ResetToRoot(),
-		)
+		return core.SeqErr(err, core.ResetToRoot())
 	}
 	return core.Seq(
 		core.SetStatus("imported "+g.name),

@@ -96,10 +96,7 @@ func commitStoreAsset(sh *core.Shared, name, url, path, version string, addTarge
 			err = addon.AddEntry(globalPath, name, url, path)
 		}
 		if err != nil {
-			return core.Seq(
-				core.SetStatusAndLog("error: "+err.Error()),
-				core.ResetToRoot(),
-			)
+			return core.SeqErr(err, core.ResetToRoot())
 		}
 		return core.Seq(
 			core.SetStatus(fmt.Sprintf("added %s to global list", name)),

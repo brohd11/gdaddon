@@ -19,32 +19,6 @@ var trackConfirmHelp = []key.Binding{
 	core.Hint("back", core.Keys.Back),
 }
 
-// kindOptions is the Track form's kind picker order; the toggle value maps back to
-// the addon.Kind it names.
-var kindOptions = []string{"package", "clone", "submodule"}
-
-func kindIndex(k addon.Kind) int {
-	switch k {
-	case addon.KindClone:
-		return 1
-	case addon.KindSubmodule:
-		return 2
-	default:
-		return 0
-	}
-}
-
-func kindFromValue(v string) addon.Kind {
-	switch v {
-	case "clone":
-		return addon.KindClone
-	case "submodule":
-		return addon.KindSubmodule
-	default:
-		return addon.KindPackage
-	}
-}
-
 // NewFromInstall builds the form for tracking an already-installed plugin found by
 // the Scan action: name and path are prefilled from disk and url is prefilled with a
 // suggestion (a git checkout's origin remote, a `source=` cfg key, or a matching
@@ -58,12 +32,12 @@ func NewFromInstall(path, name, version, suggestedURL string, kind addon.Kind, b
 	urlF := components.NewTextField("url", "URL:     ", "https://github.com/owner/repo")
 	nameF := components.NewTextField("name", "Name:    ", "(optional — derived from url)")
 	pathF := components.NewTextField("path", "Path:    ", "(optional — derived on install)")
-	kindF := components.NewToggleField("kind", "Kind:    ", kindOptions, "|")
+	kindF := components.NewToggleField("kind", "Kind:    ", addon.KindOptions, "|")
 
 	urlF.SetValue(suggestedURL)
 	nameF.SetValue(name)
 	pathF.SetValue(path)
-	kindF.SetIndex(kindIndex(kind))
+	kindF.SetIndex(addon.KindIndex(kind))
 
 	return components.NewForm(components.FormOpts{
 		Crumb: "Track Plugin",
@@ -95,7 +69,7 @@ func NewFromInstall(path, name, version, suggestedURL string, kind addon.Kind, b
 				name = addon.DeriveName(url)
 			}
 			path := strings.TrimSpace(f.Value("path"))
-			return core.Push(newTrackConfirm(name, url, path, version, kindFromValue(kindF.Value()), branch))
+			return core.Push(newTrackConfirm(name, url, path, version, addon.ParseKind(kindF.Value()), branch))
 		},
 	})
 }

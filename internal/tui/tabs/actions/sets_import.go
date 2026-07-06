@@ -33,11 +33,11 @@ func importSetToProject(sh *core.Shared, setName string) core.Action {
 	}
 	setPath, err := addon.SetPath(setName)
 	if err != nil {
-		return core.SetStatusAndLog("error: " + err.Error())
+		return core.StatusErr(err)
 	}
 	entries, err := addon.Parse(setPath)
 	if err != nil {
-		return core.SetStatusAndLog("error: " + err.Error())
+		return core.StatusErr(err)
 	}
 	added, skipped := 0, 0
 	for _, e := range entries {

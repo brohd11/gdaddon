@@ -31,12 +31,7 @@ func newSetAddEntryPicker(setName string) core.Screen {
 			}
 		}
 	}
-	if len(items) == 0 {
-		items = append(items, components.Item{
-			Name: "(no plugins to add)",
-			Desc: "every global plugin is already in this set (or none exist)",
-		})
-	}
+	items = components.EnsurePlaceholder(items, "(no plugins to add)", "every global plugin is already in this set (or none exist)")
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Add entry", Title: setName})
 }
 
@@ -50,7 +45,7 @@ func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.Pic
 			Desc: "add to the set (url only, no version)",
 			Pick: func(sh *core.Shared) core.Action {
 				if err := addon.AddEntry(setPath, g.Name, addon.NormalizeRepoURL(g.URL), g.Path); err != nil {
-					return core.SetStatusAndLog("error: " + err.Error())
+					return core.StatusErr(err)
 				}
 				return core.Seq(
 					core.SetStatusAndLog("added "+g.Name+" to "+setName),
@@ -99,7 +94,7 @@ func setVersionEndpoint(setName, setPath, pluginName, path string) pck.Endpoint 
 						validTag = sel.Tag
 					}
 					if err := addon.UpsertEntry(setPath, addon.Addon{Name: pluginName, URL: sel.Asset.URL, Path: path, Version: sel.Tag, Tag: validTag}); err != nil {
-						return core.SetStatusAndLog("error: " + err.Error())
+						return core.StatusErr(err)
 					}
 					return core.Seq(
 						core.SetStatus("added "+pluginName+" "+sel.Tag+" to "+setName),

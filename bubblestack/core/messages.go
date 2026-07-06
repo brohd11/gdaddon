@@ -28,6 +28,16 @@ func SetStatusAndLog(line string, forceShow ...bool) Action {
 	return Action{Msg: statusSetMsg{str: line, wrLog: true, forceShow: shw}}
 }
 
+// StatusErr is shorthand for the ubiquitous SetStatusAndLog("error: " + err.Error()).
+func StatusErr(err error) Action { return SetStatusAndLog("error: " + err.Error()) }
+
+// SeqErr reports err on the status line, then runs the given actions — shorthand for
+// Seq(StatusErr(err), then...). Variadic so callers can append any nav/async tail
+// (ResetToRoot, Pop, an extra status line, …), or none.
+func SeqErr(err error, then ...Action) Action {
+	return Seq(append([]Action{StatusErr(err)}, then...)...)
+}
+
 // statusClearMsg is the router's auto-clear timer firing for the status line: a tick
 // scheduled when the status's generation advances (a fresh write). It clears the
 // status only if gen still matches the current generation, so a newer write (which

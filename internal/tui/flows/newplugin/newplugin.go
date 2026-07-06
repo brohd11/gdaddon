@@ -121,10 +121,7 @@ func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) cor
 			err = addon.AddEntry(globalPath, name, url, path)
 		}
 		if err != nil {
-			return core.Seq(
-				core.SetStatusAndLog("error: "+err.Error()),
-				core.ResetToRoot(),
-			)
+			return core.SeqErr(err, core.ResetToRoot())
 		}
 		// Show the Global tab rebuilt with the new entry (parallel to a project add
 		// switching to Browse).

@@ -28,6 +28,37 @@ const (
 	KindSubmodule Kind = "submodule" // a live git working copy the parent repo manages; gdaddon never installs it
 )
 
+// KindOptions is the canonical label order for a kind toggle; index 0 is
+// KindPackage ("package", the empty Kind rendered as a word). KindIndex/ParseKind
+// convert between a Kind and its label.
+var KindOptions = []string{"package", "clone", "submodule"}
+
+// KindIndex returns k's position in KindOptions (KindClone→1, KindSubmodule→2,
+// KindPackage/other→0).
+func KindIndex(k Kind) int {
+	switch k {
+	case KindClone:
+		return 1
+	case KindSubmodule:
+		return 2
+	default:
+		return 0
+	}
+}
+
+// ParseKind maps a KindOptions label back to its Kind ("clone"/"submodule" to that
+// Kind, anything else — including "package" — to KindPackage).
+func ParseKind(label string) Kind {
+	switch label {
+	case "clone":
+		return KindClone
+	case "submodule":
+		return KindSubmodule
+	default:
+		return KindPackage
+	}
+}
+
 // Addon is a single manifest entry. Name is the manifest key. Tag records the
 // release tag the entry was installed from (empty for branch-HEAD installs, which
 // have no tag); it's what dependency specs match against, since Version holds the

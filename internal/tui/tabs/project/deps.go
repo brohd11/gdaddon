@@ -53,7 +53,7 @@ func newGetDepsLoading(st addon.Status, sh *core.Shared) *components.LoadingScre
 			return core.Action{}
 		}
 		if plan.err != nil {
-			return core.Seq(core.SetStatusAndLog("error: "+plan.err.Error()), core.Pop())
+			return core.SeqErr(plan.err, core.Pop())
 		}
 		// Nothing addable (all satisfied / only skipped): no confirm, just report.
 		if len(plan.add) == 0 {

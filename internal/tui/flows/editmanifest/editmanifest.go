@@ -21,32 +21,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 )
 
-// kindOptions is the kind toggle's order; the toggle value maps back to the
-// addon.Kind it names.
-var kindOptions = []string{"package", "clone", "submodule"}
-
-func kindIndex(k addon.Kind) int {
-	switch k {
-	case addon.KindClone:
-		return 1
-	case addon.KindSubmodule:
-		return 2
-	default:
-		return 0
-	}
-}
-
-func kindFromValue(v string) addon.Kind {
-	switch v {
-	case "clone":
-		return addon.KindClone
-	case "submodule":
-		return addon.KindSubmodule
-	default:
-		return addon.KindPackage
-	}
-}
-
 // New builds the Edit Manifest form for entry a in the manifest at manifestPath.
 // dirty is broadcast on a successful save (e.g. appctx.ProjectDirty{}) so whichever
 // tab root owns this manifest reloads. The entry name is read-only. In global mode
@@ -76,8 +50,8 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 		tagF = components.NewTextField("tag", "Tag:     ", "(blank to clear)")
 		versionF.SetValue(a.Version)
 		tagF.SetValue(a.Tag)
-		kindF = components.NewToggleField("kind", "Kind:    ", kindOptions, "|")
-		kindF.SetIndex(kindIndex(a.Kind))
+		kindF = components.NewToggleField("kind", "Kind:    ", addon.KindOptions, "|")
+		kindF.SetIndex(addon.KindIndex(a.Kind))
 		fields = append(fields, versionF, tagF, components.NewSpacer(), kindF)
 		help = []key.Binding{
 			core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
@@ -99,11 +73,11 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 			tag := strings.TrimSpace(f.Value("tag"))
 
 			if err := addon.EditEntry(manifestPath, a.Name, url, path, version, tag); err != nil {
-				return core.Seq(core.SetStatusAndLog("error: "+err.Error()), core.Async(f.Focus("url")))
+				return core.SeqErr(err, core.Async(f.Focus("url")))
 			}
 			if !globalMode {
-				if err := addon.SetKind(manifestPath, a.Name, kindFromValue(kindF.Value())); err != nil {
-					return core.Seq(core.SetStatusAndLog("error: "+err.Error()), core.Async(f.Focus("url")))
+				if err := addon.SetKind(manifestPath, a.Name, addon.ParseKind(kindF.Value())); err != nil {
+					return core.SeqErr(err, core.Async(f.Focus("url")))
 				}
 			}
 			return core.Seq(

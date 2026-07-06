@@ -211,16 +211,11 @@ func newOpenSubmenu(st addon.Status) *components.PickerScreen {
 // `lock: true` line), logs it, broadcasts ProjectDirty so the list reloads, and
 // re-renders the submenu so its Lock/Unlock row reflects the new state.
 func toggleLock(sh *core.Shared, st addon.Status) core.Action {
-	c := appctx.Of(sh)
-	newLock := !st.Addon.Lock
-	if err := addon.SetLock(c.ManifestPath, st.Addon.Name, newLock); err != nil {
-		return core.SetStatusAndLog("error: " + err.Error())
+	newLock, verb, err := appctx.LockToggle(appctx.Of(sh).ManifestPath, st.Addon.Name, st.Addon.Lock)
+	if err != nil {
+		return core.StatusErr(err)
 	}
 	st.Addon.Lock = newLock
-	verb := "locked"
-	if !newLock {
-		verb = "unlocked"
-	}
 	return core.Seq(
 		core.SetStatus(verb+" "+st.Addon.Name),
 		core.PropagateAll(appctx.ProjectDirty{}),
@@ -235,7 +230,7 @@ func toggleLock(sh *core.Shared, st addon.Status) core.Action {
 func updateBranchRecord(sh *core.Shared, st addon.Status) core.Action {
 	c := appctx.Of(sh)
 	if err := addon.UpdateEntry(c.ManifestPath, st.Addon.Name, "", "", "", st.LiveBranch); err != nil {
-		return core.SetStatusAndLog("error: " + err.Error())
+		return core.StatusErr(err)
 	}
 	return core.Seq(
 		core.SetStatus("recorded branch "+st.LiveBranch+" for "+st.Addon.Name),
@@ -260,10 +255,7 @@ func exportToGlobal(sh *core.Shared, a addon.Addon) core.Action {
 		err = addon.AddEntry(globalPath, a.Name, url, a.Path)
 	}
 	if err != nil {
-		return core.Seq(
-			core.SetStatusAndLog("error: "+err.Error()),
-			core.ResetToRoot(),
-		)
+		return core.SeqErr(err, core.ResetToRoot())
 	}
 	return core.Seq(
 		core.SetStatus("added "+a.Name+" to global list"),

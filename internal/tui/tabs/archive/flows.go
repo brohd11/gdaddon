@@ -44,10 +44,7 @@ func newRemoveConfirm(repoID string, asset source.Asset) *components.DialogScree
 		},
 		OnYes: func(sh *core.Shared) core.Action {
 			if err := arch.Remove(asset.URL); err != nil {
-				return core.Seq(
-					core.SetStatusAndLog("error: "+err.Error()),
-					core.ResetToRoot(),
-				)
+				return core.SeqErr(err, core.ResetToRoot())
 			}
 			return core.Seq(
 				core.SetStatus("removed "+asset.Name),

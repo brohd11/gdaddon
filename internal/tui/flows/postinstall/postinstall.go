@@ -122,10 +122,7 @@ func commit(sh *core.Shared, t Target, rest []Target, f *components.FormScreen, 
 	moved := finalPath != t.Path
 	if moved {
 		if err := addon.Relocate(c.ProjectRoot, t.Path, finalPath); err != nil {
-			return core.Seq(
-				core.SetStatusAndLog("error: "+err.Error()),
-				core.Async(f.Focus("path")),
-			)
+			return core.SeqErr(err, core.Async(f.Focus("path")))
 		}
 		_ = addon.UpdateEntry(c.ManifestPath, t.Name, "", finalPath, "", "")
 	}

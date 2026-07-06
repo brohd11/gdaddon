@@ -147,7 +147,7 @@ func newSetForm(sh *core.Shared) *components.FormScreen {
 				from = manifestPath
 			}
 			if _, err := addon.CreateSetFrom(name, from); err != nil {
-				return core.Seq(core.SetStatusAndLog("error: "+err.Error()), core.Async(f.Focus("name")))
+				return core.SeqErr(err, core.Async(f.Focus("name")))
 			}
 			status := "created set " + name
 			if from != "" {
@@ -210,7 +210,7 @@ func newSetDeleteConfirm(setName string) *components.DialogScreen {
 		},
 		OnYes: func(sh *core.Shared) core.Action {
 			if err := addon.DeleteSet(setName); err != nil {
-				return core.Seq(core.SetStatusAndLog("error: "+err.Error()), core.PopTo())
+				return core.SeqErr(err, core.PopTo())
 			}
 			return core.Seq(
 				core.SetStatusAndLog("deleted set "+setName),

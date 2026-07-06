@@ -56,11 +56,6 @@ func scanItems(sh *core.Shared) []list.Item {
 			},
 		})
 	}
-	if len(items) == 0 {
-		items = append(items, components.Item{
-			Name: "(all installed plugins are tracked)",
-			Desc: fmt.Sprintf("nothing untracked under %s", c.ProjectRoot),
-		})
-	}
+	items = components.EnsurePlaceholder(items, "(all installed plugins are tracked)", fmt.Sprintf("nothing untracked under %s", c.ProjectRoot))
 	return items
 }

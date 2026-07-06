@@ -19,10 +19,7 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) core.Action {
 	if mode == removeGlobalArchive {
 		if repoID, err := source.RepoID(g.url); err == nil {
 			if err := archive.RemoveRepo(repoID); err != nil {
-				return core.Seq(
-					core.SetStatusAndLog("error: "+err.Error()),
-					core.ResetToRoot(),
-				)
+				return core.SeqErr(err, core.ResetToRoot())
 			}
 			archiveRemoved = true
 		}
@@ -34,10 +31,7 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) core.Action {
 		err = addon.RemoveEntry(globalPath, g.name)
 	}
 	if err != nil {
-		return core.Seq(
-			core.SetStatusAndLog("error: "+err.Error()),
-			core.ResetToRoot(),
-		)
+		return core.SeqErr(err, core.ResetToRoot())
 	}
 	global := core.Seq(
 		core.SetStatus("removed "+g.name),

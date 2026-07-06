@@ -2,6 +2,8 @@ package components
 
 import (
 	"github.com/brohd11/bubblestack/core"
+
+	"github.com/charmbracelet/bubbles/list"
 )
 
 // Item is a self-dispatching list row: instead of a domain-specific item type +
@@ -25,4 +27,15 @@ func (i Item) FilterValue() string {
 		return i.Filter
 	}
 	return i.Name
+}
+
+// EnsurePlaceholder appends a single inert row (name + desc, no Pick) when items is
+// empty, so a list still renders a hint instead of nothing. It returns items
+// unchanged when non-empty. Operates on []list.Item since callers build the bubbles
+// list model directly (an Item satisfies list.Item).
+func EnsurePlaceholder(items []list.Item, name, desc string) []list.Item {
+	if len(items) == 0 {
+		items = append(items, Item{Name: name, Desc: desc})
+	}
+	return items
 }

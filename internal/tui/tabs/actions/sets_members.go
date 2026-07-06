@@ -32,9 +32,7 @@ func newSetPluginsPicker(setName string) core.Screen {
 			})
 		}
 	}
-	if len(items) == 0 {
-		items = append(items, components.Item{Name: "(set is empty)", Desc: "add plugins via Add entry"})
-	}
+	items = components.EnsurePlaceholder(items, "(set is empty)", "add plugins via Add entry")
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Plugins", Title: setName})
 }
 
@@ -73,15 +71,11 @@ func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.Pick
 // toggleSetLock flips the set entry's lock flag, then re-renders the member submenu
 // so its Lock/Unlock row reflects the new state. Mirrors the project tab's toggleLock.
 func toggleSetLock(setName, setPath string, e addon.Addon) core.Action {
-	newLock := !e.Lock
-	if err := addon.SetLock(setPath, e.Name, newLock); err != nil {
-		return core.SetStatusAndLog("error: " + err.Error())
+	newLock, verb, err := appctx.LockToggle(setPath, e.Name, e.Lock)
+	if err != nil {
+		return core.StatusErr(err)
 	}
 	e.Lock = newLock
-	verb := "locked"
-	if !newLock {
-		verb = "unlocked"
-	}
 	return core.Seq(
 		core.SetStatus(verb+" "+e.Name+" in "+setName),
 		core.PropagateAll(appctx.SetsDirty{}),
@@ -94,7 +88,7 @@ func newRemovePluginConf(setName, setPath string, e addon.Addon) *components.Dia
 		Text: fmt.Sprintf("Remove %s from %s?", e.Name, setName),
 		OnYesLamda: func(sh *core.Shared) core.Action {
 			if err := addon.RemoveEntry(setPath, e.Name); err != nil {
-				return core.SetStatusAndLog("error: " + err.Error())
+				return core.StatusErr(err)
 			}
 			return core.Seq(
 				core.SetStatus("removed "+e.Name+" from "+setName),

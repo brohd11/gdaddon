@@ -178,12 +178,7 @@ func RepoItems(opts BrowseOpts) []list.Item {
 			Pick: func(sh *core.Shared) core.Action { return core.Push(NewVersionsPicker(repo, opts)) },
 		})
 	}
-	if len(items) == 0 {
-		items = append(items, components.Item{
-			Name: "(nothing archived yet)",
-			Desc: "archive a package via Project → an addon → Archive",
-		})
-	}
+	items = components.EnsurePlaceholder(items, "(nothing archived yet)", "archive a package via Project → an addon → Archive")
 	return items
 }
 

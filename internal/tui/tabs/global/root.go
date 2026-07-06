@@ -64,13 +64,7 @@ func globalItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 			}
 		}
 	}
-	if len(items) == 0 {
-		items = append(items, components.Item{
-			Name: "(no global plugins yet)",
-			Desc: "add one via Actions → New Plugin → Global",
-		})
-		return items
-	}
+	items = components.EnsurePlaceholder(items, "(no global plugins yet)", "add one via Actions → New Plugin → Global")
 	appctx.SortItemsByTitle(items, mode == appctx.SortReverse)
 	return items
 }

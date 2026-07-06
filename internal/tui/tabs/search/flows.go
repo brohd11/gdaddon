@@ -108,10 +108,7 @@ func newSearchLoading(src searchpkg.Source, query, godotVer string, page int) *c
 			return core.Action{}
 		}
 		if m.err != nil {
-			return core.Seq(
-				core.SetStatusAndLog("error: "+m.err.Error()),
-				core.Pop(),
-			)
+			return core.SeqErr(m.err, core.Pop())
 		}
 		if len(m.res.Results) == 0 {
 			return core.Seq(
@@ -193,10 +190,7 @@ func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen
 			return core.Action{}
 		}
 		if m.err != nil {
-			return core.Seq(
-				core.SetStatusAndLog("error: "+m.err.Error()),
-				core.Pop(),
-			)
+			return core.SeqErr(m.err, core.Pop())
 		}
 		return newInstallMenu(src, m.detail)
 	}

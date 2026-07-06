@@ -52,10 +52,7 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 			}
 			target := filepath.Join(dir, "addon_manifest.yml")
 			if err := addon.CreateManifest(target); err != nil {
-				return core.Seq(
-					core.SetStatusAndLog("error: "+err.Error()),
-					core.Async(f.Focus("dir")),
-				)
+				return core.SeqErr(err, core.Async(f.Focus("dir")))
 			}
 			// Compose the outcome at the call site: set the status, show the Project tab
 			// (ShowTab discards this form's stack), and async-refresh the paths — the

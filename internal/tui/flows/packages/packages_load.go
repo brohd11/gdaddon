@@ -54,20 +54,14 @@ func newReleasesLoading(repoID, repoURL string, opts BrowseOpts) *components.Loa
 
 		if opts.MarkArchived {
 			if m.err != nil { // no remote ⇒ nothing new to archive
-				return core.Seq(
-					core.SetStatusAndLog("error: "+m.err.Error()),
-					core.Pop(),
-				)
+				return core.SeqErr(m.err, core.Pop())
 			}
 			return core.Replace(newVersionsPicker(repoID, repoURL, opts, cloneListing(m.listing).Releases, set))
 		}
 
 		if m.err != nil {
 			if len(archived) == 0 {
-				return core.Seq(
-					core.SetStatusAndLog("error: "+m.err.Error()),
-					core.Pop(),
-				)
+				return core.SeqErr(m.err, core.Pop())
 			}
 			// offline / delisted: install straight from the archive-only listing.
 			return core.Replace(newVersionsPicker(repoID, repoURL, opts, archived, set))
@@ -142,10 +136,7 @@ func newBranchesLoading(repoID, repoURL string, opts BrowseOpts) *components.Loa
 			return core.Action{}
 		}
 		if m.err != nil {
-			return core.Seq(
-				core.SetStatusAndLog("error: "+m.err.Error()),
-				core.Pop(),
-			)
+			return core.SeqErr(m.err, core.Pop())
 		}
 		if len(m.branches) == 0 {
 			return core.Seq(

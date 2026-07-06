@@ -178,6 +178,23 @@ func (c *Ctx) Scan() {
 // reach ManifestPath/ProjectRoot.
 func Of(sh *core.Shared) *Ctx { return core.App[Ctx](sh) }
 
+// LockToggle flips the lock on name in the manifest at path and returns the new lock
+// state plus the past-tense verb ("locked"/"unlocked"). A SetLock error is returned
+// as-is (callers wrap it with core.StatusErr); the status line, dirty payload, and
+// rebuilt submenu differ between the project and set lock toggles and stay at the
+// call site.
+func LockToggle(path, name string, cur bool) (newLock bool, verb string, err error) {
+	newLock = !cur
+	if e := addon.SetLock(path, name, newLock); e != nil {
+		return false, "", e
+	}
+	verb = "locked"
+	if !newLock {
+		verb = "unlocked"
+	}
+	return newLock, verb, nil
+}
+
 // selfUpdateCheckTimeout caps the startup self-update check's network fetch so a slow
 // or unreachable host can't leave it pending.
 const selfUpdateCheckTimeout = 30 * time.Second
