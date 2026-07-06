@@ -3,6 +3,7 @@ package addon
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestAddEntryFullAllFields(t *testing.T) {
 			if len(addons) != 1 {
 				t.Fatalf("got %d entries, want 1", len(addons))
 			}
-			if got := addons[0]; got != want {
+			if got := addons[0]; !reflect.DeepEqual(got, want) {
 				t.Errorf("round-trip mismatch:\n got  %+v\n want %+v", got, want)
 			}
 		})
@@ -149,7 +150,7 @@ func TestUpsertEntryAppend(t *testing.T) {
 	if len(addons) != 1 {
 		t.Fatalf("want 1 entry, got %d", len(addons))
 	}
-	if got := addons[0]; got != want {
+	if got := addons[0]; !reflect.DeepEqual(got, want) {
 		t.Errorf("append mismatch:\n got  %+v\n want %+v", got, want)
 	}
 }

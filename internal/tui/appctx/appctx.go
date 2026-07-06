@@ -45,17 +45,19 @@ type Ctx struct {
 	// UpdateInfo (UpdateUnknown), i.e. no marker.
 	UpdateChecks map[string]addon.UpdateInfo
 
-	// DepChecks caches each project addon's unsatisfied dependencies, keyed by
-	// addon name (only addons with >0 missing deps appear). Unlike UpdateChecks it's
-	// local-only (compares declared plugin.cfg deps against the manifest), so it's
-	// recomputed synchronously in loadProject on every refresh. The list reads it to
-	// draw the "missing deps" marker; the per-addon submenu gates its "Get
-	// dependencies" item on it.
-	DepChecks map[string][]addon.Dependency
+	// DepStatuses caches every dependency each project addon declares, keyed by addon
+	// name (only addons that declare deps appear), each with its install state. Unlike
+	// UpdateChecks it's local-only (compares declared plugin.cfg deps against the
+	// inspected project), so it's recomputed synchronously in loadProject on every
+	// refresh. The list reads the "needs attention" subset (unsuppressed && not
+	// installed) to draw the "missing deps" marker; the per-addon submenu gates its
+	// "Dependencies" item on declaring any at all; the Dependencies screen renders the
+	// full per-dep status.
+	DepStatuses map[string][]addon.DepStatus
 
 	// GitDirty marks each clone entry whose git working tree has uncommitted
 	// changes, keyed by addon name (only dirty clones appear). Local-only like
-	// DepChecks, recomputed synchronously in loadProject; the Project list reads it
+	// DepStatuses, recomputed synchronously in loadProject; the Project list reads it
 	// to draw the "uncommitted changes" marker.
 	GitDirty map[string]bool
 }
@@ -91,22 +93,23 @@ func (c *Ctx) loadArchive() {
 func (c *Ctx) loadProject() {
 	if c.ManifestPath == "" {
 		c.ProjectAddons = nil
-		c.DepChecks = nil
+		c.DepStatuses = nil
 		c.GitDirty = nil
 		return
 	}
 	c.ProjectAddons, _ = addon.Parse(c.ManifestPath)
-	c.refreshDepChecks()
-	c.refreshGitChecks()
+	// Inspect once and share the statuses: both dep-status (which deps are on disk) and
+	// the git-dirty check need the resolved install state, so they don't inspect twice.
+	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
+	c.refreshDepChecks(statuses)
+	c.refreshGitChecks(statuses)
 }
 
 // refreshGitChecks recomputes which present git-checkout entries (clone or submodule)
 // have a dirty working tree. Local-only (a `git status` per checkout), so it rides
-// loadProject alongside refreshDepChecks. Reuses Inspect for each entry's resolved
-// install path.
-func (c *Ctx) refreshGitChecks() {
+// loadProject alongside refreshDepChecks, reusing the shared inspected statuses.
+func (c *Ctx) refreshGitChecks(statuses []addon.Status) {
 	checks := make(map[string]bool)
-	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
 	for _, s := range statuses {
 		if s.Addon.IsGitWorkdir() && s.Present() && addon.HasUncommittedChanges(s.FullPath) {
 			checks[s.Addon.Name] = true
@@ -115,17 +118,17 @@ func (c *Ctx) refreshGitChecks() {
 	c.GitDirty = checks
 }
 
-// refreshDepChecks recomputes each addon's unsatisfied dependencies against the
-// freshly loaded manifest. Local-only and cheap (reads small plugin.cfg files), so
-// it rides every loadProject rather than needing its own async pass.
-func (c *Ctx) refreshDepChecks() {
-	checks := make(map[string][]addon.Dependency)
+// refreshDepChecks recomputes each addon's declared dependencies and their install
+// state against the freshly inspected project. Local-only and cheap (reads small
+// plugin.cfg files), so it rides every loadProject rather than needing its own async pass.
+func (c *Ctx) refreshDepChecks(statuses []addon.Status) {
+	checks := make(map[string][]addon.DepStatus)
 	for _, a := range c.ProjectAddons {
-		if missing, err := addon.MissingDeps(a, c.ProjectRoot, c.ProjectAddons); err == nil && len(missing) > 0 {
-			checks[a.Name] = missing
+		if ds, err := addon.DepStatuses(a, c.ProjectRoot, statuses); err == nil && len(ds) > 0 {
+			checks[a.Name] = ds
 		}
 	}
-	c.DepChecks = checks
+	c.DepStatuses = checks
 }
 
 // RefreshAll broadcasts the four Dirty markers so every cached tab root reloads from

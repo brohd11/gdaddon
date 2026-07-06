@@ -110,6 +110,20 @@ func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) co
 	return components.Item{Name: name, Desc: addonDesc(s), Pick: pick, Keys: keys}
 }
 
+// depsNeedAttention reports whether any declared dependency still needs the user's
+// action: not suppressed and not yet installed-and-satisfying (missing from the
+// manifest, in the manifest but not on disk, or installed but outdated). It's what
+// drives the "missing deps" row marker, so the warning persists until every
+// non-suppressed dep is actually installed.
+func depsNeedAttention(statuses []addon.DepStatus) bool {
+	for _, ds := range statuses {
+		if !ds.Suppressed && ds.State != addon.DepInstalled {
+			return true
+		}
+	}
+	return false
+}
+
 // rowMarker builds the combined name suffix from the update, branch-drift,
 // dependency, and git-dirty checks, e.g. "  ⚠ [update]", "  ⚠ [branch changed]", or
 // "  ⚠ [missing deps / uncommitted changes]". Empty when the addon is current, on its
@@ -158,7 +172,7 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 		rows[i] = rowData{
 			s:      s,
 			update: c.UpdateChecks[s.Addon.Name].State == addon.UpdateAvailable,
-			deps:   len(c.DepChecks[s.Addon.Name]) > 0,
+			deps:   depsNeedAttention(c.DepStatuses[s.Addon.Name]),
 			dirty:  c.GitDirty[s.Addon.Name],
 		}
 	}

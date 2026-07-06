@@ -60,10 +60,10 @@ type KeyMap struct {
 // Up/Down) to rebind everywhere at once. ctrl+c stays a hard-coded hard-quit in
 // the router and is intentionally not represented here.
 var Keys = KeyMap{
-	Up:    key.NewBinding(key.WithKeys("up", "k", "w")),
-	Down:  key.NewBinding(key.WithKeys("down", "j", "s")),
-	Left:  key.NewBinding(key.WithKeys("left", "h", "a")),
-	Right: key.NewBinding(key.WithKeys("right", "l", "d")),
+	Up:    key.NewBinding(key.WithKeys("up", "k")),
+	Down:  key.NewBinding(key.WithKeys("down", "j")),
+	Left:  key.NewBinding(key.WithKeys("left", "h")),
+	Right: key.NewBinding(key.WithKeys("right", "l")),
 
 	Select: key.NewBinding(key.WithKeys("enter", "e")),
 	Back:   key.NewBinding(key.WithKeys("esc", "backspace", "c")),

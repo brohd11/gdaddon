@@ -65,7 +65,8 @@ manifest entry with stable snake_case keys: `name`, `state`
 (array of `{repo_id, tag, url}`). Always valid JSON (`[]` when empty). Everything is
 local/instant except `update`/`latest_tag`, which stay `"unknown"` unless
 `--check-updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`).
-`missing_deps` comes from `addon.MissingDeps` (local).
+`missing_deps` comes from `addon.MissingDeps` (local; deps absent from the manifest,
+excluding any the declaring entry's `suppress_deps` ignores).
 
 ### `repos` subcommand
 
@@ -99,6 +100,7 @@ my_addon:
   version: "1.2.3"                     # optional; skips install if already matches plugin.cfg
   tag: "v1.2.3"                        # optional; the release tag installed from (what dependency specs match)
   commit: "abc1234…"                   # optional; a branch package pinned to this HEAD sha (url is that commit's archive)
+  suppress_deps: ["owner/repo"]        # optional; declared deps (canonical repo-ids) to ignore in the warning / "Add all"
 ```
 
 A git **branch** install offers two modes (TUI confirm): **Clone** (default —
@@ -115,11 +117,24 @@ branch-HEAD archive with no commit recorded — regen sources.yml to pick up new
 
 An installed addon may declare its own dependencies in its `plugin.cfg`
 (`deps=["owner/repo@v1.0.0", "owner/repo"]` — host defaults to github.com,
-tag optional). The per-addon **Get dependencies** TUI action reads them and adds the
-missing ones to the manifest (tag-pinned, or repo-only when tagless) without
-installing; `Install All` then installs them. `version` (the author-controlled
-plugin.cfg version) can diverge from `tag` (the release identity), so dependency
-matching uses `tag` with semver `>=`.
+tag optional). The per-addon **Dependencies** TUI action (shown whenever the installed
+plugin declares any deps) opens a screen listing every declared dep with its
+*install-aware* status — `[installed]`/`[not installed]`/`[missing]`/`[outdated]`/
+`[suppressed]`. From it: **Add all missing** adds the manifest-absent (non-suppressed)
+deps (tag-pinned, or repo-only when tagless) without installing — `Install All` then
+installs them — a per-dep submenu adds just one, and `s` (or the submenu) **suppresses**
+a dep. Suppression persists as an inline `suppress_deps: ["owner/repo"]` list (canonical
+repo-ids) on the *declaring* plugin's manifest entry, written by `addon.SetSuppressDeps`
+(same single-line writer as `lock`/`commit`); a suppressed dep never contributes to the
+warning nor is added by "Add all". `version` (the author-controlled plugin.cfg version)
+can diverge from `tag` (the release identity), so dependency matching uses `tag` with
+semver `>=`.
+
+The "missing deps" row marker now stays until a declared (non-suppressed) dep is
+actually *installed*, not merely present in the manifest: `addon.MissingDeps` is the
+manifest-presence subset (what "Add all" adds), while `addon.DepStatuses` (backed by the
+inspected project) is the install-aware form that drives the warning and the
+Dependencies screen (cached as `appctx.Ctx.DepStatuses`).
 
 An addon may also declare an installer-specific `dir="addons/x"` key in its
 `plugin.cfg`/`version.cfg` (project-root-relative). The manifest stays the source of

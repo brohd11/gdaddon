@@ -282,6 +282,19 @@ func SetCommit(manifestPath, name, commit string) error {
 	return setScalarField(manifestPath, name, "commit", `commit: "`+commit+`"`, commit != "")
 }
 
+// SetSuppressDeps sets (or clears) the `suppress_deps:` line on an entry, in place. A
+// non-empty id list inserts/updates an inline flow list `suppress_deps: ["a/b", "c/d"]`;
+// an empty list removes any existing line (the minimal, absent-means-none default). Ids
+// are canonical source.RepoID values (the same identity MissingDeps/DepStatuses match on).
+func SetSuppressDeps(manifestPath, name string, ids []string) error {
+	quoted := make([]string, len(ids))
+	for i, id := range ids {
+		quoted[i] = `"` + id + `"`
+	}
+	field := "suppress_deps: [" + strings.Join(quoted, ", ") + "]"
+	return setScalarField(manifestPath, name, "suppress_deps", field, len(ids) > 0)
+}
+
 // RemoveEntry deletes a manifest entry — its key line and the indented block
 // beneath it — in place, leaving every other entry byte-for-byte intact. It uses
 // the same flat-shape block detection as UpdateEntry, so it works on the project

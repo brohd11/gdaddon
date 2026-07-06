@@ -70,13 +70,14 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return toggleLock(sh, st) },
 		})
 	}
-	// Offered only when the addon is installed and actually has unsatisfied deps
-	// (the cached check), so a fully-satisfied addon doesn't show a no-op action.
-	if a.URL != "" && st.Present() && len(c.DepChecks[a.Name]) > 0 {
+	// Offered whenever the installed addon declares any dependencies (a stable
+	// inspection point that stays put once they're resolved), opening the Dependencies
+	// screen: per-dep install status, add, and suppress.
+	if a.URL != "" && st.Present() && len(c.DepStatuses[a.Name]) > 0 {
 		items = append(items, components.Item{
-			Name: "⛓ Get dependencies",
-			Desc: "add this plugin's missing dependencies to the manifest (Install All to install)",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newGetDepsLoading(st, sh)) },
+			Name: "⛓ Dependencies",
+			Desc: "view this plugin's dependencies and their install status",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newDepsScreen(st, sh)) },
 		})
 	}
 	if !submodule && a.URL != "" && !st.InGlobal(c.GlobalAddons) {

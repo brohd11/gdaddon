@@ -83,6 +83,11 @@ type Addon struct {
 	// and install/update reinstalls the pinned version rather than offering newer
 	// releases. The user toggles it per-entry; it carries through set import/export.
 	Lock bool `yaml:"lock"`
+	// SuppressDeps lists (by source.RepoID) the dependencies this addon declares that
+	// the user has chosen to ignore — an optional dep (e.g. a C++-rewritten perf
+	// module) that should never contribute to the missing-deps warning nor be added by
+	// "Add all missing". Stored as an inline flow list on the declaring addon's entry.
+	SuppressDeps []string `yaml:"suppress_deps"`
 }
 
 // IsLocked reports whether the entry is pinned (no update alerts, install/update
