@@ -19,12 +19,19 @@ func (stubScreen) HelpView(*Shared) string   { return "" }
 func (stubScreen) SetSize(*Shared, int, int) {}
 func (stubScreen) Filtering() bool           { return false }
 
-// fakeOutput is a minimal core.Output (plus the Log capability) for exercising the
-// router's output key/layout plumbing without importing components (core ←
-// components forbids it).
+// filterScreen is a stubScreen that reports it is capturing filter text, so a key the
+// router would otherwise consume globally must pass through to it instead.
+type filterScreen struct{ stubScreen }
+
+func (filterScreen) Filtering() bool { return true }
+
+// fakeOutput is a minimal core.Output (plus the Log and Wrapper capabilities) for
+// exercising the router's output key/layout plumbing without importing components
+// (core ← components forbids it).
 type fakeOutput struct {
 	logs  []string
 	shown bool
+	wrap  bool
 }
 
 func (f *fakeOutput) Log(s string, show bool) { f.logs = append(f.logs, s); f.shown = show }
@@ -37,6 +44,25 @@ func (f *fakeOutput) Height() int             { return 0 }
 func (f *fakeOutput) View(bool) string        { return "OUT" }
 func (f *fakeOutput) Update(tea.Msg) tea.Cmd  { return nil }
 func (f *fakeOutput) GotoBottom()             {}
+func (f *fakeOutput) ToggleWrap()             { f.wrap = !f.wrap }
+func (f *fakeOutput) Wrapped() bool           { return f.wrap }
+
+// plainOutput is an Output that does NOT implement Wrapper (no embedding — promoted
+// methods would satisfy the interface): the Wrap key must pass through to the screen.
+type plainOutput struct {
+	shown bool
+}
+
+func (p *plainOutput) Log(_ string, show bool) { p.shown = show }
+func (p *plainOutput) Shown() bool             { return p.shown }
+func (p *plainOutput) Toggle()                 { p.shown = !p.shown }
+func (p *plainOutput) Hide()                   { p.shown = false }
+func (p *plainOutput) Clear()                  { p.shown = false }
+func (p *plainOutput) SetSize(_, _ int)        {}
+func (p *plainOutput) Height() int             { return 0 }
+func (p *plainOutput) View(bool) string        { return "OUT" }
+func (p *plainOutput) Update(tea.Msg) tea.Cmd  { return nil }
+func (p *plainOutput) GotoBottom()             {}
 
 // fakeStatus is a minimal core.Status for exercising the router's status rendering and
 // auto-clear plumbing without importing components.
@@ -153,6 +179,58 @@ func TestOutputToggle(t *testing.T) {
 	if !out.Shown() {
 		t.Fatal("o should show the output box again")
 	}
+}
+
+// TestOutputWrapKey checks the w key flips the pane's render mode from any screen —
+// the pane need not hold focus (it is a global chrome key like o) — and that it is a
+// plain toggle.
+func TestOutputWrapKey(t *testing.T) {
+	tm := sized(newCoreTestRouter())
+	sh := tm.(Router).sh
+	out := sh.Chrome.Output.(*fakeOutput)
+	sh.Log("hello")
+
+	tm = pump(tm, keyMsg(Keys.Wrap.Keys()[0])) // unfocused: still consumed
+	if !out.Wrapped() {
+		t.Fatal("w should wrap the output pane without focusing it first")
+	}
+	tm = pump(tm, keyMsg(Keys.Wrap.Keys()[0]))
+	if out.Wrapped() {
+		t.Fatal("w should toggle wrap back off")
+	}
+
+	tm = pump(tm, keyMsg(Keys.ToggleOutput.Keys()[0])) // focus the pane
+	pump(tm, keyMsg(Keys.Wrap.Keys()[0]))
+	if !out.Wrapped() {
+		t.Fatal("w should wrap while the pane holds focus too")
+	}
+}
+
+// TestWrapKeyPassesThrough checks the two cases where w must NOT be swallowed: a top
+// screen capturing filter text (it is typing a literal w), and an Output that doesn't
+// implement Wrapper (nothing to toggle).
+func TestWrapKeyPassesThrough(t *testing.T) {
+	t.Run("filtering screen", func(t *testing.T) {
+		sh := NewShared(nil)
+		sh.Chrome = &Chrome{Output: &fakeOutput{}}
+		r := NewRouter(sh, []TabEntry{{Title: "Filter", New: func(*Shared) Screen { return filterScreen{} }}})
+		sh.Log("hello")
+
+		pump(sized(r), keyMsg(Keys.Wrap.Keys()[0]))
+		if sh.Chrome.Output.(*fakeOutput).Wrapped() {
+			t.Fatal("w must reach a filtering screen as a literal key, not toggle wrap")
+		}
+	})
+
+	t.Run("output without Wrapper", func(t *testing.T) {
+		sh := NewShared(nil)
+		sh.Chrome = &Chrome{Output: &plainOutput{}}
+		r := NewRouter(sh, []TabEntry{{Title: "Stub", New: func(*Shared) Screen { return stubScreen{} }}})
+		sh.Log("hello")
+
+		// The key is simply not consumed; the run must not panic on the assertion.
+		pump(sized(r), keyMsg(Keys.Wrap.Keys()[0]))
+	})
 }
 
 // maskScreen is a stub screen that claims the whole canvas via ChromeMasker.

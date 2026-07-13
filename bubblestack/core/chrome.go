@@ -146,7 +146,8 @@ func RenderBreadcrumb(crumbs []Crumb, width int) string {
 // holds focus — feeds scroll keys. The default implementation is the scrollable log
 // in components (NewLogPane); a consumer may supply its own. The router treats it
 // opaquely: logging is a separate capability (Log(string)) discovered by Shared.Log
-// via type assertion, so an Output need not be a log.
+// via type assertion, so an Output need not be a log. Wrapping (Keys.Wrap) is
+// likewise optional, discovered the same way — see Wrapper.
 type Output interface {
 	Shown() bool                       // occupies layout space when true
 	Toggle()                           // show/hide (the Output key, `o`)
@@ -158,6 +159,16 @@ type Output interface {
 	Update(msg tea.Msg) tea.Cmd        // handle a key while focused (scrolling)
 	GotoBottom()                       // pin to the newest content
 	Log(line string, forceShow bool)
+}
+
+// Wrapper is the optional second render mode an Output may offer: wrapping long lines
+// rather than letting them truncate at the pane edge, which is otherwise the only fate
+// of a line wider than the box (the viewport clips it, and there is no way to scroll
+// to the tail). The router reaches it by type assertion on Keys.Wrap — the same
+// optional-capability pattern as Shared.Log — so an Output need not implement it.
+type Wrapper interface {
+	ToggleWrap()
+	Wrapped() bool
 }
 
 // Status is the pluggable transient one-liner the router draws below the body

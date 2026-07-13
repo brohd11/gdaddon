@@ -2,10 +2,11 @@ package actions
 
 import (
 	"context"
+	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
+	"gdaddon/internal/quarantine"
 	"gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
@@ -15,7 +16,7 @@ import (
 // newDequarantineConfirm is the macOS-only Actions ▸ Dequarantine Addons flow:
 // compiled plugins arrive tagged with com.apple.quarantine, which Gatekeeper uses to
 // block their native binaries from loading. Clearing it is destructive-free but
-// deliberate, so it sits behind a confirm before the task runs xattr.
+// deliberate, so it sits behind a confirm before the task walks the tree.
 func newDequarantineConfirm(sh *core.Shared) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Dequarantine",
@@ -24,11 +25,13 @@ func newDequarantineConfirm(sh *core.Shared) *components.DialogScreen {
 	})
 }
 
-// newDequarantineTask clears com.apple.quarantine recursively over <root>/addons.
-// xattr -r already walks the whole tree, so one invocation covers every file; a
-// non-zero exit (e.g. the attribute absent on some files) is reported as info rather
-// than treated as a hard failure, so a partially-clean tree still reads as done.
+// newDequarantineTask clears com.apple.quarantine over <root>/addons via
+// quarantine.Clear, which prunes hidden dirs (an addon's .git holds read-only objects
+// that only ever answer with permission errors) and reports counts rather than a line
+// per file. Entries that refuse the removal are summarized, not treated as a hard
+// failure, so a partially-clean tree still reads as done.
 func newDequarantineTask() *components.TaskScreen {
+	cleared := 0
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		defer func() { done <- core.TaskEvent{Done: true} }()
 
@@ -39,14 +42,22 @@ func newDequarantineTask() *components.TaskScreen {
 		}
 
 		report("clearing com.apple.quarantine on %s …", addonsPath)
-		cmd := exec.CommandContext(ctx, "xattr", "-dr", "com.apple.quarantine", addonsPath)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			report("xattr finished with issues (some files may have lacked the attribute):\n%s", string(out))
+		res, err := quarantine.Clear(ctx, addonsPath)
+		cleared = res.Cleared
+		if err != nil {
+			report("stopped: %v", err)
 			return
+		}
+		report("cleared %d file(s)", res.Cleared)
+		if res.Denied > 0 {
+			report("%d path(s) skipped (permission denied)", res.Denied)
+		}
+		for _, e := range res.Errs {
+			report("failed: %s", e)
 		}
 	}
 	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		return core.SetStatusAndLog("quarantine cleared")
+		return core.SetStatusAndLog(fmt.Sprintf("quarantine cleared from %d file(s)", cleared))
 	}
 	onDismiss := func(sh *core.Shared) core.Action {
 		return core.PopTo() // back to the Actions menu

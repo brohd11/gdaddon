@@ -43,6 +43,7 @@ type KeyMap struct {
 	PrevTab      key.Binding
 	ToggleOutput key.Binding // focus/unfocus the output pane for scrolling
 	Output       key.Binding // show/hide the output box
+	Wrap         key.Binding // toggle the output pane's wrap render mode (optional Wrapper)
 	Clear        key.Binding
 	Unwind       key.Binding
 	Refresh      key.Binding // reload all views; action is consumer-supplied
@@ -76,6 +77,7 @@ var Keys = KeyMap{
 	PrevTab:      key.NewBinding(key.WithKeys("[", "z", "shift+left", "A")),
 	ToggleOutput: key.NewBinding(key.WithKeys("tab")),
 	Output:       key.NewBinding(key.WithKeys("o")),
+	Wrap:         key.NewBinding(key.WithKeys("w")),
 	Clear:        key.NewBinding(key.WithKeys("C")),
 	Unwind:       key.NewBinding(key.WithKeys("`", "r")),
 	Refresh:      key.NewBinding(key.WithKeys("u")),

@@ -42,6 +42,7 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 			core.FullHint("terminal (git)", appctx.AppKeys.Terminal),
 			core.FullHint("focus log", core.Keys.ToggleOutput),
 			core.FullHint("toggle log", core.Keys.Output),
+			core.FullHint("wrap log", core.Keys.Wrap),
 			core.FullHint("clear log", core.Keys.Clear),
 		}
 	}

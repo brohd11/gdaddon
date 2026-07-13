@@ -28,6 +28,20 @@ func (r *Router) globalKey(msg tea.KeyMsg) (Action, bool) {
 	ch := r.sh.Chrome
 	outputOn := ch != nil && ch.Output != nil
 
+	// Wrap flips the output pane's render mode from any screen (like Output/Clear),
+	// whether or not the pane holds focus — hence its place above the focused branch.
+	// It is an optional capability (Wrapper), so an Output without it never consumes
+	// the key. Filtering screens keep a literal w; a focused pane means the screen
+	// isn't reading keys anyway, so the gate doesn't apply there.
+	if outputOn && MatchKey(k, Keys.Wrap) {
+		if w, ok := ch.Output.(Wrapper); ok {
+			if f, isFilterer := r.Top().(Filterer); ch.outputFocused || !isFilterer || !f.Filtering() {
+				w.ToggleWrap()
+				return Action{}, true
+			}
+		}
+	}
+
 	// When the output pane holds focus, navigation keys scroll it; everything
 	// else either toggles back or clears.
 	if outputOn && ch.outputFocused {
