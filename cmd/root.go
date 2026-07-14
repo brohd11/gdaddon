@@ -147,21 +147,27 @@ func runList(projectRoot string) error {
 // listEntryJSON is the stable, machine-parseable shape of one addon's status,
 // emitted by `--list --json` for the GDScript side to consume.
 type listEntryJSON struct {
-	Name          string        `json:"name"`
-	State         string        `json:"state"` // missing/installed/mismatch/unversioned/branch_changed/invalid
-	Kind          string        `json:"kind"`  // package/clone/submodule
-	Path          string        `json:"path"`  // manifest-relative
-	FullPath      string        `json:"full_path"`
-	LocalVersion  string        `json:"local_version"`
-	PinnedVersion string        `json:"pinned_version"`
-	Tag           string        `json:"tag"`
-	Commit        string        `json:"commit"`      // pinned branch-package HEAD sha; "" for non-pinned entries
-	LiveBranch    string        `json:"live_branch"` // git checkout's current branch; "" for non-git entries
-	URL           string        `json:"url"`
-	Lock          bool          `json:"lock"`   // pinned: no update alerts, never bulk-updated
-	Update        string        `json:"update"` // unknown/current/available
-	LatestTag     string        `json:"latest_tag"`
-	MissingDeps   []missDepJSON `json:"missing_deps"`
+	Name          string `json:"name"`
+	State         string `json:"state"` // missing/installed/mismatch/unversioned/branch_changed/invalid
+	Kind          string `json:"kind"`  // package/clone/submodule
+	Path          string `json:"path"`  // manifest-relative
+	FullPath      string `json:"full_path"`
+	LocalVersion  string `json:"local_version"`
+	PinnedVersion string `json:"pinned_version"`
+	Tag           string `json:"tag"`
+	Commit        string `json:"commit"`      // pinned branch-package HEAD sha; "" for non-pinned entries
+	LiveBranch    string `json:"live_branch"` // git checkout's current branch; "" for non-git entries
+	URL           string `json:"url"`
+	Lock          bool   `json:"lock"`   // pinned: no update alerts, never bulk-updated
+	Update        string `json:"update"` // unknown/current/available
+	LatestTag     string `json:"latest_tag"`
+	// Ahead/Behind are a git checkout's divergence from its upstream (0 for everything
+	// else). They're read locally from the remote-tracking refs, so they cost nothing —
+	// but for the same reason they're only as current as the last `git fetch` in that
+	// checkout; gdaddon never fetches on a --list.
+	Ahead       int           `json:"ahead"`
+	Behind      int           `json:"behind"`
+	MissingDeps []missDepJSON `json:"missing_deps"`
 }
 
 // missDepJSON is one unsatisfied dependency declared by an installed addon.
@@ -217,6 +223,13 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 			update, latestTag = info.State.String(), info.LatestTag
 		}
 
+		// Divergence only means anything for a checkout that's actually on disk; everything
+		// else reports 0/0. Local read, so it needs no --check-updates gate.
+		var sync addon.GitSync
+		if s.Addon.IsGitWorkdir() && s.Present() {
+			sync = addon.GitSyncStatus(s.FullPath)
+		}
+
 		entries = append(entries, listEntryJSON{
 			Name:          s.Addon.Name,
 			State:         s.State.String(),
@@ -232,6 +245,8 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 			Lock:          s.Addon.Lock,
 			Update:        update,
 			LatestTag:     latestTag,
+			Ahead:         sync.Ahead,
+			Behind:        sync.Behind,
 			MissingDeps:   deps,
 		})
 	}

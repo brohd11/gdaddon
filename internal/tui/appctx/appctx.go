@@ -60,6 +60,14 @@ type Ctx struct {
 	// DepStatuses, recomputed synchronously in loadProject; the Project list reads it
 	// to draw the "uncommitted changes" marker.
 	GitDirty map[string]bool
+
+	// GitSync caches each present git checkout's divergence from its upstream, keyed by
+	// addon name (only checkouts that track an upstream appear). Local-only like GitDirty
+	// — it reads the remote-tracking refs git already has — so it recomputes in every
+	// loadProject. What it can't do is notice new upstream commits: those only land once
+	// the refs are updated, which is what the Project tab's fetch key (AppKeys.Fetch) is
+	// for. Until then the counts are as stale as git's own.
+	GitSync map[string]addon.GitSync
 }
 
 // New builds the context for a project root and performs the initial path scan.
@@ -95,6 +103,7 @@ func (c *Ctx) loadProject() {
 		c.ProjectAddons = nil
 		c.DepStatuses = nil
 		c.GitDirty = nil
+		c.GitSync = nil
 		return
 	}
 	c.ProjectAddons, _ = addon.Parse(c.ManifestPath)
@@ -105,17 +114,26 @@ func (c *Ctx) loadProject() {
 	c.refreshGitChecks(statuses)
 }
 
-// refreshGitChecks recomputes which present git-checkout entries (clone or submodule)
-// have a dirty working tree. Local-only (a `git status` per checkout), so it rides
-// loadProject alongside refreshDepChecks, reusing the shared inspected statuses.
+// refreshGitChecks recomputes, for every present git-checkout entry (clone or submodule),
+// whether its working tree is dirty and how far it has diverged from its upstream. Both
+// are local reads (a `git status` and a `git rev-list` per checkout, no network), so they
+// ride loadProject alongside refreshDepChecks, reusing the shared inspected statuses.
 func (c *Ctx) refreshGitChecks(statuses []addon.Status) {
-	checks := make(map[string]bool)
+	dirty := make(map[string]bool)
+	sync := make(map[string]addon.GitSync)
 	for _, s := range statuses {
-		if s.Addon.IsGitWorkdir() && s.Present() && addon.HasUncommittedChanges(s.FullPath) {
-			checks[s.Addon.Name] = true
+		if !s.Addon.IsGitWorkdir() || !s.Present() {
+			continue
+		}
+		if addon.HasUncommittedChanges(s.FullPath) {
+			dirty[s.Addon.Name] = true
+		}
+		if gs := addon.GitSyncStatus(s.FullPath); gs.Tracking {
+			sync[s.Addon.Name] = gs
 		}
 	}
-	c.GitDirty = checks
+	c.GitDirty = dirty
+	c.GitSync = sync
 }
 
 // refreshDepChecks recomputes each addon's declared dependencies and their install

@@ -20,6 +20,10 @@ const projectTitle = "Godot Addons"
 type ProjectScreen struct {
 	list list.Model
 	sort appctx.SortMode
+	// fetching marks a fetch-all pass in flight (see fetchAllCmd), so a second "f"
+	// while the first is still running doesn't fan out a duplicate set of fetches.
+	// Cleared when its fetchDone arrives.
+	fetching bool
 }
 
 var _ core.Filterer = (*ProjectScreen)(nil)
@@ -40,6 +44,7 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 			core.FullHint("select", core.Keys.Select),
 			core.FullHint("sort", appctx.AppKeys.Sort),
 			core.FullHint("terminal", appctx.AppKeys.Terminal),
+			core.FullHint("fetch", appctx.AppKeys.Fetch),
 			core.FullHint("focus log", core.Keys.ToggleOutput),
 			core.FullHint("toggle log", core.Keys.Output),
 			core.FullHint("wrap log", core.Keys.Wrap),
@@ -56,12 +61,26 @@ func (s *ProjectScreen) Init(sh *core.Shared) tea.Cmd { return checkUpdatesCmd(s
 func (s *ProjectScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	// "i" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
-	// Gated behind the filter guard so it doesn't hijack filter typing.
-	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
-		appctx.CycleSort(&s.list, &s.sort, projectSortModes, projectTitle,
-			func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })
-		return s, core.Action{}
+	// The tab's own keys, gated behind the filter guard so they don't hijack filter typing.
+	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() {
+		switch {
+		// "i" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
+		case core.MatchKey(k.String(), appctx.AppKeys.Sort):
+			appctx.CycleSort(&s.list, &s.sort, projectSortModes, projectTitle,
+				func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })
+			return s, core.Action{}
+		// "f" git-fetches every project checkout so the ahead/behind markers can see new
+		// upstream commits. Network-bound, hence explicit — it never runs on its own.
+		case core.MatchKey(k.String(), appctx.AppKeys.Fetch):
+			if s.fetching {
+				return s, core.SetStatus("fetch already running")
+			}
+			s.fetching = true
+			return s, core.Seq(
+				core.SetStatus("fetching git checkouts…"),
+				core.Async(fetchAllCmd(sh)),
+			)
+		}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
@@ -93,6 +112,28 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 	case updateChecksReady:
 		appctx.Of(sh).SetUpdateChecks(p.checks)
 		s.list.SetItems(projectListItems(sh, s.sort))
+	case gitRefresh:
+		// A git operation (pull/push/commit/single-repo fetch) changed a checkout: recompute
+		// the local git state so the dirty / ahead / behind markers settle. Local-only, so
+		// unlike ProjectDirty it doesn't re-fire the network update check.
+		appctx.Of(sh).RefreshProject()
+		s.list.SetItems(projectListItems(sh, s.sort))
+	case fetchDone:
+		// The refs are now current, so re-inspecting recomputes each checkout's ahead/behind
+		// (RefreshProject → refreshGitChecks) and the markers appear. Logging here — rather
+		// than from the cmd — keeps Shared on the UI thread; a plain ProjectDirty would also
+		// work but would re-fire the network-bound update check for no reason.
+		s.fetching = false
+		for _, r := range p.results {
+			sh.Log(fetchLine(r))
+		}
+		appctx.Of(sh).RefreshProject()
+		s.list.SetItems(projectListItems(sh, s.sort))
+		if len(p.results) == 0 {
+			return core.SetStatus("no git checkouts to fetch")
+		}
+		line, failed := fetchSummary(p.results)
+		return core.SetStatusAndLog(line, failed) // force the log open only to show a failure's reason
 	}
 	return core.Action{}
 }

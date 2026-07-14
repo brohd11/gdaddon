@@ -85,11 +85,11 @@ func addonDesc(s addon.Status) string {
 	return desc
 }
 
-// addonItem builds one browse row. A non-installable addon gets a nil Pick (an
-// inert row), which replaces the old Installable() gate in the screen's Update.
-// upd is the cached update-check result and missingDeps whether the addon has
-// unsatisfied dependencies; rowMarker decorates the name from both.
-func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) components.Item {
+// addonItem builds one browse row from its rowData — the inspected status plus the cached
+// warning flags rowMarker decorates the name with. A non-installable addon gets a nil Pick
+// (an inert row), which replaces the old Installable() gate in the screen's Update.
+func addonItem(r rowData) components.Item {
+	s := r.s
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
@@ -106,8 +106,7 @@ func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) co
 			return core.Action{}, false
 		}
 	}
-	name := s.Addon.Name + rowMarker(upd, missingDeps, dirty, s.State == addon.StateBranchChanged)
-	return components.Item{Name: name, Desc: addonDesc(s), Pick: pick, Keys: keys}
+	return components.Item{Name: s.Addon.Name + rowMarker(r), Desc: addonDesc(s), Pick: pick, Keys: keys}
 }
 
 // depsNeedAttention reports whether any declared dependency still needs the user's
@@ -124,22 +123,30 @@ func depsNeedAttention(statuses []addon.DepStatus) bool {
 	return false
 }
 
-// rowMarker builds the combined name suffix from the update, branch-drift,
-// dependency, and git-dirty checks, e.g. "  ⚠ [update]", "  ⚠ [branch changed]", or
-// "  ⚠ [missing deps / uncommitted changes]". Empty when the addon is current, on its
-// recorded branch, its deps are satisfied, and (for a clone) its working tree is clean.
-func rowMarker(upd addon.UpdateInfo, missingDeps, dirty, branchChanged bool) string {
+// rowMarker builds the combined name suffix from every warning the row carries — update,
+// branch drift, upstream divergence, dependencies, git-dirty — e.g. "  ⚠ [update]",
+// "  ⚠ [behind origin 3]", or "  ⚠ [ahead 2 / uncommitted changes]". Empty when the addon
+// is current, on its recorded branch, in sync with its upstream, its deps are satisfied,
+// and (for a checkout) its working tree is clean. The ahead/behind counts are as fresh as
+// the last fetch (see appctx.Ctx.GitSync).
+func rowMarker(r rowData) string {
 	var parts []string
-	if upd.State == addon.UpdateAvailable {
+	if r.update {
 		parts = append(parts, "update")
 	}
-	if branchChanged {
+	if r.s.State == addon.StateBranchChanged {
 		parts = append(parts, "branch changed")
 	}
-	if missingDeps {
+	if r.sync.Behind > 0 {
+		parts = append(parts, fmt.Sprintf("behind origin %d", r.sync.Behind))
+	}
+	if r.sync.Ahead > 0 {
+		parts = append(parts, fmt.Sprintf("ahead %d", r.sync.Ahead))
+	}
+	if r.deps {
 		parts = append(parts, "missing deps")
 	}
-	if dirty {
+	if r.dirty {
 		parts = append(parts, "uncommitted changes")
 	}
 	if len(parts) == 0 {
@@ -157,9 +164,10 @@ var projectSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse, a
 // not just install state — and built from one value.
 type rowData struct {
 	s      addon.Status
-	update bool // a newer release exists (UpdateAvailable; excludes locked/current/unknown)
-	deps   bool // has unsatisfied dependencies
-	dirty  bool // git checkout has uncommitted changes
+	update bool          // a newer release exists (UpdateAvailable; excludes locked/current/unknown)
+	deps   bool          // has unsatisfied dependencies
+	dirty  bool          // git checkout has uncommitted changes
+	sync   addon.GitSync // git checkout's divergence from its upstream, as of the last fetch
 }
 
 // projectListItems builds the browse list contents: one row per addon, decorated
@@ -174,12 +182,13 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 			update: c.UpdateChecks[s.Addon.Name].State == addon.UpdateAvailable,
 			deps:   depsNeedAttention(c.DepStatuses[s.Addon.Name]),
 			dirty:  c.GitDirty[s.Addon.Name],
+			sync:   c.GitSync[s.Addon.Name],
 		}
 	}
 	sortRows(rows, mode)
 	items := make([]list.Item, len(rows))
 	for i, r := range rows {
-		items[i] = addonItem(r.s, c.UpdateChecks[r.s.Addon.Name], r.deps, r.dirty)
+		items[i] = addonItem(r)
 	}
 	return items
 }
@@ -214,9 +223,11 @@ const (
 	rankMissing     = iota // not installed
 	rankMismatch           // installed version != pinned
 	rankBranch             // git checkout on a different branch than recorded
+	rankBehind             // git checkout behind its upstream — there's something to pull
 	rankUpdate             // a newer release is available
 	rankDeps               // unsatisfied dependencies
 	rankDirty              // uncommitted changes in a git checkout
+	rankAhead              // unpushed local commits — informational, nothing is broken
 	rankUnversioned        // installed, no version pinned
 	rankInstalled          // installed and clean
 	rankInvalid            // broken entry (missing url/path)
@@ -241,6 +252,9 @@ func attentionRank(r rowData) int {
 		return rankInvalid
 	}
 	// Warnings raise urgency (lower the number) but never lower it.
+	if r.sync.Behind > 0 && rankBehind < base {
+		base = rankBehind
+	}
 	if r.update && rankUpdate < base {
 		base = rankUpdate
 	}
@@ -249,6 +263,9 @@ func attentionRank(r rowData) int {
 	}
 	if r.dirty && rankDirty < base {
 		base = rankDirty
+	}
+	if r.sync.Ahead > 0 && rankAhead < base {
+		base = rankAhead
 	}
 	return base
 }

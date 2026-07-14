@@ -9,6 +9,7 @@ import "github.com/charmbracelet/bubbles/key"
 type appKeyMap struct {
 	Sort     key.Binding // cycle a data list's sort order (Project/Global/Archive)
 	Terminal key.Binding // open a terminal at an installed addon's install path (Project)
+	Fetch    key.Binding // git-fetch every project git checkout, refreshing its ahead/behind (Project)
 }
 
 // AppKeys is the active custom keymap. Edit a WithKeys list here to rebind; the
@@ -16,4 +17,5 @@ type appKeyMap struct {
 var AppKeys = appKeyMap{
 	Sort:     key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "sort")),
 	Terminal: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "terminal")),
+	Fetch:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fetch")),
 }

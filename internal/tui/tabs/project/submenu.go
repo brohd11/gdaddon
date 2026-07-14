@@ -36,6 +36,16 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return updateBranchRecord(sh, st) },
 		})
 	}
+	// A present checkout (clone or submodule) gets the git command hub: status, fetch, pull,
+	// push, commit. A submodule qualifies — it's a real checkout you develop in; only
+	// gdaddon's *install* actions are meaningless for one.
+	if a.IsGitWorkdir() && st.Present() {
+		items = append(items, components.Item{
+			Name: "⎇ Git",
+			Desc: "status, fetch, pull, push, commit",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newGitSubmenu(st, sh)) },
+		})
+	}
 	if !submodule {
 		items = append(items, components.Item{
 			Name: "↧ Install / update",

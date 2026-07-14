@@ -61,10 +61,14 @@ manifest entry with stable snake_case keys: `name`, `state`
 `tag`, `commit` (a branch package's pinned HEAD sha; `""` otherwise), `live_branch`
 (a git checkout's current branch; `""` for non-git entries), `url`,
 `lock` (bool; version-pinned, no update alerts),
-`update` (`unknown`/`current`/`available`), `latest_tag`, `missing_deps`
+`update` (`unknown`/`current`/`available`), `latest_tag`,
+`ahead`/`behind` (a git checkout's divergence from its upstream; `0` otherwise),
+`missing_deps`
 (array of `{repo_id, tag, url}`). Always valid JSON (`[]` when empty). Everything is
 local/instant except `update`/`latest_tag`, which stay `"unknown"` unless
 `--check-updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`).
+`ahead`/`behind` are local too — they read the remote-tracking refs git already has — so
+they're only as current as that checkout's last `git fetch`; a `--list` never fetches.
 `missing_deps` comes from `addon.MissingDeps` (local; deps absent from the manifest,
 excluding any the declaring entry's `suppress_deps` ignores).
 
@@ -162,7 +166,7 @@ cmd/
   repos.go           — the `repos` subcommand: run a shell command in every nested git repo (uses addon.FindGitRepos / addon.HasUncommittedChanges)
   paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
 internal/
-  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), nested-repo walk (FindGitRepos) + dirty check (HasUncommittedChanges), ~/.gdaddon global list
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), git checkouts (read-only in gitscan.go: FindGitRepos, HasUncommittedChanges, GitSyncStatus, GitChanges, GitFetch/FetchAll; mutating/streaming in gitops.go: GitStream + GitStatus/GitPull/GitPush/GitCommit), ~/.gdaddon global list
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
   archive/           — local package archive (~/.gdaddon/archive or config/config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, theme, last search source — Load) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
@@ -244,6 +248,34 @@ so their output is untouched.
 Key packages/functions:
 - `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing. For git checkouts (clone/submodule) it reads the live checked-out branch (`gitCheckedOutBranch`, exposed on `Status.LiveBranch`) and reports `StateBranchChanged` when it differs from the recorded `tag` — branch drift, reconciled by re-recording the tag via the per-addon **Update branch record** action. A present git checkout is never touched by `Install All` (it skips clones/submodules whether unversioned or drifted).
 - `addon.Install` / `addon.InstallAll` — fetch (`.zip` download / `.git` clone / **local `.zip` path** for archived packages), derive the install dir from the package's `plugin.cfg`/`version.cfg` (`internal/addon/cfg.go`), and report progress via a callback. `Install` returns the resolved path+version. Both take a leading `ctx context.Context` (as do `UpdateAll`/`InstallAllDeps`) — cancelling it aborts the in-flight download/clone (HTTP request + `git clone` are context-bound), which is how the TUI's task-abort works.
+- `addon.GitSyncStatus` / `addon.GitFetch` / `addon.FetchAll` (gitscan.go) — a git checkout's
+  divergence from its upstream (`GitSync{Ahead, Behind, Tracking}`), a ctx-bound `git fetch`,
+  and the fan-out that fetches every present clone/submodule in an inspected manifest. The
+  split matters: **`GitSyncStatus` is a local read** of the remote-tracking refs git already
+  has (a `git rev-list`, same cost class as `HasUncommittedChanges`), so it rides the
+  synchronous `appctx.Ctx.refreshGitChecks` pass next to `GitDirty` and populates `Ctx.GitSync`
+  on every refresh — but it can only *see* new upstream commits after a fetch. **`GitFetch` is
+  the only network call**, so it's bound to an explicit key (Project tab `f` →
+  `tabs/project/fetch.go`, an async cmd broadcasting `fetchDone`, mirroring `checkUpdatesCmd`)
+  and never runs on its own. Both `GitFetch` and the clone paths set `GIT_TERMINAL_PROMPT=0`
+  so a repo with uncached credentials fails fast instead of hanging the TUI on an invisible
+  auth prompt. The counts surface as the `behind origin N` / `ahead N` row markers alongside
+  `uncommitted changes`; behind-ness is a *flag*, not an `addon.State` (a checkout can be
+  behind, dirty, and branch-drifted at once).
+- `addon.GitStream` / `GitStatus` / `GitPull` / `GitPush` / `GitCommit` (gitops.go) — the git
+  operations behind the per-addon **Git** submenu (`tabs/project/git.go`: status, fetch, pull,
+  push, commit — a `components.NewStayTask` per op, streaming git's output to the log via
+  `Reporter`, then broadcasting `gitRefresh` so the row markers settle). `GitStream` is the
+  primitive: it runs git with `gitEnv()` (`GIT_TERMINAL_PROMPT=0` + `GIT_EDITOR=true`, so git
+  can never sit waiting for input a TUI can't give) and relays stdout+stderr through a
+  `lineWriter` that breaks on `\r` as well as `\n` (git's progress output is CR-delimited).
+  **This is not a git client**: `GitPull` is `--ff-only`, so a diverged branch aborts having
+  changed nothing rather than leaving a conflicted tree behind the TUI, and every failure
+  routes the user to a real terminal. **`GitCommit`'s `stageAll` is load-bearing**: `commit -a`
+  stages only *tracked* files, so a newly created file is silently left out — the commit form
+  makes the user pick (`-a` vs a leading `add -A`), and the confirm (`commitBody`) lists what
+  will be committed *and* names the untracked files that won't. `addon.GitChanges` (gitscan.go,
+  read-only) parses `status --porcelain` for that screen.
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` write single scalar lines the same way (empty value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha.
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails). A commit-pinned branch package is stored under `<branch>@<sha>` (so distinct commits of the same branch don't overwrite), and `parseArchiveTag` recovers the branch + `Asset.Commit` pin when the archive is listed back.

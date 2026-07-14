@@ -72,6 +72,35 @@ func TestSortStatusWarnings(t *testing.T) {
 	}
 }
 
+// TestSortStatusGitSync proves upstream divergence factors into the status sort the way
+// the workflow wants it: a checkout with something to pull outranks even an available
+// release update, while unpushed local commits are informational and sink below a dirty
+// tree (nothing is broken — you just haven't pushed).
+func TestSortStatusGitSync(t *testing.T) {
+	withSync := func(name string, ahead, behind int) rowData {
+		r := row(name, addon.StateUnversioned)
+		r.sync = addon.GitSync{Ahead: ahead, Behind: behind, Tracking: true}
+		return r
+	}
+	hasUpdate := row("hasUpdate", addon.StateInstalled)
+	hasUpdate.update = true
+	dirty := row("dirty", addon.StateInstalled)
+	dirty.dirty = true
+
+	rows := []rowData{
+		withSync("inSync", 0, 0),
+		withSync("ahead", 2, 0),
+		dirty,
+		hasUpdate,
+		withSync("behind", 0, 3),
+	}
+	sortRows(rows, appctx.SortStatus)
+	want := []string{"behind", "hasUpdate", "dirty", "ahead", "inSync"}
+	if !eq(names(rows), want) {
+		t.Errorf("status w/ git sync = %v, want %v", names(rows), want)
+	}
+}
+
 // TestAttentionRankLocked proves a locked entry (never UpdateAvailable) is not lifted
 // by an update — it stays in the installed tier.
 func TestAttentionRankLocked(t *testing.T) {
