@@ -4,6 +4,7 @@ package tui
 import (
 	"gdaddon/internal/config"
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/docs"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/archive"
 	"gdaddon/internal/tui/tabs/global"
@@ -13,12 +14,17 @@ import (
 
 	"github.com/brohd11/bubblestack"
 	"github.com/brohd11/bubblestack/components"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Run wires the tabs and blocks until the user quits. Tab roots are built lazily by
 // the router (after the theme is applied), so each tab reads its own state when
 // constructed; nothing is inspected here.
-func Run(projectRoot, version string) error {
+//
+// firstRun (gdaddon had to create ~/.gdaddon) adds the docs welcome popup to the
+// startup hook — the one moment we know the user has never seen the tool.
+func Run(projectRoot, version string, firstRun bool) error {
 	theme := "mono"
 	if cfg, err := config.Load(); err == nil && cfg.CurrentTheme != "" {
 		theme = cfg.CurrentTheme
@@ -29,7 +35,13 @@ func Run(projectRoot, version string) error {
 		Output: components.NewLogPane(),
 		Status: components.NewStatusLine(),
 		Theme:  theme,
-		Init:   appctx.SelfUpdateCheckCmd,
+		Init: func(sh *bubblestack.Shared) tea.Cmd {
+			cmds := []tea.Cmd{appctx.SelfUpdateCheckCmd(sh)}
+			if firstRun {
+				cmds = append(cmds, docs.WelcomeCmd())
+			}
+			return tea.Batch(cmds...)
+		},
 		RefreshAction: func(sh *bubblestack.Shared) bubblestack.Action {
 			return appctx.RefreshAll()
 		},

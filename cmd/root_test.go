@@ -63,3 +63,21 @@ func TestDiscoverManifestMissing(t *testing.T) {
 		t.Error("expected an error when no manifest exists under the root")
 	}
 }
+
+// TestIsFirstRun covers the onboarding trigger: gdaddon has never run when ~/.gdaddon
+// is absent. runRoot must sample it *before* config.Ensure creates the directory, so
+// this is only ever true on the very first launch.
+func TestIsFirstRun(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if !isFirstRun() {
+		t.Error("no ~/.gdaddon should read as a first run")
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".gdaddon"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if isFirstRun() {
+		t.Error("an existing ~/.gdaddon should not read as a first run")
+	}
+}

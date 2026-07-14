@@ -55,6 +55,11 @@ func Execute() {
 // (--install) or launches the TUI (default). The manifest is discovered under the root
 // (by runInstall here, or the TUI context's scan).
 func runRoot(cmd *cobra.Command, args []string) error {
+	// Sampled before Ensure creates it: no ~/.gdaddon means the user has never run
+	// gdaddon, which is when the TUI offers the docs. (Ensure's created-paths return
+	// would also fire for someone who merely deleted one config file.)
+	firstRun := isFirstRun()
+
 	// Dump the default config files on first run so they're the editable source
 	// of truth (config.yml: archive dir/theme; sources.yml: search/vcs rules). A
 	// failure here is non-fatal.
@@ -81,7 +86,17 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	case updateFlag:
 		return runUpdate(projectRoot)
 	}
-	return tui.Run(projectRoot, version)
+	return tui.Run(projectRoot, version, firstRun)
+}
+
+// isFirstRun reports whether ~/.gdaddon is absent. Call it before config.Ensure.
+func isFirstRun() bool {
+	dir, err := config.Dir()
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(dir)
+	return os.IsNotExist(err)
 }
 
 // discoverManifest finds the manifest under the project root, returning a helpful

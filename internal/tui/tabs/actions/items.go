@@ -4,6 +4,7 @@ import (
 	"runtime"
 
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/docs"
 	"gdaddon/internal/tui/flows/newplugin"
 
 	"github.com/brohd11/bubblestack/components"
@@ -65,6 +66,12 @@ func actionItems(sh *core.Shared) []list.Item {
 		Pick: func(sh *core.Shared) core.Action { return core.Push(newThemePicker()) },
 	},
 	)
+
+	items = append(items, components.Item{
+		Name: "? Docs",
+		Desc: "getting started, manifest format, dependencies, config",
+		Pick: func(sh *core.Shared) core.Action { return core.Push(docs.Index()) },
+	})
 
 	items = append(items, components.Item{
 		Name: "⟲ Update gdaddon",

@@ -66,8 +66,10 @@
 //	flows/…      shared, domain-aware flow screens composed by more than one tab
 //	             (so they can't live in any single tab without a cross-tab import):
 //	             e.g. flows/newplugin, the Add Plugin form+confirm used by both the
-//	             Actions and Search tabs. Unlike components these DO name domain
-//	             types; they sit between components and tabs.
+//	             Actions and Search tabs, or flows/docs, the embedded manual reached
+//	             from the Actions tab and from this package's first-run welcome popup.
+//	             Unlike components these DO name domain types; they sit between
+//	             components and tabs.
 //	tabs/…       one package per top-level tab (the domain): its root screen, its
 //	             flow screens, and the builders that wire components to features
 //	             (e.g. a tab defines its own newInstallConfirm rather than confirm

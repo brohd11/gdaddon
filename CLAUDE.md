@@ -167,10 +167,10 @@ internal/
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
-    flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin)
+    flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin, docs)
 bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd11/bubblestack, replace => ./bubblestack); imports no gdaddon package
   core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask; plus a router-drawn breadcrumb bar under the tab strip, built each frame from the live stack via the optional Crumber interface — CrumbLabel(short bool) — and RenderBreadcrumb), Router over a screen stack, nav commands that return a core.Action (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, core.Action): Action bundles a control Msg the router applies synchronously and an async Cmd; Async wraps a cmd-only Action, the zero Action is a no-op) + optional interfaces (incl. Overlayer — a popup drawn over the screen below it; Composite/PopupBox in overlay.go do the ANSI-aware compositing), router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
-  components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, DialogScreen (a confirm box, or a modal overlay when its Overlay flag is set — composited by core.PopupBox), LoadingScreen, TaskScreen, FormScreen; LogPane = default core.Output, with a wrap render mode (`w`, via the optional core.Wrapper capability) that folds long lines the viewport would otherwise clip at the pane edge) — they name no domain type. TaskScreen (streaming work) and LoadingScreen (fetch spinner) each own a context.WithCancel and let esc abort the in-flight work — their work closures (TaskScreen's RunFunc, LoadingScreen's Run) take that ctx as their first arg, so a cancellable closure threads it into its network/process call
+  components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, DialogScreen (a confirm box, or a modal overlay when its Overlay flag is set — composited by core.PopupBox), LoadingScreen, TaskScreen, FormScreen, DocScreen (a scrollable read-only text page: a viewport under an optional title bar, its body supplied by a `Render(width) string` closure re-run on resize, so the caller owns formatting and DocScreen owns only scrolling); LogPane = default core.Output, with a wrap render mode (`w`, via the optional core.Wrapper capability) that folds long lines the viewport would otherwise clip at the pane edge) — they name no domain type. TaskScreen (streaming work) and LoadingScreen (fetch spinner) each own a context.WithCancel and let esc abort the in-flight work — their work closures (TaskScreen's RunFunc, LoadingScreen's Run) take that ctx as their first arg, so a cancellable closure threads it into its network/process call
 ```
 
 ### TUI design goals
@@ -208,6 +208,28 @@ to the framework, and tabs never import each other. That acyclic layering — ac
 the `bubblestack` module boundary for `core`/`components` — is what lets the screens
 live in separate packages. See `internal/tui/doc.go` for the full contract and how
 to add a tab.
+
+### Docs & onboarding
+
+The manual ships inside the binary: `internal/tui/flows/docs/` embeds `pages/*.md`
+(`//go:embed`) and renders them in a `components.DocScreen`. **Adding a page is dropping
+a numbered `.md` into `pages/`** — no code change. The filename orders it (`embed.FS`
+reads sorted), its first `# ` heading is the title (breadcrumb + index row), and the
+first line under that heading is the index description. `render.go` is a deliberately
+partial markdown reader (headings / bullets / fenced code / inline code / re-flowed
+paragraphs) styled from the live theme — no renderer dependency, so pages repaint on a
+theme switch like everything else.
+
+It's a `flows/` package because two layers reach it: **Actions ▸ Docs** (`docs.Index()`)
+and `tui.Run`, which shows the first-run welcome popup. "First run" is *`~/.gdaddon` did
+not exist*, sampled by `isFirstRun` in `cmd/root.go` **before** `config.Ensure` creates it
+(`Ensure`'s created-paths return would also fire for someone who merely deleted one config
+file) and passed to `tui.Run(projectRoot, version, firstRun)`. The popup rides
+`bubblestack.Config.Init` next to `appctx.SelfUpdateCheckCmd` — `docs.WelcomeCmd` returns
+a `core.Push` as a message, which the router applies. Enter `Replace`s the popup with the
+docs index (so esc from the index lands on the tab root, not back on the popup); esc
+dismisses. Non-interactive runs (`--install`/`--list`/`--update`) return before `tui.Run`,
+so their output is untouched.
 
 Key packages/functions:
 - `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing. For git checkouts (clone/submodule) it reads the live checked-out branch (`gitCheckedOutBranch`, exposed on `Status.LiveBranch`) and reports `StateBranchChanged` when it differs from the recorded `tag` — branch drift, reconciled by re-recording the tag via the per-addon **Update branch record** action. A present git checkout is never touched by `Install All` (it skips clones/submodules whether unversioned or drifted).

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"gdaddon/internal/tui/appctx"
+	"gdaddon/internal/tui/flows/docs"
 	"gdaddon/internal/tui/flows/newplugin"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/project"
@@ -83,5 +84,42 @@ func TestTabSwitchGatedAtDepth(t *testing.T) {
 	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
 	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(core.Router).Top())
+	}
+}
+
+// TestFirstRunDocsFlow walks the onboarding path a first-run user takes: the welcome
+// popup the startup hook shows, enter into the docs index, enter into a page, then esc
+// back out. The popup Replaces itself with the index, so backing out of the index lands
+// on the tab root rather than re-showing the popup.
+func TestFirstRunDocsFlow(t *testing.T) {
+	tm := sized(newTestRouter())
+	root := tm.(core.Router).Top()
+
+	tm = pump(tm, docs.WelcomeCmd()()) // what bubblestack.Config.Init dispatches
+	if d, ok := tm.(core.Router).Top().(*components.DialogScreen); !ok || !d.IsOverlay() {
+		t.Fatalf("want the welcome popup on top, got %T", tm.(core.Router).Top())
+	}
+
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
+		t.Fatalf("enter on the popup should open the docs index, got %T", tm.(core.Router).Top())
+	}
+
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	if _, ok := tm.(core.Router).Top().(*components.DocScreen); !ok {
+		t.Fatalf("enter on a docs row should open the page, got %T", tm.(core.Router).Top())
+	}
+	if out := tm.View(); !strings.Contains(out, "Docs › Getting started") {
+		t.Errorf("breadcrumb should name the open page:\n%s", out)
+	}
+
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
+		t.Fatalf("esc on a page should return to the index, got %T", tm.(core.Router).Top())
+	}
+
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	if tm.(core.Router).Top() != root {
+		t.Fatalf("esc on the index should return to the tab root, got %T", tm.(core.Router).Top())
 	}
 }
