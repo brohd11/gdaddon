@@ -8,7 +8,7 @@ import "github.com/charmbracelet/bubbles/key"
 // rebind is a single edit here rather than hunting string literals across tabs.
 type appKeyMap struct {
 	Sort     key.Binding // cycle a data list's sort order (Project/Global/Archive)
-	Terminal key.Binding // open a terminal at a git checkout's install path (Project)
+	Terminal key.Binding // open a terminal at an installed addon's install path (Project)
 }
 
 // AppKeys is the active custom keymap. Edit a WithKeys list here to rebind; the

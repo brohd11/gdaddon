@@ -39,7 +39,7 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 		return []key.Binding{
 			core.FullHint("select", core.Keys.Select),
 			core.FullHint("sort", appctx.AppKeys.Sort),
-			core.FullHint("terminal (git)", appctx.AppKeys.Terminal),
+			core.FullHint("terminal", appctx.AppKeys.Terminal),
 			core.FullHint("focus log", core.Keys.ToggleOutput),
 			core.FullHint("toggle log", core.Keys.Output),
 			core.FullHint("wrap log", core.Keys.Wrap),

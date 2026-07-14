@@ -94,11 +94,11 @@ func addonItem(s addon.Status, upd addon.UpdateInfo, missingDeps, dirty bool) co
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
-	// A present git checkout (clone/submodule) gets a "t" shortcut to open a terminal
-	// at its install path (the framework dispatches Item.Keys for the highlighted row,
-	// see RootUpdate).
+	// Any addon present on disk (package or git checkout) gets a "t" shortcut to open
+	// a terminal at its install path (the framework dispatches Item.Keys for the
+	// highlighted row, see RootUpdate).
 	var keys func(*core.Shared, string) (core.Action, bool)
-	if s.Addon.IsGitWorkdir() && s.Present() {
+	if s.Present() {
 		keys = func(sh *core.Shared, k string) (core.Action, bool) {
 			if core.MatchKey(k, appctx.AppKeys.Terminal) {
 				return sysopen.Terminal(s.FullPath), true
