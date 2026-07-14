@@ -143,6 +143,16 @@ install dir is being *derived*, a `dir=` key overrides the default `addons/<name
 derivation (see `installDir` in cfg.go, applied by `resolveInstall` in resolve.go).
 The derived path is then recorded back into the manifest on install.
 
+Derivation preserves the package's own directory levels: a plugin folder's path
+*relative to the addons anchor* is its path under the project's `addons/`, so
+`addon_lib/my_addon/version.cfg` installs to `addons/addon_lib/my_addon`, namespace
+folder and all. The anchor is the package's `addons/` folder when it ships one, else
+the package root (a package with no `addons/` folder is assumed to *be* one). A zip's
+single top-level folder is stripped only when it's a wrapper rather than a level of
+that layout — a host-generated `repo-tag/` (by url), the addon folder itself, an asset
+pack's root, or a release asset's version-stamped `MyPlugin-1.2.3/` (see `isWrapperDir`
+in fetch.go); an unrecognized level is assumed to be the author's and kept.
+
 ## Architecture
 
 ```

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gdaddon/internal/restrule"
@@ -50,19 +51,49 @@ func fetchZip(ctx context.Context, url, addonName string, report Reporter) (stri
 		return "", "", func() {}, err
 	}
 
-	// Unwrap a single top-level folder (GitHub archives wrap content in repo-tag/).
-	// When that folder is the author's own package folder (not a synthetic
+	// Unwrap a single top-level folder when it wraps the package (GitHub archives wrap
+	// content in repo-tag/) rather than being a level of the addon layout — see
+	// isWrapperDir. When that folder is the author's own package folder (not a synthetic
 	// source-archive wrapper) its name is the addon's install dir for a path-less
 	// entry, so surface it as pkgName.
 	root, pkgName := extractDir, ""
 	if entries, err := os.ReadDir(extractDir); err == nil && len(entries) == 1 && entries[0].IsDir() {
-		root = filepath.Join(extractDir, entries[0].Name())
-		if !isSourceArchiveURL(url) {
-			pkgName = entries[0].Name()
+		if dir := filepath.Join(extractDir, entries[0].Name()); isWrapperDir(dir, url) {
+			root = dir
+			if !isSourceArchiveURL(url) {
+				pkgName = entries[0].Name()
+			}
 		}
 	}
 	return root, pkgName, cleanup, nil
 }
+
+// isWrapperDir reports whether a zip's single top-level folder wraps the package — so
+// stripping it recovers the addon layout — rather than being a real level of that
+// layout, which stripping would destroy (the namespace folder in
+// addon_lib/my_addon/version.cfg, whose install dir is addons/addon_lib/my_addon).
+//
+// The two are structurally identical (a folder holding no config of its own, with the
+// addon nested inside), so the tells are non-structural: the url says the host
+// generated the wrapper, or the folder is version-stamped the way a release asset's
+// wrapper is. Absent a tell, the folder is kept — an unrecognized level is assumed to
+// be the author's.
+func isWrapperDir(dir, url string) bool {
+	switch {
+	case isSourceArchiveURL(url):
+		return true // host-generated repo-tag/: synthetic and version-stamped
+	case hasPluginCfg(dir):
+		return true // the folder *is* the addon (script_tabs/plugin.cfg)
+	case len(pluginDirs(dir)) == 0:
+		return true // no config anywhere: an asset pack, and the folder is the pack
+	default:
+		return versionStamped.MatchString(filepath.Base(dir))
+	}
+}
+
+// versionStamped matches a release asset's version-stamped wrapper folder
+// (MyPlugin-1.2.3, foo_v2.0) and not a plain package folder (addon_lib).
+var versionStamped = regexp.MustCompile(`(^|[-_.])v?\d+(\.\d+)+`)
 
 // isSourceArchiveURL reports whether url is a host-generated source/branch archive
 // (e.g. GitHub ".../archive/refs/tags/<tag>.zip" / "…/refs/heads/<branch>.zip",

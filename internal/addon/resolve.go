@@ -90,7 +90,7 @@ func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement 
 	// folders are the plugins. Derive from those, ignoring sibling junk (docs/,
 	// .github/, README) and the GitHub wrapper name.
 	if addonsDir := findAddonsDir(stagingRoot); addonsDir != "" {
-		if ps := placementsForDirs(childDirs(addonsDir), definedPath); len(ps) > 0 {
+		if ps := placementsForDirs(addonsDir, childDirs(addonsDir), definedPath); len(ps) > 0 {
 			return ps
 		}
 	}
@@ -100,28 +100,45 @@ func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement 
 		// No config anywhere: install the whole tree (pinned path, else addons/<name>).
 		return []placement{{src: stagingRoot, destRel: pathOr(definedPath, DefaultPath(rootName))}}
 	}
-	return placementsForDirs(dirs, definedPath)
+	// No addons/ folder: the package root *is* the addons folder, so a plugin folder's
+	// path relative to it is its path under addons/ (addon_lib/my_addon keeps its
+	// addon_lib namespace).
+	return placementsForDirs(stagingRoot, dirs, definedPath)
 }
 
 // placementsForDirs maps a set of plugin folders to their install destinations with
-// the derive precedence definedPath > a dir= override (destFor) > addons/<folder>.
-// A single folder honors a pinned/relocated definedPath; a bundle of folders each
-// derives its own addons/<folder> (the pinned path can't collapse them — installStaged
-// overwrites only the entry's own folder and leaves bundled siblings, see
+// the derive precedence definedPath > a dir= override (destFor) > addons/<folder's path
+// under base>. A single folder honors a pinned/relocated definedPath; a bundle of
+// folders each derives its own destination (the pinned path can't collapse them —
+// installStaged overwrites only the entry's own folder and leaves bundled siblings, see
 // primaryPlacement). Returns nil for an empty set.
-func placementsForDirs(dirs []string, definedPath string) []placement {
+func placementsForDirs(base string, dirs []string, definedPath string) []placement {
 	switch len(dirs) {
 	case 0:
 		return nil
 	case 1:
-		return []placement{{src: dirs[0], destRel: pathOr(definedPath, destFor(dirs[0], DefaultPath(filepath.Base(dirs[0]))))}}
+		return []placement{{src: dirs[0], destRel: pathOr(definedPath, destFor(dirs[0], defaultPathUnder(base, dirs[0])))}}
 	default:
 		out := make([]placement, 0, len(dirs))
 		for _, d := range dirs {
-			out = append(out, placement{src: d, destRel: destFor(d, DefaultPath(filepath.Base(d)))})
+			out = append(out, placement{src: d, destRel: destFor(d, defaultPathUnder(base, d))})
 		}
 		return out
 	}
+}
+
+// defaultPathUnder is a staged plugin folder's derived install path: addons/ + the
+// folder's path relative to base, so directory levels between the two survive
+// (base=<root>, dir=<root>/addon_lib/my_addon → addons/addon_lib/my_addon). Callers
+// pick base to express where the addons/ anchor is: the package's own addons/ folder
+// when it ships one, else the package root. Falls back to the leaf name when dir is
+// not under base.
+func defaultPathUnder(base, dir string) string {
+	rel, err := filepath.Rel(base, dir)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return DefaultPath(filepath.Base(dir))
+	}
+	return DefaultPath(filepath.ToSlash(rel))
 }
 
 // findAddonsDir returns the shallowest directory named "addons" anywhere under root,

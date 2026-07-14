@@ -64,6 +64,60 @@ func TestInstallZipEndToEnd(t *testing.T) {
 	}
 }
 
+// TestInstallZipTopLevelFolder covers what fetchZip does with a zip's single top-level
+// folder: it strips a wrapper but keeps a real level of the addon layout. Only a
+// zip-level test exercises that — resolveInstall never sees the folder when it's stripped.
+func TestInstallZipTopLevelFolder(t *testing.T) {
+	cfg := "[plugin]\nversion=\"1.0.0\"\n"
+	cases := []struct {
+		name     string
+		files    map[string]string
+		wantPath string
+	}{
+		{
+			// The namespace folder is the zip's root: it is not a wrapper, so
+			// addon_lib survives into the install path.
+			name:     "namespace folder kept",
+			files:    map[string]string{"addon_lib/my_addon/version.cfg": cfg},
+			wantPath: "addons/addon_lib/my_addon",
+		},
+		{
+			// The folder *is* the addon: unwrapped, and its name is the install dir.
+			name:     "package folder unwrapped",
+			files:    map[string]string{"my_addon/plugin.cfg": cfg},
+			wantPath: "addons/my_addon",
+		},
+		{
+			// A release asset's version-stamped wrapper: stripped, so the install path
+			// doesn't carry the version (which would change on every release).
+			name:     "version-stamped wrapper stripped",
+			files:    map[string]string{"MyPlugin-1.2.3/my_addon/plugin.cfg": cfg},
+			wantPath: "addons/my_addon",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			zipPath := filepath.Join(t.TempDir(), "pkg.zip")
+			if err := os.WriteFile(zipPath, buildZip(t, tc.files), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			project := t.TempDir()
+			res, err := Install(context.Background(), Addon{Name: "Whatever", URL: zipPath}, project, func(string, ...any) {})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Path != tc.wantPath {
+				t.Errorf("Path = %q, want %q", res.Path, tc.wantPath)
+			}
+			if _, err := os.Stat(filepath.Join(project, tc.wantPath)); err != nil {
+				t.Errorf("addon not installed at %s: %v", tc.wantPath, err)
+			}
+		})
+	}
+}
+
 func TestInstallLocalZip(t *testing.T) {
 	// A local archive zip (as produced by the archive feature) installs without
 	// any network access.

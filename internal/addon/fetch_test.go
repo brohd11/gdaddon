@@ -147,6 +147,47 @@ func TestResolveInstall(t *testing.T) {
 		}
 	})
 
+	t.Run("namespace folder kept when there is no addons/", func(t *testing.T) {
+		// addon_lib/my_addon/version.cfg: with no addons/ folder the package root *is*
+		// the addons folder, so addon_lib is a namespace level and must survive.
+		root := t.TempDir()
+		mkCfg(t, root, "addon_lib/my_addon", "version.cfg")
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/addon_lib/my_addon" {
+			t.Fatalf("addon_lib should be kept; got %+v", ps)
+		}
+		if filepath.Base(ps[0].src) != "my_addon" {
+			t.Errorf("src should be the plugin folder, got %s", ps[0].src)
+		}
+	})
+
+	t.Run("namespace folder kept for a bundle", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addon_lib/a")
+		mkPlugin(t, root, "addon_lib/b")
+		ps := resolveInstall(root, "Whatever", "", "")
+		got := destSet(ps)
+		if len(got) != 2 || got[0] != "addons/addon_lib/a" || got[1] != "addons/addon_lib/b" {
+			t.Fatalf("got %v", got)
+		}
+	})
+
+	t.Run("namespace folder under addons/ anchors on addons/", func(t *testing.T) {
+		// The same layout shipped with its own addons/ folder: addons/ is the anchor,
+		// so the namespace is not doubled up (addons/addons/addon_lib/…). The child is
+		// mirrored whole — my_addon rides along inside src and still lands at
+		// addons/addon_lib/my_addon on disk; addon_lib is what gets pinned.
+		root := t.TempDir()
+		mkCfg(t, root, "addons/addon_lib/my_addon", "version.cfg")
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/addon_lib" {
+			t.Fatalf("got %+v", ps)
+		}
+		if filepath.Base(ps[0].src) != "addon_lib" {
+			t.Errorf("src should be the addons/ child folder, got %s", ps[0].src)
+		}
+	})
+
 	t.Run("explicit path wins", func(t *testing.T) {
 		root := t.TempDir()
 		mkPlugin(t, root, "addons/my_addon")
