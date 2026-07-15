@@ -61,12 +61,19 @@ are read straight from git, so they're only as current as your last fetch — th
 is for. gdaddon never fetches on its own, since it's the one thing here that goes to the
 network without being asked.
 
-Open a checkout and pick **Git** for the rest of the round-trip: status, fetch, pull, push,
-and commit, each streaming git's own output to the log. It's not a git client, and doesn't
-try to be — the operations that need a decision from you refuse instead of guessing. Pull is
-`--ff-only`, so a branch that has diverged aborts having changed nothing rather than dropping
-you into a merge conflict inside a TUI. When something fails, git says why in the log and you
-go sort it out in a terminal.
+Open a checkout and pick **Git** — or press `v` on the row — for the rest of the round-trip:
+status, fetch, pull, push, and commit, each streaming git's own output to the log. It's not a
+git client, and doesn't try to be — the operations that need a decision from you refuse instead
+of guessing. Pull is `--ff-only`, so a branch that has diverged aborts having changed nothing
+rather than dropping you into a merge conflict inside a TUI. When something fails, git says why
+in the log and you go sort it out in a terminal.
+
+To do it across the whole project at once — **Actions ▸ Git**, or `V` on the list — fetch,
+pull, or push every checkout in one go. A scope switch chooses clones, submodules, or both
+(clones by default: they're the ones you develop, and pulling a submodule dirties the parent
+repo that tracks it). The confirm names every repo it will touch, then each runs in turn with
+its output under its own header. If one repo refuses — a divergence, say — it's skipped and the
+rest still run.
 
 Commit asks for a message and what to stage, because git's own default is a trap: `-a` stages
 changes to files git already tracks, so a script you *just created* is untracked and would

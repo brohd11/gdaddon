@@ -21,6 +21,15 @@ func git(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// setIdentity gives dir a repo-local commit identity, so production git operations that run
+// without GIT_AUTHOR_*/COMMITTER_* env (addon.GitCommit) can commit on a CI runner whose
+// account has no ambient git identity — the "empty ident name" failure otherwise.
+func setIdentity(t *testing.T, dir string) {
+	t.Helper()
+	git(t, dir, "config", "user.email", "t@t")
+	git(t, dir, "config", "user.name", "t")
+}
+
 // commit writes a file in dir and commits it, advancing that repo's branch by one.
 func commit(t *testing.T, dir, name string) {
 	t.Helper()
@@ -45,10 +54,12 @@ func upstreamClone(t *testing.T) (remote, work string) {
 		t.Fatal(err)
 	}
 	git(t, remote, "init", "-q", "-b", "main")
+	setIdentity(t, remote)
 	commit(t, remote, "seed")
 
 	work = filepath.Join(base, "work")
 	git(t, base, "clone", "-q", remote, work)
+	setIdentity(t, work)
 	return remote, work
 }
 

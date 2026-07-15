@@ -275,7 +275,18 @@ Key packages/functions:
   stages only *tracked* files, so a newly created file is silently left out — the commit form
   makes the user pick (`-a` vs a leading `add -A`), and the confirm (`commitBody`) lists what
   will be committed *and* names the untracked files that won't. `addon.GitChanges` (gitscan.go,
-  read-only) parses `status --porcelain` for that screen.
+  read-only) parses `status --porcelain` for that screen. The **project-wide** version lives in
+  `internal/tui/flows/git/` (a flow, since both the Project tab and Actions open it):
+  `git.AllRepos` is the fetch/pull/push-all menu (Actions ▸ Git, and `V` on the Project list),
+  with a scope switch cycling clones → submodules → all (clones default — pulling a submodule
+  dirties the parent repo's recorded pointer). It confirms with the repo list (`confirmBody`,
+  capped like `commitBody`) then runs each repo **sequentially** under its own header — reading
+  git's output is the point, so concurrent interleaving is avoided (the concurrent no-confirm
+  path is the `f` key / `addon.FetchAll`). `git.Task` is the single-repo streaming stay-task
+  shared by that flow and the per-addon submenu. Both raise `appctx.GitRefresh` on success so
+  the Project list's local markers settle without re-firing the network update check. Keys: `v`
+  (row-level, an addon's own Git page) and `V` (the all-repos page) — deliberately not `g`/`G`,
+  which bubbles binds to jump-to-top/bottom on every list.
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` write single scalar lines the same way (empty value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha.
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails). A commit-pinned branch package is stored under `<branch>@<sha>` (so distinct commits of the same branch don't overwrite), and `parseArchiveTag` recovers the branch + `Asset.Commit` pin when the archive is listed back.

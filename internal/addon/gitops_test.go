@@ -49,6 +49,7 @@ func bareUpstreamClone(t *testing.T) (remote, work string) {
 		t.Fatal(err)
 	}
 	git(t, seed, "init", "-q", "-b", "main")
+	setIdentity(t, seed)
 	commit(t, seed, "seed")
 
 	remote = filepath.Join(base, "remote.git")
@@ -56,6 +57,7 @@ func bareUpstreamClone(t *testing.T) (remote, work string) {
 
 	work = filepath.Join(base, "work")
 	git(t, base, "clone", "-q", remote, work)
+	setIdentity(t, work)
 	return remote, work
 }
 

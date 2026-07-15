@@ -284,6 +284,13 @@ type (
 	// Actions menu — reload from the updated context; the header needs no notification
 	// (it reads straight from App each render).
 	PathRefresh struct{}
+	// GitRefresh is broadcast after a git operation (pull/push/commit/single fetch) changes a
+	// checkout, so the Project list recomputes its *local* git state — dirty / ahead / behind.
+	// Deliberately not ProjectDirty: this touched no manifest and no release, so re-firing the
+	// network-bound update check would be wasted work. Raised from both the per-addon Git
+	// submenu (tabs/project) and the all-repos flow (flows/git), which is why it lives here
+	// rather than in either — tabs can't import each other.
+	GitRefresh struct{}
 )
 
 // RefreshPaths re-runs Scan after the paths may have changed (e.g. a manifest was just

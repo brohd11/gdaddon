@@ -7,6 +7,7 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+	gitflow "gdaddon/internal/tui/flows/git"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -20,12 +21,6 @@ import (
 // deliberately not a git client. Every operation here either succeeds on the boring path or
 // fails having changed nothing, and says so; a divergence, a conflict, or a rebase is a
 // decision, and decisions belong in a real terminal ("t" opens one at the addon's folder).
-
-// gitRefresh is broadcast after a git operation changes a checkout, so the Project list and
-// the Git submenu recompute their local git state (dirty / ahead / behind). It exists rather
-// than reusing appctx.ProjectDirty for the same reason fetchDone does: ProjectDirty re-fires
-// the network-bound update check, and a local commit says nothing about release listings.
-type gitRefresh struct{}
 
 // stageOptions is the commit form's staging toggle, in index order. The default (index 0) is
 // the conservative one — see addon.GitCommit for why the distinction is load-bearing.
@@ -45,7 +40,7 @@ func newGitSubmenu(st addon.Status, sh *core.Shared) *components.PickerScreen {
 		// Rebuild the rows (and their state descriptions) once an operation reports back, so
 		// popping out of a finished pull doesn't land on rows that still say "3 behind".
 		Refresh: func(sh *core.Shared, payload any) ([]list.Item, bool) {
-			if _, ok := payload.(gitRefresh); !ok {
+			if _, ok := payload.(appctx.GitRefresh); !ok {
 				return nil, false
 			}
 			return gitItems(st, sh), true
@@ -62,7 +57,7 @@ func gitItems(st addon.Status, sh *core.Shared) []list.Item {
 	// A task row: run op, stream git's output to the log, refresh the state on success.
 	task := func(label, verb string, op func(context.Context, string, addon.Reporter) error) func(*core.Shared) core.Action {
 		return func(*core.Shared) core.Action {
-			return core.Push(newGitTask(label, verb, dir, op))
+			return core.Push(gitflow.Task(label, verb, dir, op))
 		}
 	}
 
@@ -129,53 +124,6 @@ func commitDesc(dir string) string {
 		return "working tree is clean"
 	}
 	return fmt.Sprintf("commit %d changed file(s)", len(changes))
-}
-
-// newGitTask runs one git operation, streaming its output into the shared log (report's
-// lines land there, and the pane reveals itself). It's a *stay* task: the whole point is to
-// read what git said — especially when it refused — so the screen holds until esc rather
-// than yanking the output away on completion.
-//
-// verb is the past tense for the success status ("pulled"); an empty verb means the
-// operation only reports (Status), so it gets no status line of its own.
-func newGitTask(label, verb, dir string, op func(context.Context, string, addon.Reporter) error) *components.TaskScreen {
-	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
-		done <- core.TaskEvent{Done: true, Err: op(ctx, dir, report)}
-	}
-	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		if ev.Err != nil {
-			// git's own words are already in the log above; the status line only has to say
-			// where to go next. Nothing was changed — that's what --ff-only and a failed push
-			// guarantee.
-			return core.SetStatusAndLog(gitFailure(verb) + " — resolve it in a terminal (t)")
-		}
-		if verb == "" {
-			return core.PropagateAll(gitRefresh{})
-		}
-		return core.Seq(
-			core.SetStatus(verb),
-			core.PropagateAll(gitRefresh{}),
-		)
-	}
-	onDismiss := func(*core.Shared) core.Action { return core.PopTo() } // back to the Git hub
-	return components.NewStayTask(label, "done — esc to go back", run, onDone, onDismiss)
-}
-
-// gitFailure names the failed operation from its success verb ("pulled" → "pull failed").
-func gitFailure(verb string) string {
-	switch verb {
-	case "":
-		return "git status failed"
-	case "fetched":
-		return "fetch failed"
-	case "pulled":
-		return "pull failed"
-	case "pushed":
-		return "push failed"
-	case "committed":
-		return "commit failed"
-	}
-	return verb + " failed"
 }
 
 // ---------- commit ----------
@@ -246,7 +194,7 @@ func newCommitConfirm(st addon.Status, msg string, stageAll bool) *components.Di
 		// No Crumb: it defaults to "Conf", so the trail reads "Git › Commit › Conf" rather
 		// than repeating "Commit" twice.
 		Text: commitBody(st, changes, msg, stageAll),
-		OnYes: core.Replace(newGitTask("committing "+st.Addon.Name+"…", "committed", st.FullPath,
+		OnYes: core.Replace(gitflow.Task("committing "+st.Addon.Name+"…", "committed", st.FullPath,
 			func(ctx context.Context, dir string, report addon.Reporter) error {
 				return addon.GitCommit(ctx, dir, msg, stageAll, report)
 			})),

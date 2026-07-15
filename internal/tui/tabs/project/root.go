@@ -3,6 +3,7 @@ package project
 import (
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
+	gitflow "gdaddon/internal/tui/flows/git"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -45,6 +46,8 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 			core.FullHint("sort", appctx.AppKeys.Sort),
 			core.FullHint("terminal", appctx.AppKeys.Terminal),
 			core.FullHint("fetch", appctx.AppKeys.Fetch),
+			core.FullHint("git", appctx.AppKeys.Git),
+			core.FullHint("git all", appctx.AppKeys.GitAll),
 			core.FullHint("focus log", core.Keys.ToggleOutput),
 			core.FullHint("toggle log", core.Keys.Output),
 			core.FullHint("wrap log", core.Keys.Wrap),
@@ -80,6 +83,10 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 				core.SetStatus("fetching git checkouts…"),
 				core.Async(fetchAllCmd(sh)),
 			)
+		// "V" opens the project-wide Git page (fetch/pull/push across every checkout). "v" is
+		// per-row (an addon's own Git page) and lives in the row's Item.Keys instead.
+		case core.MatchKey(k.String(), appctx.AppKeys.GitAll):
+			return s, core.Push(gitflow.AllRepos(sh))
 		}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)
@@ -112,7 +119,7 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 	case updateChecksReady:
 		appctx.Of(sh).SetUpdateChecks(p.checks)
 		s.list.SetItems(projectListItems(sh, s.sort))
-	case gitRefresh:
+	case appctx.GitRefresh:
 		// A git operation (pull/push/commit/single-repo fetch) changed a checkout: recompute
 		// the local git state so the dirty / ahead / behind markers settle. Local-only, so
 		// unlike ProjectDirty it doesn't re-fire the network update check.

@@ -94,14 +94,18 @@ func addonItem(r rowData) components.Item {
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
-	// Any addon present on disk (package or git checkout) gets a "t" shortcut to open
-	// a terminal at its install path (the framework dispatches Item.Keys for the
-	// highlighted row, see RootUpdate).
+	// A present row carries its own shortcuts (the framework dispatches Item.Keys for the
+	// highlighted row, see RootUpdate): "t" opens a terminal at the install path for any
+	// package or checkout; "v" opens the Git page, but only for a git checkout — on a package
+	// it isn't handled, so the key falls through (as "t" does on an absent row).
 	var keys func(*core.Shared, string) (core.Action, bool)
 	if s.Present() {
 		keys = func(sh *core.Shared, k string) (core.Action, bool) {
-			if core.MatchKey(k, appctx.AppKeys.Terminal) {
+			switch {
+			case core.MatchKey(k, appctx.AppKeys.Terminal):
 				return sysopen.Terminal(s.FullPath), true
+			case core.MatchKey(k, appctx.AppKeys.Git) && s.Addon.IsGitWorkdir():
+				return core.Push(newGitSubmenu(s, sh)), true
 			}
 			return core.Action{}, false
 		}

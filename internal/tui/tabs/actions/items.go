@@ -5,6 +5,7 @@ import (
 
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/docs"
+	gitflow "gdaddon/internal/tui/flows/git"
 	"gdaddon/internal/tui/flows/newplugin"
 
 	"github.com/brohd11/bubblestack/components"
@@ -49,6 +50,11 @@ func actionItems(sh *core.Shared) []list.Item {
 			Name: "⌕ Scan installed",
 			Desc: "find installed plugins not in the manifest and track them",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newScanPicker(sh)) },
+		})
+		items = append(items, components.Item{
+			Name: "⎇ Git",
+			Desc: "fetch, pull, or push every git checkout in the project",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(gitflow.AllRepos(sh)) },
 		})
 	}
 	// macOS quarantines compiled plugins' native binaries; offer a manual clear.
