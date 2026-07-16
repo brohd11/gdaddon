@@ -40,6 +40,12 @@ make clean
 
 Build outputs go to `build/<platform>/gdaddon[.exe]`.
 
+The sibling `repoview` tool is its own module, built separately:
+
+```bash
+cd repoview && go build -o ../build/repoview .   # then: repoview [dir]  (-depth N)
+```
+
 ## Running
 
 ```bash
@@ -183,7 +189,7 @@ cmd/
   repos.go           — the `repos` subcommand: run a shell command in every nested git repo (uses addon.FindGitRepos / addon.HasUncommittedChanges)
   paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
 internal/
-  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), git checkouts (read-only in gitscan.go: FindGitRepos, HasUncommittedChanges, GitSyncStatus, GitChanges, GitFetch/FetchAll; mutating/streaming in gitops.go: GitStream + GitStatus/GitPull/GitPush/GitCommit), ~/.gdaddon global list
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, gitCheckedOutBranch, normalizeGitRemote) that classify a plugin folder's `.git`
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
   archive/           — local package archive (~/.gdaddon/archive or config/config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, theme, last search source — Load) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
@@ -199,6 +205,10 @@ internal/
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin, docs)
+gitstack/            — the reusable git module, its OWN module (github.com/brohd11/gitstack, replace => ./gitstack); imports no gdaddon package. Extracted from addon so a second tool (repoview, below) can share it.
+  repo/              — domain-neutral git engine (stdlib only): FindGitRepos, Scan (folder → []Repo), Describe/CurrentBranch, HasUncommittedChanges, GitSyncStatus, GitChanges, GitFetch, FetchAll([]Repo), GitStream + GitStatus/GitPull/GitPush/GitCommit; types Repo{Name,Dir,Branch,Sync,Dirty}, GitSync, GitChange, FetchResult, Reporter
+  repoui/            — git-viewing screens over bubblestack (name no domain type): RepoMenu (per-repo status/fetch/pull/push/commit submenu), AllReposMenu(sh, []Scope) (batch fetch/pull/push, consumer supplies the scopes), Task, RefreshMsg. gdaddon consumes these behind thin adapters (flows/git/git.go builds its clone/submodule/all scopes; tabs/project/git.go maps Status→repo.Repo); appctx.GitRefresh is an alias of repoui.RefreshMsg
+repoview/            — a second binary + module (github.com/brohd11/repoview, replace => ./repoview), the manifest-free sibling of gdaddon: scan a plain directory for git checkouts (repo.Scan) and show each one's status (branch/ahead/behind/dirty) in one list screen, driving fetch/pull/push/commit through the shared gitstack/repoui screens. One repo-list tab (no tab strip) + an "a" Actions menu (theme, refresh); no manifest, fresh scan each run. See repoview/main.go + repoview/internal/app/
 bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd11/bubblestack, replace => ./bubblestack); imports no gdaddon package
   core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask; plus a router-drawn breadcrumb bar under the tab strip, built each frame from the live stack via the optional Crumber interface — CrumbLabel(short bool) — and RenderBreadcrumb), Router over a screen stack, nav commands that return a core.Action (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, core.Action): Action bundles a control Msg the router applies synchronously and an async Cmd; Async wraps a cmd-only Action, the zero Action is a no-op) + optional interfaces (incl. Overlayer — a popup drawn over the screen below it; Composite/PopupBox in overlay.go do the ANSI-aware compositing), router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
   components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, DialogScreen (a confirm box, or a modal overlay when its Overlay flag is set — composited by core.PopupBox), LoadingScreen, TaskScreen, FormScreen, DocScreen (a scrollable read-only text page: a viewport under an optional title bar, its body supplied by a `Render(width) string` closure re-run on resize, so the caller owns formatting and DocScreen owns only scrolling); LogPane = default core.Output, with a wrap render mode (`w`, via the optional core.Wrapper capability) that folds long lines the viewport would otherwise clip at the pane edge) — they name no domain type. TaskScreen (streaming work) and LoadingScreen (fetch spinner) each own a context.WithCancel and let esc abort the in-flight work — their work closures (TaskScreen's RunFunc, LoadingScreen's Run) take that ctx as their first arg, so a cancellable closure threads it into its network/process call
@@ -265,7 +275,8 @@ so their output is untouched.
 Key packages/functions:
 - `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing. For git checkouts (clone/submodule) it reads the live checked-out branch (`gitCheckedOutBranch`, exposed on `Status.LiveBranch`) and reports `StateBranchChanged` when it differs from the recorded `tag` — branch drift, reconciled by re-recording the tag via the per-addon **Update branch record** action. A present git checkout is never touched by `Install All` (it skips clones/submodules whether unversioned or drifted).
 - `addon.Install` / `addon.InstallAll` — fetch (`.zip` download / `.git` clone / **local `.zip` path** for archived packages), derive the install dir from the package's `plugin.cfg`/`version.cfg` (`internal/addon/cfg.go`), and report progress via a callback. `Install` returns the resolved path+version. Both take a leading `ctx context.Context` (as do `UpdateAll`/`InstallAllDeps`) — cancelling it aborts the in-flight download/clone (HTTP request + `git clone` are context-bound), which is how the TUI's task-abort works.
-- `addon.GitSyncStatus` / `addon.GitFetch` / `addon.FetchAll` (gitscan.go) — a git checkout's
+- `addon.GitSyncStatus` / `addon.GitFetch` / `addon.FetchAll` (engine in `gitstack/repo`,
+  re-exported as `addon.*`; `FetchAll` is gdaddon's `[]Status` adapter over `repo.FetchAll`) — a git checkout's
   divergence from its upstream (`GitSync{Ahead, Behind, Tracking}`), a ctx-bound `git fetch`,
   and the fan-out that fetches every present clone/submodule in an inspected manifest. The
   split matters: **`GitSyncStatus` is a local read** of the remote-tracking refs git already
@@ -279,10 +290,12 @@ Key packages/functions:
   auth prompt. The counts surface as the `behind origin N` / `ahead N` row markers alongside
   `uncommitted changes`; behind-ness is a *flag*, not an `addon.State` (a checkout can be
   behind, dirty, and branch-drifted at once).
-- `addon.GitStream` / `GitStatus` / `GitPull` / `GitPush` / `GitCommit` (gitops.go) — the git
-  operations behind the per-addon **Git** submenu (`tabs/project/git.go`: status, fetch, pull,
-  push, commit — a `components.NewStayTask` per op, streaming git's output to the log via
-  `Reporter`, then broadcasting `gitRefresh` so the row markers settle). `GitStream` is the
+- `addon.GitStream` / `GitStatus` / `GitPull` / `GitPush` / `GitCommit` (engine in
+  `gitstack/repo/ops.go`, re-exported as `addon.*`) — the git operations behind the per-addon
+  **Git** submenu, which is now the shared `repoui.RepoMenu` (status, fetch, pull, push, commit —
+  a `components.NewStayTask` per op, streaming git's output to the log via `Reporter`, then
+  broadcasting `repoui.RefreshMsg` so the row markers settle; `tabs/project/git.go` is a thin
+  adapter mapping `Status`→`repo.Repo`). `GitStream` is the
   primitive: it runs git with `gitEnv()` (`GIT_TERMINAL_PROMPT=0` + `GIT_EDITOR=true`, so git
   can never sit waiting for input a TUI can't give) and relays stdout+stderr through a
   `lineWriter` that breaks on `\r` as well as `\n` (git's progress output is CR-delimited).
@@ -291,19 +304,20 @@ Key packages/functions:
   routes the user to a real terminal. **`GitCommit`'s `stageAll` is load-bearing**: `commit -a`
   stages only *tracked* files, so a newly created file is silently left out — the commit form
   makes the user pick (`-a` vs a leading `add -A`), and the confirm (`commitBody`) lists what
-  will be committed *and* names the untracked files that won't. `addon.GitChanges` (gitscan.go,
-  read-only) parses `status --porcelain` for that screen. The **project-wide** version lives in
-  `internal/tui/flows/git/` (a flow, since both the Project tab and Actions open it):
-  `git.AllRepos` is the fetch/pull/push-all menu (Actions ▸ Git, and `V` on the Project list),
-  with a scope switch cycling clones → submodules → all (clones default — pulling a submodule
-  dirties the parent repo's recorded pointer). It confirms with the repo list (`confirmBody`,
-  capped like `commitBody`) then runs each repo **sequentially** under its own header — reading
-  git's output is the point, so concurrent interleaving is avoided (the concurrent no-confirm
-  path is the `f` key / `addon.FetchAll`). `git.Task` is the single-repo streaming stay-task
-  shared by that flow and the per-addon submenu. Both raise `appctx.GitRefresh` on success so
-  the Project list's local markers settle without re-firing the network update check. Keys: `v`
-  (row-level, an addon's own Git page) and `V` (the all-repos page) — deliberately not `g`/`G`,
-  which bubbles binds to jump-to-top/bottom on every list.
+  will be committed *and* names the untracked files that won't. `addon.GitChanges`
+  (`gitstack/repo`, read-only) parses `status --porcelain` for that screen. The commit form and
+  its confirm/body all live in `repoui` now, keyed on `repo.Repo`. The **project-wide** version
+  is the shared `repoui.AllReposMenu`, reached via `internal/tui/flows/git/` (a flow, since both
+  the Project tab and Actions open it): `git.AllRepos` builds the three scopes — clones,
+  submodules, all (clones default — pulling a submodule dirties the parent repo's recorded
+  pointer) — and hands them to `repoui.AllReposMenu`, which owns the scope cycling, the confirm
+  (`confirmBody`, capped like `commitBody`) and the **sequential** per-repo batch (reading git's
+  output is the point, so concurrent interleaving is avoided; the concurrent no-confirm path is
+  the `f` key / `addon.FetchAll`). The single-repo streaming stay-task (`repoui.Task`) is shared
+  by the batch and the per-repo submenu; both raise `repoui.RefreshMsg` on success (aliased as
+  `appctx.GitRefresh`) so the Project list's local markers settle without re-firing the network
+  update check. Keys: `v` (row-level, an addon's own Git page) and `V` (the all-repos page) —
+  deliberately not `g`/`G`, which bubbles binds to jump-to-top/bottom on every list.
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` / `addon.SetIsDependency` write single scalar lines the same way (empty/false value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha, `SetIsDependency` records/clears a dep's auto-added provenance. `addon.OrphanDeps` reports which `is_dependency` entries nothing installed still needs (the "unused dependency" marker).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails). A commit-pinned branch package is stored under `<branch>@<sha>` (so distinct commits of the same branch don't overwrite), and `parseArchiveTag` recovers the branch + `Asset.Commit` pin when the archive is listed back.

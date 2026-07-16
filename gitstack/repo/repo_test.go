@@ -207,6 +207,52 @@ func TestFetchAll(t *testing.T) {
 	}
 }
 
+func TestCurrentBranch(t *testing.T) {
+	if got := CurrentBranch(t.TempDir()); got != "" {
+		t.Errorf("CurrentBranch(non-checkout) = %q, want empty", got)
+	}
+	dir := t.TempDir()
+	initRepo(t, dir, "https://github.com/owner/repo.git", "trunk")
+	if got := CurrentBranch(dir); got != "trunk" {
+		t.Errorf("CurrentBranch = %q, want trunk", got)
+	}
+}
+
+func TestScan(t *testing.T) {
+	base := t.TempDir()
+	initRepo(t, base, "https://github.com/owner/root.git", "main") // top-level: excluded
+
+	a := filepath.Join(base, "alpha")
+	os.MkdirAll(a, 0o755)
+	initRepo(t, a, "https://github.com/owner/alpha.git", "main")
+
+	b := filepath.Join(base, "beta")
+	os.MkdirAll(b, 0o755)
+	initRepo(t, b, "https://github.com/owner/beta.git", "dev")
+	os.WriteFile(filepath.Join(b, "wip.txt"), []byte("x"), 0o644) // dirty
+
+	repos, err := Scan(base, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]Repo{}
+	for _, r := range repos {
+		byName[r.Name] = r
+	}
+	if len(byName) != 2 {
+		t.Fatalf("Scan found %d repos, want 2 (base excluded): %v", len(byName), repos)
+	}
+	if r := byName["alpha"]; r.Branch != "main" || r.Dirty {
+		t.Errorf("alpha = %+v, want branch main, clean", r)
+	}
+	if r := byName["beta"]; r.Branch != "dev" || !r.Dirty {
+		t.Errorf("beta = %+v, want branch dev, dirty", r)
+	}
+	if r := byName["beta"]; r.Dir != b {
+		t.Errorf("beta.Dir = %q, want absolute %q", r.Dir, b)
+	}
+}
+
 func TestGitChangesAndCommit(t *testing.T) {
 	_, work := upstreamClone(t)
 

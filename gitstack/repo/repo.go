@@ -43,6 +43,48 @@ type Repo struct {
 // fire hundreds of parallel git processes (and trip host rate limits).
 const maxConcurrentFetch = 8
 
+// CurrentBranch returns the branch checked out in dir, or "" when dir isn't a git checkout
+// (no `.git` entry), the HEAD is detached, or git can't be read. A cheap local read, so a
+// viewer can label every repo it scans.
+func CurrentBranch(dir string) string {
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		return ""
+	}
+	if b := gitOutput(dir, "rev-parse", "--abbrev-ref", "HEAD"); b != "" && b != "HEAD" {
+		return b
+	}
+	return ""
+}
+
+// Describe reads dir's live git state into a Repo carrying the given display name: its
+// checked-out branch, divergence from upstream, and whether the working tree is dirty. Every
+// read is local (no network), so it's cheap enough to call per repo on a fresh scan.
+func Describe(name, dir string) Repo {
+	return Repo{
+		Name:   name,
+		Dir:    dir,
+		Branch: CurrentBranch(dir),
+		Sync:   GitSyncStatus(dir),
+		Dirty:  HasUncommittedChanges(dir),
+	}
+}
+
+// Scan finds every git checkout nested under base (to maxDepth, base itself excluded) and
+// describes each — the one call a repo viewer needs to turn a directory into a list of
+// status-bearing repos. Each Repo's Name is its base-relative path, Dir its absolute path.
+// Results are in FindGitRepos order (a sorted filesystem walk).
+func Scan(base string, maxDepth int) ([]Repo, error) {
+	rels, err := FindGitRepos(base, maxDepth)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Repo, 0, len(rels))
+	for _, rel := range rels {
+		out = append(out, Describe(rel, filepath.Join(base, rel)))
+	}
+	return out, nil
+}
+
 // HasUncommittedChanges reports whether dir is a git checkout (a standalone clone or
 // a submodule) with a dirty working tree (modified or untracked files). False when
 // dir isn't a checkout (no `.git` entry) or the tree is clean.
