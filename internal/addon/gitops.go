@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -73,10 +74,12 @@ func GitPush(ctx context.Context, dir string, report Reporter) error {
 // and `$` in it need no escaping.
 func GitCommit(ctx context.Context, dir, message string, stageAll bool, report Reporter) error {
 	if stageAll {
+		report("%s", "$ git add -A")
 		if err := GitStream(ctx, dir, report, "add", "-A"); err != nil {
 			return err
 		}
 	}
+	report("%s", "$ git commit -a -m "+strconv.Quote(message))
 	return GitStream(ctx, dir, report, "commit", "-a", "-m", message)
 }
 

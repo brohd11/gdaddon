@@ -73,14 +73,14 @@ var Keys = KeyMap{
 	Yes: key.NewBinding(key.WithKeys("enter", "y", "Y", "e")),
 	No:  key.NewBinding(key.WithKeys("esc", "n", "N", "c")),
 
-	NextTab:      key.NewBinding(key.WithKeys("]", "x", "shift+right", "D")),
-	PrevTab:      key.NewBinding(key.WithKeys("[", "z", "shift+left", "A")),
+	NextTab:      key.NewBinding(key.WithKeys("]", "x", "shift+right")),
+	PrevTab:      key.NewBinding(key.WithKeys("[", "z", "shift+left")),
 	ToggleOutput: key.NewBinding(key.WithKeys("tab")),
 	Output:       key.NewBinding(key.WithKeys("o")),
 	Wrap:         key.NewBinding(key.WithKeys("w")),
 	Clear:        key.NewBinding(key.WithKeys("C")),
-	Unwind:       key.NewBinding(key.WithKeys("`", "r")),
-	Refresh:      key.NewBinding(key.WithKeys("u")),
+	Unwind:       key.NewBinding(key.WithKeys("`", "u")),
+	Refresh:      key.NewBinding(key.WithKeys("r")),
 
 	NextField: key.NewBinding(key.WithKeys("down", "tab")),
 	PrevField: key.NewBinding(key.WithKeys("up", "shift+tab")),

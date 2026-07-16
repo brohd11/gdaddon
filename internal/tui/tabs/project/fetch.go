@@ -44,7 +44,10 @@ func fetchAllCmd(sh *core.Shared) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
 		defer cancel()
 
-		return core.PropagateAll(fetchDone{results: addon.FetchAll(ctx, statuses)})
+		return core.Seq(
+			core.PropagateAll(fetchDone{results: addon.FetchAll(ctx, statuses)}),
+			core.RefreshRoots(),
+		)
 	}
 }
 
