@@ -40,11 +40,10 @@ make clean
 
 Build outputs go to `build/<platform>/gdaddon[.exe]`.
 
-The sibling `repoview` tool is its own module, built separately:
-
-```bash
-cd repoview && go build -o ../build/repoview .   # then: repoview [dir]  (-depth N)
-```
+`bubblestack`, `gitstack`, and `repoview` are separate repos (see Architecture). For local
+cross-repo work, check them out beside this one under `~/main/go/` and run
+`go work init ./godot_addon_installer ./bubblestack ./gitstack ./repoview` there (the `go.work`
+stays uncommitted). Ordinary `make`/`go build` here builds against the tagged module versions.
 
 ## Running
 
@@ -205,11 +204,13 @@ internal/
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin, docs)
-gitstack/            — the reusable git module, its OWN module (github.com/brohd11/gitstack, replace => ./gitstack); imports no gdaddon package. Extracted from addon so a second tool (repoview, below) can share it.
+The three modules below live in their OWN GitHub repos (github.com/brohd11/{bubblestack,gitstack,repoview}) — gdaddon `require`s bubblestack + gitstack as tagged versions (v0.1.0), no `replace`. For local co-development all four are checked out side by side under ~/main/go/ and tied by an *uncommitted* `go.work` there (`use ./godot_addon_installer ./bubblestack ./gitstack ./repoview`), so cross-module edits are picked up without re-tagging; releases/CI/outside consumers use the tags. None of the three imports a gdaddon package. Their layouts:
+
+gitstack (github.com/brohd11/gitstack) — the reusable git module, extracted from addon so a second tool (repoview, below) can share it:
   repo/              — domain-neutral git engine (stdlib only): FindGitRepos, Scan (folder → []Repo), Describe/CurrentBranch, HasUncommittedChanges, GitSyncStatus, GitChanges, GitFetch, FetchAll([]Repo), GitStream + GitStatus/GitPull/GitPush/GitCommit; types Repo{Name,Dir,Branch,Sync,Dirty}, GitSync, GitChange, FetchResult, Reporter
   repoui/            — git-viewing screens over bubblestack (name no domain type): RepoMenu (per-repo status/fetch/pull/push/commit submenu), AllReposMenu(sh, []Scope) (batch fetch/pull/push, consumer supplies the scopes), Task, RefreshMsg. gdaddon consumes these behind thin adapters (flows/git/git.go builds its clone/submodule/all scopes; tabs/project/git.go maps Status→repo.Repo); appctx.GitRefresh is an alias of repoui.RefreshMsg
-repoview/            — a second binary + module (github.com/brohd11/repoview, replace => ./repoview), the manifest-free sibling of gdaddon: scan a plain directory for git checkouts (repo.Scan) and show each one's status (branch/ahead/behind/dirty) in one list screen, driving fetch/pull/push/commit through the shared gitstack/repoui screens. One repo-list tab (no tab strip) + an "a" Actions menu (theme, refresh); no manifest, fresh scan each run. See repoview/main.go + repoview/internal/app/
-bubblestack/         — the reusable TUI framework, its OWN module (github.com/brohd11/bubblestack, replace => ./bubblestack); imports no gdaddon package
+repoview (github.com/brohd11/repoview) — a separate binary/repo, the manifest-free sibling of gdaddon: scan a plain directory for git checkouts (repo.Scan) and show each one's status (branch/ahead/behind/dirty) in one list screen, driving fetch/pull/push/commit through the shared gitstack/repoui screens. One repo-list tab (no tab strip) + an "a" Actions menu (theme, refresh); no manifest, fresh scan each run. gdaddon does NOT depend on it — it's a second consumer of bubblestack + gitstack, developed in its own repo (see its main.go + internal/app/).
+bubblestack (github.com/brohd11/bubblestack) — the reusable TUI framework:
   core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask; plus a router-drawn breadcrumb bar under the tab strip, built each frame from the live stack via the optional Crumber interface — CrumbLabel(short bool) — and RenderBreadcrumb), Router over a screen stack, nav commands that return a core.Action (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, core.Action): Action bundles a control Msg the router applies synchronously and an async Cmd; Async wraps a cmd-only Action, the zero Action is a no-op) + optional interfaces (incl. Overlayer — a popup drawn over the screen below it; Composite/PopupBox in overlay.go do the ANSI-aware compositing), router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
   components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, DialogScreen (a confirm box, or a modal overlay when its Overlay flag is set — composited by core.PopupBox), LoadingScreen, TaskScreen, FormScreen, DocScreen (a scrollable read-only text page: a viewport under an optional title bar, its body supplied by a `Render(width) string` closure re-run on resize, so the caller owns formatting and DocScreen owns only scrolling); LogPane = default core.Output, with a wrap render mode (`w`, via the optional core.Wrapper capability) that folds long lines the viewport would otherwise clip at the pane edge) — they name no domain type. TaskScreen (streaming work) and LoadingScreen (fetch spinner) each own a context.WithCancel and let esc abort the in-flight work — their work closures (TaskScreen's RunFunc, LoadingScreen's Run) take that ctx as their first arg, so a cancellable closure threads it into its network/process call
 ```

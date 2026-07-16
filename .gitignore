@@ -3,3 +3,7 @@ dist/
 .DS_Store
 temp/
 namespace_builder.gd
+
+# local multi-repo workspace (see CLAUDE.md); the real go.work lives at ~/main/go, above this repo
+go.work
+go.work.sum

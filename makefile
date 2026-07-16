@@ -9,11 +9,10 @@ LDFLAGS = -ldflags "-X gdaddon/cmd.version=$(VERSION)"
 
 all: mac-arm linux windows
 
-# Run the test suite for both modules (bubblestack is a separate Go module, so a
-# root `go test ./...` does not descend into it).
+# Run the test suite. bubblestack/gitstack/repoview are now separate repos (consumed
+# as tagged modules); each has its own CI. This tests only the gdaddon module.
 test:
 	go test ./...
-	cd bubblestack && go test ./...
 
 mac-arm:
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o $(OUT_DIR)/mac-arm64/$(APP_NAME) .

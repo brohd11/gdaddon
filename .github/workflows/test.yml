@@ -14,7 +14,3 @@ jobs:
 
       - name: Test root module
         run: go test ./...
-
-      - name: Test bubblestack module
-        working-directory: bubblestack
-        run: go test ./...
