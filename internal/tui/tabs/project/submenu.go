@@ -58,7 +58,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 				return guardDirty(sh, st, packages.BrowseRepo(a.URL, packages.BrowseOpts{
 					Source:         packages.SourceAll,
 					IncludeHEAD:    true,
-					LeadItems:      pinnedInstallItems(st),
+					LeadItems:      append(latestInstallItems(st, c.UpdateChecks[a.Name]), pinnedInstallItems(st)...),
 					Endpoint:       installEndpoint(a, local),
 					ArchivedMarker: "(archived)",
 				}))
@@ -193,6 +193,23 @@ func pinnedInstallItems(st addon.Status) []list.Item {
 		Name: name,
 		Desc: desc,
 		Pick: func(sh *core.Shared) core.Action { return core.Push(pinnedInstallScreen(a, st.LocalVersion)) },
+	}}
+}
+
+// latestInstallItems returns the "install the newest release" lead row for the install
+// versions picker, shown only when an update check found a newer release than the pinned
+// one (UpdateAvailable — which already excludes clones/submodules/locked/commit-pinned).
+// On pick it resolves the latest release's asset off-thread and drops to the install
+// confirm, so it reuses the normal install task/pin path.
+func latestInstallItems(st addon.Status, info addon.UpdateInfo) []list.Item {
+	a := st.Addon
+	if info.State != addon.UpdateAvailable {
+		return nil
+	}
+	return []list.Item{components.Item{
+		Name: "⬆ Install latest (" + info.LatestTag + ")",
+		Desc: "update to the newest release",
+		Pick: func(sh *core.Shared) core.Action { return core.Push(latestInstallScreen(a, st.LocalVersion)) },
 	}}
 }
 

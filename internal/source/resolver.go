@@ -218,13 +218,14 @@ func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo stri
 	return branches, nil
 }
 
-// DependencyAsset picks the asset to install for a tagged dependency, where no
-// user is present to choose. Pinning a tagged dependency asserts the release is
-// unambiguous: exactly one uploaded asset → install it (e.g. a GDExtension addon's
-// precompiled build, where the generated source archive is useless); no uploaded
-// asset → the generated source archive (a pure-GDScript addon); two or more uploaded
-// assets → ambiguous (ok=false), so the caller reports and skips it.
-func DependencyAsset(rel Release) (Asset, bool) {
+// AutoAsset picks the asset to install automatically when no user is present to
+// choose — the shared selector behind dependency install, Install latest, and Update
+// All. It asserts the release is unambiguous: exactly one uploaded asset → install it
+// (e.g. a GDExtension addon's precompiled build, where the generated source archive is
+// useless); no uploaded asset → the generated source archive (a pure-GDScript addon);
+// two or more uploaded assets → ambiguous (ok=false), so the caller reports and skips
+// it (or, when a user is present, opens a picker).
+func AutoAsset(rel Release) (Asset, bool) {
 	var uploaded []Asset
 	var generated *Asset
 	for i := range rel.Assets {

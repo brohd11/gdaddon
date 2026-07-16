@@ -23,8 +23,8 @@ func TestLockedSkipsUpdateCheck(t *testing.T) {
 	if info := CheckUpdate(context.Background(), a); info.State != UpdateLocked {
 		t.Errorf("CheckUpdate on locked addon = %v, want UpdateLocked", info.State)
 	}
-	if _, ok := ResolveUpdate(context.Background(), a, "1.0.0"); ok {
-		t.Errorf("ResolveUpdate on locked addon returned a plan, want ok=false")
+	if _, res := ResolveUpdate(context.Background(), a, "1.0.0"); res != ResolveNone {
+		t.Errorf("ResolveUpdate on locked addon = %v, want ResolveNone", res)
 	}
 	if got := UpdateLocked.String(); got != "locked" {
 		t.Errorf("UpdateLocked.String() = %q, want \"locked\"", got)
@@ -61,44 +61,18 @@ func TestLatestRelease(t *testing.T) {
 	})
 }
 
-func TestResolveUpdateAsset(t *testing.T) {
-	// Two releases; each has an uploaded asset plus a (last-appended) source archive.
-	old := source.Release{Tag: "v1.0.0", Assets: []source.Asset{
-		{Name: "addon.zip", URL: "https://h/dl/v1.0.0/addon.zip"},
-		{Name: "Source code (zip)", URL: "https://h/archive/v1.0.0.zip"},
+func TestUploadedCount(t *testing.T) {
+	rel := source.Release{Assets: []source.Asset{
+		{Name: "addon.zip"},
+		{Name: "other.zip"},
+		{Name: "Source code (zip)", Generated: true},
 	}}
-	latest := source.Release{Tag: "v2.0.0", Assets: []source.Asset{
-		{Name: "addon.zip", URL: "https://h/dl/v2.0.0/addon.zip"},
-		{Name: "Source code (zip)", URL: "https://h/archive/v2.0.0.zip"},
-	}}
-	releases := []source.Release{latest, old}
-
-	t.Run("matches the uploaded asset by name", func(t *testing.T) {
-		got, ok := resolveUpdateAsset("https://h/dl/v1.0.0/addon.zip", releases, latest)
-		if !ok || got.URL != "https://h/dl/v2.0.0/addon.zip" {
-			t.Errorf("got %q ok=%v, want the v2.0.0 addon.zip", got.URL, ok)
-		}
-	})
-
-	t.Run("matches the source archive by name", func(t *testing.T) {
-		got, ok := resolveUpdateAsset("https://h/archive/v1.0.0.zip", releases, latest)
-		if !ok || got.URL != "https://h/archive/v2.0.0.zip" {
-			t.Errorf("got %q ok=%v, want the v2.0.0 source archive", got.URL, ok)
-		}
-	})
-
-	t.Run("falls back to the last asset when url is unknown", func(t *testing.T) {
-		got, ok := resolveUpdateAsset("https://h/dl/v0.9.0/legacy.zip", releases, latest)
-		if !ok || got.URL != "https://h/archive/v2.0.0.zip" {
-			t.Errorf("got %q ok=%v, want the source-archive fallback", got.URL, ok)
-		}
-	})
-
-	t.Run("no assets", func(t *testing.T) {
-		if _, ok := resolveUpdateAsset("x", nil, source.Release{}); ok {
-			t.Errorf("expected ok=false when the latest release has no assets")
-		}
-	})
+	if got := uploadedCount(rel); got != 2 {
+		t.Errorf("uploadedCount = %d, want 2 (generated excluded)", got)
+	}
+	if got := uploadedCount(source.Release{Assets: []source.Asset{{Name: "s", Generated: true}}}); got != 0 {
+		t.Errorf("uploadedCount of a source-archive-only release = %d, want 0", got)
+	}
 }
 
 func TestURLInReleases(t *testing.T) {

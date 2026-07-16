@@ -19,17 +19,19 @@ import (
 // the update plan, so a slow or unreachable host can't hang the loading screen.
 const updateResolveTimeout = 60 * time.Second
 
-// updatePlansMsg carries the resolved update plans from the background fetch to
-// the loading screen's result handler.
+// updatePlansMsg carries the resolved update plans (and the addons skipped as
+// ambiguous) from the background fetch to the loading screen's result handler.
 type updatePlansMsg struct {
-	plans []addon.UpdatePlan
+	plans   []addon.UpdatePlan
+	skipped []addon.SkippedUpdate
 }
 
 // newUpdateAllLoading captures the manifest paths, then fetches every installed
 // addon's latest release off the UI thread (resolveUpdatePlansCmd). When the
-// listings come back it either reports "up to date" and pops, or opens the confirm
-// listing each "name old → new". It's the entry point of the Actions ▸ Update all
-// flow: loading → confirm → task.
+// listings come back it logs any addon skipped for having multiple packages, then
+// either reports "up to date" and pops, or opens the confirm listing each
+// "name old → new". It's the entry point of the Actions ▸ Update all flow:
+// loading → confirm → task.
 func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 	c := appctx.Of(sh)
 	cmd := resolveUpdatePlansCmd(c.ManifestPath, c.ProjectRoot)
@@ -38,13 +40,20 @@ func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 		if !ok {
 			return core.Action{}
 		}
+		for _, s := range m.skipped {
+			sh.Log(fmt.Sprintf("[%s] update skipped: multiple packages (%s) — update manually", s.Name, s.Tag))
+		}
 		if len(m.plans) == 0 {
+			status := "all installed addons are up to date"
+			if len(m.skipped) > 0 {
+				status = fmt.Sprintf("%d addon(s) need a manual update (multiple packages)", len(m.skipped))
+			}
 			return core.Seq(
-				core.SetStatus("all installed addons are up to date"),
+				core.SetStatus(status),
 				core.Pop(),
 			)
 		}
-		return core.Replace(newUpdateAllConfirm(m.plans))
+		return core.Replace(newUpdateAllConfirm(m.plans, m.skipped))
 	}
 	return components.NewLoadingScreen("Update All", "checking for updates…", cmd, onResult)
 }
@@ -58,27 +67,27 @@ func resolveUpdatePlansCmd(manifestPath, projectRoot string) func(context.Contex
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(parent, updateResolveTimeout)
 			defer cancel()
-			plans, err := addon.ResolveUpdatePlans(ctx, manifestPath, projectRoot)
+			plans, skipped, err := addon.ResolveUpdatePlans(ctx, manifestPath, projectRoot)
 			if err != nil {
 				return updatePlansMsg{}
 			}
-			return updatePlansMsg{plans: plans}
+			return updatePlansMsg{plans: plans, skipped: skipped}
 		}
 	}
 }
 
-// newUpdateAllConfirm lists the pending updates ("name old → new") and, on confirm,
-// runs the batch update task.
-func newUpdateAllConfirm(plans []addon.UpdatePlan) *components.DialogScreen {
+// newUpdateAllConfirm lists the pending updates ("name old → new"), any addons skipped
+// for having multiple packages, and, on confirm, runs the batch update task.
+func newUpdateAllConfirm(plans []addon.UpdatePlan, skipped []addon.SkippedUpdate) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Update All",
-		Text:  updateAllBody(plans),
+		Text:  updateAllBody(plans, skipped),
 		OnYes: core.Replace(newUpdateAllTask(plans)),
 	})
 }
 
-func updateAllBody(plans []addon.UpdatePlan) string {
-	lines := make([]string, 0, len(plans)+1)
+func updateAllBody(plans []addon.UpdatePlan, skipped []addon.SkippedUpdate) string {
+	lines := make([]string, 0, len(plans)+len(skipped)+3)
 	lines = append(lines, fmt.Sprintf("Update %d addon(s) to their latest release:\n", len(plans)))
 	for _, p := range plans {
 		old := p.OldVersion
@@ -86,6 +95,12 @@ func updateAllBody(plans []addon.UpdatePlan) string {
 			old = "unknown"
 		}
 		lines = append(lines, fmt.Sprintf("  %s   %s → %s", p.Addon.Name, old, p.NewTag))
+	}
+	if len(skipped) > 0 {
+		lines = append(lines, "", "Skipped (multiple packages — update manually):")
+		for _, s := range skipped {
+			lines = append(lines, fmt.Sprintf("  %s   %s", s.Name, s.Tag))
+		}
 	}
 	return strings.Join(lines, "\n")
 }

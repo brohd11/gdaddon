@@ -1,6 +1,7 @@
 package project
 
 import (
+	"context"
 	"fmt"
 	"path"
 
@@ -14,6 +15,8 @@ import (
 	"gdaddon/internal/tui/widgets"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -45,6 +48,67 @@ func pinnedInstallScreen(a addon.Addon, local string) core.Screen {
 	pick := versionItem{tag: a.Tag, repoID: repoID, clone: a.IsClone(),
 		asset: source.Asset{Name: path.Base(a.URL), URL: a.URL}}
 	return newInstallConfirm(a, local, pick) // plain (non-branch/non-archived) confirm → newInstallTask
+}
+
+// latestReleaseMsg carries the fetched latest release from the loading screen's fetch
+// cmd back to its onResult closure.
+type latestReleaseMsg struct {
+	rel source.Release
+	ok  bool
+}
+
+// latestInstallScreen fetches the addon's newest release off-thread and drops to the
+// install confirm for it, preferring an author-uploaded asset over the generated source
+// archive (source.AutoAsset). When several uploaded packages make the choice
+// ambiguous it opens an asset picker instead. On no release / fetch error it pops with a
+// status.
+func latestInstallScreen(a addon.Addon, local string) core.Screen {
+	repoID, _ := source.RepoID(a.URL)
+	run := func(ctx context.Context) tea.Cmd {
+		return func() tea.Msg {
+			listing, err := source.AvailableVersions(ctx, a.URL)
+			if err != nil || listing == nil {
+				return latestReleaseMsg{}
+			}
+			rel, ok := addon.LatestRelease(listing.Releases)
+			return latestReleaseMsg{rel: rel, ok: ok}
+		}
+	}
+	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
+		m, ok := msg.(latestReleaseMsg)
+		if !ok {
+			return core.Action{}
+		}
+		if !m.ok || len(m.rel.Assets) == 0 {
+			return core.Seq(core.SetStatusAndLog("no newer release to install"), core.Pop())
+		}
+		// Prefer a single uploaded asset over the generated source archive; when several
+		// uploaded packages make the choice ambiguous, let the user pick.
+		if asset, ok := source.AutoAsset(m.rel); ok {
+			pick := versionItem{tag: m.rel.Tag, asset: asset, repoID: repoID}
+			return core.Replace(newInstallConfirm(a, local, pick))
+		}
+		return core.Replace(latestAssetPicker(a, local, repoID, m.rel))
+	}
+	return components.NewLoadingScreen(repoID, "resolving latest release…", run, onResult)
+}
+
+// latestAssetPicker lists a release's assets when "Install latest" can't pick one
+// unambiguously (several uploaded packages); selecting one drops to the install confirm.
+// Assets keep their natural order — uploaded first, the generated source archive last.
+func latestAssetPicker(a addon.Addon, local, repoID string, rel source.Release) core.Screen {
+	items := make([]list.Item, 0, len(rel.Assets))
+	for _, as := range rel.Assets {
+		as := as
+		items = append(items, components.Item{
+			Name: as.Name,
+			Pick: func(sh *core.Shared) core.Action {
+				pick := versionItem{tag: rel.Tag, asset: as, repoID: repoID}
+				return core.Push(newInstallConfirm(a, local, pick))
+			},
+		})
+	}
+	return components.NewPicker(items, components.PickerOpts{Crumb: "Assets", Title: rel.Tag})
 }
 
 // newStoreInstallConfirm confirms installing a chosen Asset Store version, then runs

@@ -149,38 +149,49 @@ type UpdatePlan struct {
 	Asset      source.Asset
 }
 
-// ResolveUpdate fetches the addon's release listing and, when a newer release than
-// the installed one exists, returns the plan to install it. The target asset
-// preserves the kind the addon currently tracks (resolveUpdateAsset). ok is false
-// when the addon is already on the latest release, is branch-tracked, has no
-// comparable releases, or can't be fetched — so it never plans a no-op update.
-func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePlan, bool) {
+// UpdateResolution is the outcome of resolving one addon's update.
+type UpdateResolution int
+
+const (
+	ResolveNone      UpdateResolution = iota // nothing to do (current / branch / locked / uncomparable / no releases)
+	ResolvePlan                              // a plan is available (UpdatePlan valid)
+	ResolveAmbiguous                         // a newer release exists but several uploaded packages make the asset choice ambiguous
+)
+
+// ResolveUpdate fetches the addon's release listing and, when a newer release than the
+// installed one exists, returns the plan to install it. The target asset is chosen by
+// source.AutoAsset (prefer the uploaded package, else the generated source archive) — the
+// same selector as Install latest. It returns ResolveNone when the addon is already on the
+// latest release, is branch-tracked, locked, has no comparable releases, or can't be
+// fetched (so it never plans a no-op update), and ResolveAmbiguous when a newer release
+// exists but has two or more uploaded packages (no user to pick — the caller logs & skips).
+func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePlan, UpdateResolution) {
 	if a.URL == "" {
-		return UpdatePlan{}, false
+		return UpdatePlan{}, ResolveNone
 	}
 	// A locked entry is pinned by the user: never plan a bulk update for it.
 	if a.IsLocked() {
-		return UpdatePlan{}, false
+		return UpdatePlan{}, ResolveNone
 	}
 	listing, err := source.AvailableVersions(ctx, a.URL)
 	if err != nil || listing == nil {
-		return UpdatePlan{}, false
+		return UpdatePlan{}, ResolveNone
 	}
 	if listing.Branch != nil {
 		for _, asset := range listing.Branch.Assets {
 			if asset.URL == a.URL {
-				return UpdatePlan{}, false
+				return UpdatePlan{}, ResolveNone
 			}
 		}
 	}
 	latest, ok := LatestRelease(listing.Releases)
 	if !ok {
-		return UpdatePlan{}, false
+		return UpdatePlan{}, ResolveNone
 	}
 	// Already on the latest release: its url is one of that release's assets.
 	for _, asset := range latest.Assets {
 		if asset.URL == a.URL {
-			return UpdatePlan{}, false
+			return UpdatePlan{}, ResolveNone
 		}
 	}
 	// A bare repo/clone url (a scanned install) matches no asset, so fall back to a
@@ -189,43 +200,32 @@ func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePla
 	if !urlInReleases(a.URL, listing.Releases) {
 		current, ok := currentByVersion(a, latest.Tag)
 		if !ok || current {
-			return UpdatePlan{}, false
+			return UpdatePlan{}, ResolveNone
 		}
 	}
-	asset, ok := resolveUpdateAsset(a.URL, listing.Releases, latest)
+	asset, ok := source.AutoAsset(latest)
 	if !ok {
-		return UpdatePlan{}, false
+		// ok=false is either an empty release (nothing to do) or 2+ uploaded packages
+		// (ambiguous — no user to pick, so surface it as a skip).
+		if uploadedCount(latest) >= 2 {
+			return UpdatePlan{Addon: a, OldVersion: localVersion, NewTag: latest.Tag}, ResolveAmbiguous
+		}
+		return UpdatePlan{}, ResolveNone
 	}
-	return UpdatePlan{Addon: a, OldVersion: localVersion, NewTag: latest.Tag, Asset: asset}, true
+	return UpdatePlan{Addon: a, OldVersion: localVersion, NewTag: latest.Tag, Asset: asset}, ResolvePlan
 }
 
-// resolveUpdateAsset picks which asset of the latest release to install for an
-// update, preserving the kind the addon currently tracks: it finds the asset name
-// the current url resolved to (across any release in the listing) and selects the
-// same-named asset in the latest release. When the name can't be matched it falls
-// back to the release's last asset — the host's generated source archive, which
-// every release offers (see source.resolveReleases) — so an update can still
-// proceed.
-func resolveUpdateAsset(currentURL string, releases []source.Release, latest source.Release) (source.Asset, bool) {
-	var wantName string
-	for _, rel := range releases {
-		for _, asset := range rel.Assets {
-			if asset.URL == currentURL {
-				wantName = asset.Name
-			}
+// uploadedCount counts a release's author-uploaded assets (excluding the host's
+// generated source archive) — used to tell an ambiguous release (2+ uploads) from an
+// empty one when source.AutoAsset returns ok=false.
+func uploadedCount(rel source.Release) int {
+	n := 0
+	for _, a := range rel.Assets {
+		if !a.Generated {
+			n++
 		}
 	}
-	if wantName != "" {
-		for _, asset := range latest.Assets {
-			if asset.Name == wantName {
-				return asset, true
-			}
-		}
-	}
-	if len(latest.Assets) == 0 {
-		return source.Asset{}, false
-	}
-	return latest.Assets[len(latest.Assets)-1], true
+	return n
 }
 
 // maxConcurrentChecks caps how many release-listing fetches forInstalled runs at
@@ -282,21 +282,53 @@ func CheckUpdates(ctx context.Context, statuses []Status) map[string]UpdateInfo 
 	return checks
 }
 
+// SkippedUpdate is an addon with a newer release whose asset can't be chosen
+// automatically (several uploaded packages) — surfaced so the user updates it by hand.
+type SkippedUpdate struct {
+	Name string
+	Tag  string
+}
+
 // ResolveUpdatePlans inspects the manifest and resolves an update plan for every
 // installed addon that has a newer release than the one installed. Not-installed
 // or url-less entries are skipped (nothing to compare). Fetches run concurrently
-// and honor ctx (cancel/deadline) so a slow host can't stall the caller. The
-// returned plans are name-sorted for deterministic output.
-func ResolveUpdatePlans(ctx context.Context, manifestPath, baseDir string) ([]UpdatePlan, error) {
+// and honor ctx (cancel/deadline) so a slow host can't stall the caller. It also
+// returns the addons that have a newer release but an ambiguous asset choice (2+
+// uploaded packages), so the caller can report them for a manual update. Both slices
+// are name-sorted for deterministic output.
+func ResolveUpdatePlans(ctx context.Context, manifestPath, baseDir string) ([]UpdatePlan, []SkippedUpdate, error) {
 	statuses, err := Inspect(manifestPath, baseDir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	plans := forInstalled(statuses, func(a Addon, local string) (UpdatePlan, bool) {
-		return ResolveUpdate(ctx, a, local)
+	type result struct {
+		plan    UpdatePlan
+		skipped SkippedUpdate
+		isSkip  bool
+	}
+	results := forInstalled(statuses, func(a Addon, local string) (result, bool) {
+		plan, res := ResolveUpdate(ctx, a, local)
+		switch res {
+		case ResolvePlan:
+			return result{plan: plan}, true
+		case ResolveAmbiguous:
+			return result{skipped: SkippedUpdate{Name: a.Name, Tag: plan.NewTag}, isSkip: true}, true
+		default:
+			return result{}, false
+		}
 	})
+	var plans []UpdatePlan
+	var skipped []SkippedUpdate
+	for _, r := range results {
+		if r.isSkip {
+			skipped = append(skipped, r.skipped)
+		} else {
+			plans = append(plans, r.plan)
+		}
+	}
 	sort.Slice(plans, func(i, j int) bool { return plans[i].Addon.Name < plans[j].Addon.Name })
-	return plans, nil
+	sort.Slice(skipped, func(i, j int) bool { return skipped[i].Name < skipped[j].Name })
+	return plans, skipped, nil
 }
 
 // UpdateAll installs each plan's target asset under baseDir and pins the new

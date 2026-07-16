@@ -275,12 +275,17 @@ func runUpdate(projectRoot string) error {
 	if err != nil {
 		return err
 	}
-	plans, err := addon.ResolveUpdatePlans(context.Background(), manifest, projectRoot)
+	plans, skipped, err := addon.ResolveUpdatePlans(context.Background(), manifest, projectRoot)
 	if err != nil {
 		return err
 	}
+	for _, s := range skipped {
+		fmt.Printf("Skipping %s (%s): multiple packages — update manually.\n", s.Name, s.Tag)
+	}
 	if len(plans) == 0 {
-		fmt.Println("All installed addons are up to date.")
+		if len(skipped) == 0 {
+			fmt.Println("All installed addons are up to date.")
+		}
 		return nil
 	}
 	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }

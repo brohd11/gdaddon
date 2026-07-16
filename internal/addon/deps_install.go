@@ -112,7 +112,7 @@ func importDeps(parent context.Context, manifestPath, baseDir string, report Rep
 }
 
 // ResolveDepAsset finds the dependency's required release and picks its install asset
-// (source.DependencyAsset: the single uploaded build, or the generated source archive
+// (source.AutoAsset: the single uploaded build, or the generated source archive
 // when none was uploaded; ambiguous multi-upload releases yield ok=false).
 //
 // It is archive-first: a tag-equal local copy avoids the network and survives upstream
@@ -127,7 +127,7 @@ func ResolveDepAsset(ctx context.Context, d Dependency) (source.Asset, bool) {
 	}
 	for _, rel := range listing.Releases {
 		if tagEqual(rel.Tag, d.Tag) {
-			return source.DependencyAsset(rel)
+			return source.AutoAsset(rel)
 		}
 	}
 	return source.Asset{}, false
@@ -144,7 +144,7 @@ func archivedDepAsset(d Dependency) (source.Asset, bool) {
 	}
 	for _, rel := range releases {
 		if tagEqual(rel.Tag, d.Tag) {
-			return source.DependencyAsset(rel)
+			return source.AutoAsset(rel)
 		}
 	}
 	return source.Asset{}, false
