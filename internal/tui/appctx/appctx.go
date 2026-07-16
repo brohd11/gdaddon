@@ -18,6 +18,7 @@ import (
 	"gdaddon/internal/selfupdate"
 
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/gitstack/repoui"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -292,14 +293,15 @@ type (
 	// Actions menu — reload from the updated context; the header needs no notification
 	// (it reads straight from App each render).
 	PathRefresh struct{}
-	// GitRefresh is broadcast after a git operation (pull/push/commit/single fetch) changes a
-	// checkout, so the Project list recomputes its *local* git state — dirty / ahead / behind.
-	// Deliberately not ProjectDirty: this touched no manifest and no release, so re-firing the
-	// network-bound update check would be wasted work. Raised from both the per-addon Git
-	// submenu (tabs/project) and the all-repos flow (flows/git), which is why it lives here
-	// rather than in either — tabs can't import each other.
-	GitRefresh struct{}
 )
+
+// GitRefresh is broadcast after a git operation (pull/push/commit/single fetch) changes a
+// checkout, so the Project list recomputes its *local* git state — dirty / ahead / behind.
+// Deliberately not ProjectDirty: this touched no manifest and no release, so re-firing the
+// network-bound update check would be wasted work. It is an alias of the shared screens'
+// repoui.RefreshMsg — the git flows (which live in the reusable gitstack/repoui module) raise
+// that value directly, and the Project root recognizes it here under gdaddon's own name.
+type GitRefresh = repoui.RefreshMsg
 
 // RefreshPaths re-runs Scan after the paths may have changed (e.g. a manifest was just
 // created). When async it defers the scan into a tea.Cmd that, once it runs, emits the

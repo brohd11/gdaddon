@@ -1,4 +1,4 @@
-package addon
+package repo
 
 import (
 	"bytes"
@@ -10,9 +10,9 @@ import (
 )
 
 // This file holds the git operations that *change* a repo (pull/push/commit) or stream
-// their output to a UI, as opposed to gitscan.go's read-only probes. They exist so the
-// routine half of addon development — see what changed, pull, commit, push — can happen
-// without leaving gdaddon. They are deliberately not a git client: anything needing a
+// their output to a UI, as opposed to repo.go's read-only probes. They exist so the
+// routine half of working a checkout — see what changed, pull, commit, push — can happen
+// without leaving the app. They are deliberately not a git client: anything needing a
 // decision (a diverged branch, a conflict, a rebase) fails and leaves the repo untouched
 // for the user to sort out in a real terminal.
 
@@ -21,7 +21,7 @@ import (
 // words folded in, since that's the part worth reading). stdout and stderr are interleaved
 // the way a terminal would show them — git writes progress and errors to stderr, and a
 // caller streaming to a log wants both. ctx cancellation kills the subprocess, which is how
-// the TUI's task-abort works.
+// a TUI's task-abort works.
 func GitStream(ctx context.Context, dir string, report Reporter, args ...string) error {
 	w := &lineWriter{report: report}
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)

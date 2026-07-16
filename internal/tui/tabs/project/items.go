@@ -12,6 +12,7 @@ import (
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/gitstack/repoui"
 
 	"github.com/charmbracelet/bubbles/list"
 )
@@ -105,7 +106,7 @@ func addonItem(r rowData) components.Item {
 			case core.MatchKey(k, appctx.AppKeys.Terminal):
 				return sysopen.Terminal(s.FullPath), true
 			case core.MatchKey(k, appctx.AppKeys.Git) && s.Addon.IsGitWorkdir():
-				return core.Push(newGitSubmenu(s, sh)), true
+				return core.Push(repoui.RepoMenu(sh, repoFromStatus(s))), true
 			}
 			return core.Action{}, false
 		}

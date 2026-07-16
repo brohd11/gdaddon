@@ -14,10 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Reporter is a sink for human-readable progress lines. The CLI prints them to
-// stdout; the TUI funnels them into bubbletea messages.
-type Reporter func(format string, args ...any)
-
 // Kind classifies how a manifest entry relates to git, on one mutually-exclusive
 // axis (mirroring the internal gitKind probe).
 type Kind string
