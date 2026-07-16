@@ -248,7 +248,9 @@ func resolveOneDepCmd(manifestPath string, d addon.Dependency) func(context.Cont
 		return func() tea.Msg {
 			name := addon.DeriveName(d.RepoURL)
 			if d.Tag == "" {
-				if err := addon.AddEntry(manifestPath, name, addon.NormalizeRepoURL(d.RepoURL), ""); err != nil {
+				// AddEntryFull with an empty tag behaves like a bare AddEntry, but also
+				// records the is_dependency provenance the plain AddEntry can't.
+				if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: name, URL: addon.NormalizeRepoURL(d.RepoURL), Dependency: true}); err != nil {
 					return addResult{err: err}
 				}
 				return addResult{status: fmt.Sprintf("added %s (no version)", name)}
@@ -259,7 +261,7 @@ func resolveOneDepCmd(manifestPath string, d addon.Dependency) func(context.Cont
 			if !ok {
 				return addResult{err: fmt.Errorf("no asset for %s %s", d.RepoID, d.Tag)}
 			}
-			if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: name, URL: asset.URL, Tag: d.Tag}); err != nil {
+			if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: name, URL: asset.URL, Tag: d.Tag, Dependency: true}); err != nil {
 				return addResult{err: err}
 			}
 			return addResult{status: fmt.Sprintf("added %s %s", name, d.Tag)}
@@ -410,8 +412,9 @@ func depsConfirmBody(name string, plan depPlan) string {
 func commitDeps(sh *core.Shared, name, manifestPath string, plan depPlan) core.Action {
 	added, failed := 0, 0
 	for _, p := range plan.add {
-		// AddEntryFull with an empty tag behaves like a bare AddEntry.
-		if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: p.name, URL: p.url, Tag: p.tag}); err != nil {
+		// AddEntryFull with an empty tag behaves like a bare AddEntry. Dependency marks
+		// the entry's provenance so it can later flag as an unused dependency.
+		if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: p.name, URL: p.url, Tag: p.tag, Dependency: true}); err != nil {
 			failed++
 			continue
 		}

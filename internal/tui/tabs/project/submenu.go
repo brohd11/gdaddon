@@ -80,6 +80,16 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return toggleLock(sh, st) },
 		})
 	}
+	// Offered only for an entry auto-added as another plugin's dependency: clear the
+	// is_dependency flag so the user adopts it as their own and it stops flagging as an
+	// "unused dependency" once its depender is gone. Mirrors the Lock toggle.
+	if a.Dependency {
+		items = append(items, components.Item{
+			Name: "✓ Keep (not a dependency)",
+			Desc: "clear the dependency flag — stop the 'unused dependency' warning",
+			Pick: func(sh *core.Shared) core.Action { return keepAddon(sh, st) },
+		})
+	}
 	// Offered whenever the installed addon declares any dependencies (a stable
 	// inspection point that stays put once they're resolved), opening the Dependencies
 	// screen: per-dep install status, add, and suppress.
@@ -229,6 +239,22 @@ func toggleLock(sh *core.Shared, st addon.Status) core.Action {
 	st.Addon.Lock = newLock
 	return core.Seq(
 		core.SetStatus(verb+" "+st.Addon.Name),
+		core.PropagateAll(appctx.ProjectDirty{}),
+		core.Replace(newSubmenuScreen(st, sh)),
+	)
+}
+
+// keepAddon clears the entry's is_dependency flag (SetIsDependency removes the line),
+// promoting an auto-added dependency to a user-chosen plugin so it no longer flags as an
+// "unused dependency". It logs the change, broadcasts ProjectDirty so the list marker
+// clears, and re-renders the submenu (without its Keep row) to reflect the new state.
+func keepAddon(sh *core.Shared, st addon.Status) core.Action {
+	if err := addon.SetIsDependency(appctx.Of(sh).ManifestPath, st.Addon.Name, false); err != nil {
+		return core.StatusErr(err)
+	}
+	st.Addon.Dependency = false
+	return core.Seq(
+		core.SetStatus("keeping "+st.Addon.Name+" (no longer a dependency)"),
 		core.PropagateAll(appctx.ProjectDirty{}),
 		core.Replace(newSubmenuScreen(st, sh)),
 	)

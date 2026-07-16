@@ -3,6 +3,7 @@ package addon
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -116,6 +117,90 @@ deps=["u/Present@v1.0.0", "u/Absent@v1.0.0", "u/Stale@v2.0.0", "u/Tagless"]
 	// An addon with no recorded path declares nothing (not installed).
 	if missing, err := MissingDeps(Addon{Name: "A", URL: a.URL}, root, manifest); err != nil || missing != nil {
 		t.Errorf("expected nil for an addon with no path; got %v err=%v", missing, err)
+	}
+}
+
+// installedDep builds a present Status for an addon dir under root, writing a
+// plugin.cfg declaring deps (deps="" writes none). Returns the Status for use in
+// an OrphanDeps statuses slice.
+func installedDep(t *testing.T, root, name, url, relPath, deps string, isDep bool, suppress ...string) Status {
+	t.Helper()
+	dir := filepath.Join(root, relPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "[plugin]\nname=\"" + name + "\"\nversion=\"1.0.0\"\n"
+	if deps != "" {
+		cfg += "deps=" + deps + "\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "plugin.cfg"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return Status{
+		Addon:    Addon{Name: name, URL: url, Path: relPath, Dependency: isDep, SuppressDeps: suppress},
+		State:    StateInstalled,
+		FullPath: dir,
+	}
+}
+
+// TestOrphanDeps covers the "unused dependency" flag: an is_dependency entry is orphaned
+// unless some present plugin's plugin.cfg (non-suppressed) still declares it.
+func TestOrphanDeps(t *testing.T) {
+	root := t.TempDir()
+
+	// A (user-chosen) declares Dep and Sup, but suppresses Sup.
+	a := installedDep(t, root, "A", "https://github.com/u/A", "addons/a",
+		`["u/Dep", "u/Sup"]`, false, "github.com/u/sup")
+	// Dep is still needed by A → not orphan.
+	dep := installedDep(t, root, "Dep", "https://github.com/u/Dep", "addons/dep", "", true)
+	// Sup is declared by A but suppressed → nothing needs it → orphan.
+	sup := installedDep(t, root, "Sup", "https://github.com/u/Sup", "addons/sup", "", true)
+	// Old was a dependency of something now gone → orphan.
+	old := installedDep(t, root, "Old", "https://github.com/u/Old", "addons/old", "", true)
+	// Keep is unneeded too but not flagged as a dependency → never orphan.
+	keep := installedDep(t, root, "Keep", "https://github.com/u/Keep", "addons/keep", "", false)
+
+	got := OrphanDeps([]Status{a, dep, sup, old, keep})
+	want := map[string]bool{"Sup": true, "Old": true}
+	if len(got) != len(want) {
+		t.Fatalf("orphans = %v, want %v", got, want)
+	}
+	for name := range want {
+		if !got[name] {
+			t.Errorf("expected %s to be orphaned; got %v", name, got)
+		}
+	}
+
+	// When the depender A is not present, its live dep is orphaned too (the graph is
+	// read from installed plugins only).
+	a.State = StateMissing
+	got = OrphanDeps([]Status{a, dep, sup, old, keep})
+	if !got["Dep"] {
+		t.Errorf("Dep should be orphaned once its depender is absent; got %v", got)
+	}
+}
+
+// TestSetIsDependency covers the provenance line writer: set inserts is_dependency: true,
+// clear removes it (an absent line reads as user-chosen).
+func TestSetIsDependency(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	if err := AddEntry(path, "Widget", "https://github.com/u/Widget.git", "addons/widget"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SetIsDependency(path, "Widget", true); err != nil {
+		t.Fatal(err)
+	}
+	if addons, _ := Parse(path); len(addons) != 1 || !addons[0].Dependency {
+		t.Fatalf("is_dependency not set: %+v", addons)
+	}
+
+	if err := SetIsDependency(path, "Widget", false); err != nil {
+		t.Fatal(err)
+	}
+	if data := string(mustRead(t, path)); strings.Contains(data, "is_dependency") {
+		t.Errorf("clearing should remove the line; got:\n%s", data)
 	}
 }
 

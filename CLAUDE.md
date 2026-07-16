@@ -61,6 +61,8 @@ manifest entry with stable snake_case keys: `name`, `state`
 `tag`, `commit` (a branch package's pinned HEAD sha; `""` otherwise), `live_branch`
 (a git checkout's current branch; `""` for non-git entries), `url`,
 `lock` (bool; version-pinned, no update alerts),
+`is_dependency` (bool; entry auto-added because another plugin declares it as a dep),
+`orphan` (bool; an `is_dependency` entry nothing installed still requires),
 `update` (`unknown`/`current`/`available`), `latest_tag`,
 `ahead`/`behind` (a git checkout's divergence from its upstream; `0` otherwise),
 `missing_deps`
@@ -70,7 +72,9 @@ local/instant except `update`/`latest_tag`, which stay `"unknown"` unless
 `ahead`/`behind` are local too — they read the remote-tracking refs git already has — so
 they're only as current as that checkout's last `git fetch`; a `--list` never fetches.
 `missing_deps` comes from `addon.MissingDeps` (local; deps absent from the manifest,
-excluding any the declaring entry's `suppress_deps` ignores).
+excluding any the declaring entry's `suppress_deps` ignores). `is_dependency`/`orphan` are
+local too: `orphan` comes from `addon.OrphanDeps` (the union of every non-suppressed dep
+declared by a *present* plugin — an `is_dependency` entry outside that union is orphaned).
 
 ### `repos` subcommand
 
@@ -105,6 +109,7 @@ my_addon:
   tag: "v1.2.3"                        # optional; the release tag installed from (what dependency specs match)
   commit: "abc1234…"                   # optional; a branch package pinned to this HEAD sha (url is that commit's archive)
   suppress_deps: ["owner/repo"]        # optional; declared deps (canonical repo-ids) to ignore in the warning / "Add all"
+  is_dependency: true                  # optional; auto-added because another plugin declares it — provenance for the "unused dependency" marker
 ```
 
 A git **branch** install offers two modes (TUI confirm): **Clone** (default —
@@ -139,6 +144,18 @@ actually *installed*, not merely present in the manifest: `addon.MissingDeps` is
 manifest-presence subset (what "Add all" adds), while `addon.DepStatuses` (backed by the
 inspected project) is the install-aware form that drives the warning and the
 Dependencies screen (cached as `appctx.Ctx.DepStatuses`).
+
+A dep added via the Dependencies flow is recorded with `is_dependency: true` (provenance —
+written by `addon.SetIsDependency`, the same single-line writer as `lock`/`commit`, and
+carried by `AddEntryFull` so it survives set import/export; export to global drops it, an
+explicit promotion). `addon.OrphanDeps` (local, cached as `appctx.Ctx.OrphanDeps`, computed
+in the same `loadProject` pass as `DepStatuses`) then flags any `is_dependency` entry no
+longer required by any *installed* plugin — the **"unused dependency"** row marker. The
+graph is read from installed plugins only, so uninstalling a depender flags its dep (a
+stateless, self-healing recompute). It's a warning marker, not an `addon.State` — an entry
+can be installed *and* orphaned at once, like the "missing deps"/"behind origin" markers.
+The per-addon **Keep (not a dependency)** action clears the flag (`SetIsDependency` false),
+adopting the entry so it stops flagging; removal is the existing per-addon **Remove**.
 
 An addon may also declare an installer-specific `dir="addons/x"` key in its
 `plugin.cfg`/`version.cfg` (project-root-relative). The manifest stays the source of
@@ -287,7 +304,7 @@ Key packages/functions:
   the Project list's local markers settle without re-firing the network update check. Keys: `v`
   (row-level, an addon's own Git page) and `V` (the all-repos page) — deliberately not `g`/`G`,
   which bubbles binds to jump-to-top/bottom on every list.
-- `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` write single scalar lines the same way (empty value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha.
+- `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` / `addon.SetIsDependency` write single scalar lines the same way (empty/false value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha, `SetIsDependency` records/clears a dep's auto-added provenance. `addon.OrphanDeps` reports which `is_dependency` entries nothing installed still needs (the "unused dependency" marker).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails). A commit-pinned branch package is stored under `<branch>@<sha>` (so distinct commits of the same branch don't overwrite), and `parseArchiveTag` recovers the branch + `Asset.Commit` pin when the archive is listed back.
 - `archive.RemoveRepo` / `archive.Remove` — delete a repo's whole archive (used by Global → Remove "+ archive"), or one archived package by its local path, pruning emptied folders (the Archive tab).

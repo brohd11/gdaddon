@@ -147,6 +147,49 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 	return missing, nil
 }
 
+// OrphanDeps reports which is_dependency-flagged manifest entries are no longer required
+// by any installed plugin — the "unused dependency" markers. It builds the union of every
+// non-suppressed dependency RepoID declared by a present plugin's plugin.cfg, then flags
+// each entry with Dependency==true whose own RepoID is absent from that union. Keyed by
+// addon Name; only orphans appear (a missing key reads as not-orphaned).
+//
+// The graph is read from installed plugins only (an uninstalled plugin's plugin.cfg isn't
+// on disk), so removing/uninstalling a depender flags its dep here — intended, and a
+// stateless self-healing recompute. Local-only, so it rides every refresh like DepStatuses.
+func OrphanDeps(statuses []Status) map[string]bool {
+	needed := make(map[string]bool)
+	for _, s := range statuses {
+		if !s.Present() {
+			continue
+		}
+		deps, err := Dependencies(s.FullPath)
+		if err != nil || len(deps) == 0 {
+			continue
+		}
+		suppressed := stringSet(s.Addon.SuppressDeps)
+		for _, d := range deps {
+			if !suppressed[d.RepoID] {
+				needed[d.RepoID] = true
+			}
+		}
+	}
+
+	orphan := make(map[string]bool)
+	for _, s := range statuses {
+		if !s.Addon.Dependency {
+			continue
+		}
+		id, err := source.RepoID(s.Addon.URL)
+		if err != nil {
+			continue
+		}
+		if !needed[id] {
+			orphan[s.Addon.Name] = true
+		}
+	}
+	return orphan
+}
+
 // DepState is a declared dependency's install state relative to the project, as shown
 // on the Dependencies screen.
 type DepState int

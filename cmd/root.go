@@ -158,8 +158,10 @@ type listEntryJSON struct {
 	Commit        string `json:"commit"`      // pinned branch-package HEAD sha; "" for non-pinned entries
 	LiveBranch    string `json:"live_branch"` // git checkout's current branch; "" for non-git entries
 	URL           string `json:"url"`
-	Lock          bool   `json:"lock"`   // pinned: no update alerts, never bulk-updated
-	Update        string `json:"update"` // unknown/current/available
+	Lock          bool   `json:"lock"`          // pinned: no update alerts, never bulk-updated
+	IsDependency  bool   `json:"is_dependency"` // auto-added because another plugin declares it as a dep
+	Orphan        bool   `json:"orphan"`        // an is_dependency entry nothing installed still requires
+	Update        string `json:"update"`        // unknown/current/available
 	LatestTag     string `json:"latest_tag"`
 	// Ahead/Behind are a git checkout's divergence from its upstream (0 for everything
 	// else). They're read locally from the remote-tracking refs, so they cost nothing —
@@ -202,6 +204,10 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 		checks = addon.CheckUpdates(context.Background(), statuses)
 	}
 
+	// Orphan state is local (which is_dependency entries nothing installed still needs),
+	// computed once over the whole set and read per-entry below.
+	orphans := addon.OrphanDeps(statuses)
+
 	entries := make([]listEntryJSON, 0, len(statuses))
 	for _, s := range statuses {
 		deps := make([]missDepJSON, 0)
@@ -243,6 +249,8 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 			LiveBranch:    s.LiveBranch,
 			URL:           s.Addon.URL,
 			Lock:          s.Addon.Lock,
+			IsDependency:  s.Addon.Dependency,
+			Orphan:        orphans[s.Addon.Name],
 			Update:        update,
 			LatestTag:     latestTag,
 			Ahead:         sync.Ahead,

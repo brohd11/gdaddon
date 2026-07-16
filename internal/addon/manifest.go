@@ -206,7 +206,12 @@ func AddEntryFull(manifestPath string, a Addon) error {
 		}
 	}
 	if a.Lock {
-		return SetLock(manifestPath, a.Name, true)
+		if err := SetLock(manifestPath, a.Name, true); err != nil {
+			return err
+		}
+	}
+	if a.Dependency {
+		return SetIsDependency(manifestPath, a.Name, true)
 	}
 	return nil
 }
@@ -280,6 +285,14 @@ func SetLock(manifestPath, name string, lock bool) error {
 // fields (a sha is deliberately not stored in tag, which deps compare via semver).
 func SetCommit(manifestPath, name, commit string) error {
 	return setScalarField(manifestPath, name, "commit", `commit: "`+commit+`"`, commit != "")
+}
+
+// SetIsDependency sets (or clears) the `is_dependency:` line on an entry, in place. For
+// isDep=true it inserts/updates `is_dependency: true`; for isDep=false it removes any
+// existing line (an absent line reads as user-chosen, so the manifest stays minimal).
+// Mirrors SetLock — a bool whose absence is the zero value.
+func SetIsDependency(manifestPath, name string, isDep bool) error {
+	return setScalarField(manifestPath, name, "is_dependency", "is_dependency: true", isDep)
 }
 
 // SetSuppressDeps sets (or clears) the `suppress_deps:` line on an entry, in place. A

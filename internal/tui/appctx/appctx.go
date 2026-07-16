@@ -68,6 +68,12 @@ type Ctx struct {
 	// the refs are updated, which is what the Project tab's fetch key (AppKeys.Fetch) is
 	// for. Until then the counts are as stale as git's own.
 	GitSync map[string]addon.GitSync
+
+	// OrphanDeps marks each is_dependency-flagged entry no longer required by anything
+	// installed, keyed by addon name (only orphans appear). Local-only like DepStatuses,
+	// recomputed synchronously in loadProject; the Project list reads it to draw the
+	// "unused dependency" marker.
+	OrphanDeps map[string]bool
 }
 
 // New builds the context for a project root and performs the initial path scan.
@@ -102,6 +108,7 @@ func (c *Ctx) loadProject() {
 	if c.ManifestPath == "" {
 		c.ProjectAddons = nil
 		c.DepStatuses = nil
+		c.OrphanDeps = nil
 		c.GitDirty = nil
 		c.GitSync = nil
 		return
@@ -111,6 +118,7 @@ func (c *Ctx) loadProject() {
 	// the git-dirty check need the resolved install state, so they don't inspect twice.
 	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
 	c.refreshDepChecks(statuses)
+	c.OrphanDeps = addon.OrphanDeps(statuses)
 	c.refreshGitChecks(statuses)
 }
 

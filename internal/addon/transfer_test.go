@@ -19,12 +19,13 @@ func TestAddEntryFullAllFields(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "addon_manifest.yml")
 			want := Addon{
-				Name:    "Acme",
-				URL:     "https://github.com/u/Acme.git",
-				Path:    "addons/acme",
-				Version: "1.2.3",
-				Tag:     "v1.2.3",
-				Kind:    kind,
+				Name:       "Acme",
+				URL:        "https://github.com/u/Acme.git",
+				Path:       "addons/acme",
+				Version:    "1.2.3",
+				Tag:        "v1.2.3",
+				Kind:       kind,
+				Dependency: true,
 			}
 			if err := AddEntryFull(path, want); err != nil {
 				t.Fatal(err)

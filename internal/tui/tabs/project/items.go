@@ -150,6 +150,9 @@ func rowMarker(r rowData) string {
 	if r.deps {
 		parts = append(parts, "missing deps")
 	}
+	if r.orphan {
+		parts = append(parts, "unused dependency")
+	}
 	if r.dirty {
 		parts = append(parts, "uncommitted changes")
 	}
@@ -170,6 +173,7 @@ type rowData struct {
 	s      addon.Status
 	update bool          // a newer release exists (UpdateAvailable; excludes locked/current/unknown)
 	deps   bool          // has unsatisfied dependencies
+	orphan bool          // an is_dependency entry no longer required by anything installed
 	dirty  bool          // git checkout has uncommitted changes
 	sync   addon.GitSync // git checkout's divergence from its upstream, as of the last fetch
 }
@@ -185,6 +189,7 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 			s:      s,
 			update: c.UpdateChecks[s.Addon.Name].State == addon.UpdateAvailable,
 			deps:   depsNeedAttention(c.DepStatuses[s.Addon.Name]),
+			orphan: c.OrphanDeps[s.Addon.Name],
 			dirty:  c.GitDirty[s.Addon.Name],
 			sync:   c.GitSync[s.Addon.Name],
 		}
@@ -231,6 +236,7 @@ const (
 	rankUpdate             // a newer release is available
 	rankDeps               // unsatisfied dependencies
 	rankDirty              // uncommitted changes in a git checkout
+	rankOrphan             // an is_dependency entry nothing installed needs — a cleanup hint
 	rankAhead              // unpushed local commits — informational, nothing is broken
 	rankUnversioned        // installed, no version pinned
 	rankInstalled          // installed and clean
@@ -267,6 +273,9 @@ func attentionRank(r rowData) int {
 	}
 	if r.dirty && rankDirty < base {
 		base = rankDirty
+	}
+	if r.orphan && rankOrphan < base {
+		base = rankOrphan
 	}
 	if r.sync.Ahead > 0 && rankAhead < base {
 		base = rankAhead

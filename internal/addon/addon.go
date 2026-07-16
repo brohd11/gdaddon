@@ -88,6 +88,13 @@ type Addon struct {
 	// module) that should never contribute to the missing-deps warning nor be added by
 	// "Add all missing". Stored as an inline flow list on the declaring addon's entry.
 	SuppressDeps []string `yaml:"suppress_deps"`
+	// Dependency records that this entry was auto-added because another plugin declares
+	// it as a dependency — provenance, not the user's own choice. It lets OrphanDeps flag
+	// the entry as an "unused dependency" once nothing installed still requires it. Set
+	// when a dep is added via the Dependencies flow; cleared by the "Keep" action once the
+	// user adopts it. Carries through set import/export but is dropped on export to global
+	// (an explicit promotion). The user toggles it off, never on.
+	Dependency bool `yaml:"is_dependency"`
 }
 
 // IsLocked reports whether the entry is pinned (no update alerts, install/update
@@ -110,12 +117,12 @@ func (a Addon) IsGitWorkdir() bool { return a.Kind == KindClone || a.Kind == Kin
 type State int
 
 const (
-	StateInvalid     State = iota // missing url or path
-	StateMissing                  // not installed locally
-	StateInstalled                // installed and version matches (or no version pinned + present unversioned)
-	StateMismatch                 // installed but local version != pinned version
-	StateUnversioned              // installed, present, manifest pins no version
-	StateBranchChanged            // git checkout present, on a different branch than the manifest records
+	StateInvalid       State = iota // missing url or path
+	StateMissing                    // not installed locally
+	StateInstalled                  // installed and version matches (or no version pinned + present unversioned)
+	StateMismatch                   // installed but local version != pinned version
+	StateUnversioned                // installed, present, manifest pins no version
+	StateBranchChanged              // git checkout present, on a different branch than the manifest records
 )
 
 // String renders a State as a short lowercase label for non-interactive output.
