@@ -42,7 +42,7 @@ Build outputs go to `build/<platform>/gdaddon[.exe]`.
 
 `bubblestack`, `gitstack`, and `repoview` are separate repos (see Architecture). For local
 cross-repo work, check them out beside this one under `~/main/go/` and run
-`go work init ./godot_addon_installer ./bubblestack ./gitstack ./repoview` there (the `go.work`
+`go work init ./gdaddon ./bubblestack ./gitstack ./repoview` there (the `go.work`
 stays uncommitted). Ordinary `make`/`go build` here builds against the tagged module versions.
 
 ## Running
@@ -204,7 +204,7 @@ internal/
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin, docs)
-The three modules below live in their OWN GitHub repos (github.com/brohd11/{bubblestack,gitstack,repoview}) — gdaddon `require`s bubblestack + gitstack as tagged versions (v0.1.0), no `replace`. For local co-development all four are checked out side by side under ~/main/go/ and tied by an *uncommitted* `go.work` there (`use ./godot_addon_installer ./bubblestack ./gitstack ./repoview`), so cross-module edits are picked up without re-tagging; releases/CI/outside consumers use the tags. None of the three imports a gdaddon package. Their layouts:
+The three modules below live in their OWN GitHub repos (github.com/brohd11/{bubblestack,gitstack,repoview}) — gdaddon `require`s bubblestack + gitstack as tagged versions (v0.1.0), no `replace`. For local co-development all four are checked out side by side under ~/main/go/ and tied by an *uncommitted* `go.work` there (`use ./gdaddon ./bubblestack ./gitstack ./repoview`), so cross-module edits are picked up without re-tagging; releases/CI/outside consumers use the tags. None of the three imports a gdaddon package. Their layouts:
 
 gitstack (github.com/brohd11/gitstack) — the reusable git module, extracted from addon so a second tool (repoview, below) can share it:
   repo/              — domain-neutral git engine (stdlib only): FindGitRepos, Scan (folder → []Repo), Describe/CurrentBranch, HasUncommittedChanges, GitSyncStatus, GitChanges, GitFetch, FetchAll([]Repo), GitStream + GitStatus/GitPull/GitPush/GitCommit; types Repo{Name,Dir,Branch,Sync,Dirty}, GitSync, GitChange, FetchResult, Reporter

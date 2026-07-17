@@ -119,6 +119,36 @@ func TestGitChanges(t *testing.T) {
 		}
 	})
 
+	// A new directory is reported by status's default (-unormal) as a single "?? dir/"
+	// entry, which is useless to every caller here: it can't be diffed (`diff --no-index`
+	// against a directory just errors) and it misnames what a commit would stage. -uall
+	// names the files instead.
+	t.Run("untracked directory expands to its files", func(t *testing.T) {
+		_, work := bareUpstreamClone(t)
+		if err := os.MkdirAll(filepath.Join(work, "newdir", "sub"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, work, filepath.Join("newdir", "b.txt"), "b")
+		write(t, work, filepath.Join("newdir", "sub", "a.txt"), "a")
+
+		got := changeCodes(t, work)
+		want := map[string]string{
+			filepath.Join("newdir", "b.txt"):        "??",
+			filepath.Join("newdir", "sub", "a.txt"): "??",
+		}
+		for path, code := range want {
+			if got[path] != code {
+				t.Errorf("GitChanges[%q] = %q, want %q (full: %v)", path, got[path], code, got)
+			}
+		}
+		if _, ok := got["newdir/"]; ok {
+			t.Errorf("the collapsed directory entry should be gone: %v", got)
+		}
+		if len(got) != len(want) {
+			t.Errorf("GitChanges returned %d entries, want %d: %v", len(got), len(want), got)
+		}
+	})
+
 	t.Run("Untracked", func(t *testing.T) {
 		if !(GitChange{Code: "??"}).Untracked() {
 			t.Error(`Code "??" should read as untracked`)

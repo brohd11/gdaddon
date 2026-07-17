@@ -85,8 +85,11 @@ func TestGitSubmenuWiring(t *testing.T) {
 		t.Fatalf("v on a git checkout should open the Git submenu (PickerScreen), got %T", tm.(core.Router).Top())
 	}
 	// The framed view renders the submenu on top: its "Git" breadcrumb, the repo title, and
-	// its git-command rows (Commit/Push sit below the viewport fold, so assert a visible one).
-	if out := tm.View(); !strings.Contains(out, "myrepo") || !strings.Contains(out, "Git") || !strings.Contains(out, "Pull") {
+	// its git-command rows. Only the first few rows fit at this window size — the list
+	// paginates the rest — so assert on ones above the fold rather than on a row whose
+	// position shifts whenever the menu gains an entry.
+	if out := tm.View(); !strings.Contains(out, "myrepo") || !strings.Contains(out, "Git") ||
+		!strings.Contains(out, "Status") || !strings.Contains(out, "Diff") {
 		t.Errorf("submenu should be the repo's Git menu with git commands:\n%s", out)
 	}
 
