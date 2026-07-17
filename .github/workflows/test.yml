@@ -12,5 +12,8 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check go.mod/go.sum are tidy
+        run: go mod tidy -diff
+
       - name: Test root module
         run: go test ./...
