@@ -18,6 +18,29 @@ Installing 25 addons: [here](https://youtu.be/1EIBzfUs50g)
 
 ### Install
 
+#### Quick install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh
+```
+
+Installs into `~/.local/bin`, and offers to add that to your `PATH` if it isn't already.
+Prefer to read before you pipe to a shell? Same thing in two steps:
+
+```bash
+curl -fsSL -o install.sh https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh
+less install.sh && sh install.sh
+```
+
+Overrides: `BIN_DIR=/usr/local/bin` to install elsewhere, `VERSION=v0.3.0` to pin a release,
+`--modify-path` to update your shell rc file without prompting (for unattended setup scripts), or
+`--no-modify-path` to leave rc files alone. Covers macOS (arm64/amd64) and Linux
+(amd64/arm64); on **Windows** grab the `.zip` from
+[Releases](https://github.com/brohd11/gdaddon/releases).
+
+This path needs no quarantine handling — that attribute is set by browsers, not by `curl`.
+Afterwards, `gdaddon self-update` keeps it current.
+
 #### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-EditorPlugin)
 This is the Godot EditorPlugin companion to gdaddon. You can actually download and install the binary from here if you want. It should remove the need for quarantine management on macOS.
 
@@ -25,9 +48,10 @@ Open the gdaddon dialog and it will prompt you to update/install the binary.
 
 #### To install from this repo:
 
-There are binaries under releases, you can also build with Go and Make: `make` will build for all current platforms.
+There are binaries under releases, you can also build with Go and Make: `make` builds for your own
+platform, `make all` for every supported one.
 
-On macOS, downloaded binaries may have quarantine status that needs to be cleared before you can execute: `xattr -dr com.apple.quarantine path/to/gdaddon`
+On macOS, binaries downloaded **in a browser** may have quarantine status that needs to be cleared before you can execute: `xattr -dr com.apple.quarantine path/to/gdaddon`
 
 Alternatively, build with Go and this is not a problem.
 

@@ -6,11 +6,9 @@ mkdir -p "$HOME/.local/bin"
 
 # Absolute path to the repo so the symlink target doesn't dangle.
 GO_DIR="$(pwd)"
-if [ "$(uname)" = "Darwin" ]; then
-    GO_EXE="$GO_DIR/build/mac-arm64/gdaddon"
-else
-    GO_EXE="$GO_DIR/build/linux/gdaddon"
-fi
+# The makefile lays builds out as build/<GOOS>-<GOARCH>/, and `make` builds the host
+# target only -- so ask the toolchain rather than assuming darwin means arm64.
+GO_EXE="$GO_DIR/build/$(go env GOOS)-$(go env GOARCH)/gdaddon"
 
 if [ ! -x "$GO_EXE" ]; then
     echo "error: $GO_EXE not found or not executable — run 'make' first" >&2
