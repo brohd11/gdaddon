@@ -11,7 +11,9 @@ type appKeyMap struct {
 	Terminal key.Binding // open a terminal at an installed addon's install path (Project)
 	Fetch    key.Binding // git-fetch every project git checkout, refreshing its ahead/behind (Project)
 	Git      key.Binding // open the highlighted addon's Git page (Project)
+	Diff     key.Binding // open the highlighted addon's diff list (Project; git checkouts only)
 	GitAll   key.Binding // open the project-wide (all-repos) Git page (Project)
+	RootGit  key.Binding // open the project repo's own Git page (Project)
 }
 
 // AppKeys is the active custom keymap. Edit a WithKeys list here to rebind; the
@@ -22,7 +24,9 @@ var AppKeys = appKeyMap{
 	Fetch:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fetch")),
 	// v/V rather than g/G: bubbles binds g/G to jump-to-top/bottom on every list, and we keep
 	// that consistent across tabs rather than making one list behave differently. v = version
-	// control.
-	Git:    key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "git")),
-	GitAll: key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "git all")),
+	// control. ctrl+v is the project repo itself — V puts it in the batch, ctrl+v works it alone.
+	Git:     key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "git")),
+	Diff:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
+	GitAll:  key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "git all")),
+	RootGit: key.NewBinding(key.WithKeys("ctrl+v"), key.WithHelp("ctrl+v", "root git")),
 }

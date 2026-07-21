@@ -36,6 +36,8 @@ var (
 	GitChanges            = repo.GitChanges
 	HasUncommittedChanges = repo.HasUncommittedChanges
 	FindGitRepos          = repo.FindGitRepos
+	FetchLine             = repo.FetchLine
+	FetchSummary          = repo.FetchSummary
 )
 
 // FetchAll fetches every present git checkout (clone or submodule) among statuses and reads

@@ -61,7 +61,7 @@ func gitProject(t *testing.T) string {
 // so the Project tab inspects a live manifest.
 func routerAt(root string) core.Router {
 	sh := core.NewShared(appctx.New(root, "dev"))
-	sh.Chrome = &core.Chrome{Header: core.NewHeaderPane(appctx.Header), Output: components.NewLogPane()}
+	sh.Chrome = &core.Chrome{Header: core.NewHeaderPane(appctx.Header), Output: components.NewLogPane(), Status: components.NewStatusLine()}
 	return core.NewRouter(sh, []core.TabEntry{
 		{Title: appctx.TitleProject, New: func(sh *core.Shared) core.Screen { return project.NewProjectScreen(sh) }},
 	})
@@ -106,3 +106,47 @@ func TestGitSubmenuWiring(t *testing.T) {
 		t.Errorf("the all-repos menu title should say so:\n%s", out)
 	}
 }
+
+// TestRootGitKeyWiring: "ctrl+v" opens the project repo's own Git page (the shared
+// repoui.RepoMenu, handed the root) when the project root is itself a checkout — and stays
+// put with a status-line explanation when it isn't.
+func TestRootGitKeyWiring(t *testing.T) {
+	root := gitProject(t)
+	// Make the project root itself a checkout (gitProject only inits the nested addon).
+	init := exec.Command("git", "-C", root, "init", "-q", "-b", "main")
+	if out, err := init.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+
+	tm := sized(routerAt(root))
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyCtrlV})
+	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
+		t.Fatalf("ctrl+v should open the project repo's Git page (PickerScreen), got %T", tm.(core.Router).Top())
+	}
+	if out := tm.View(); !strings.Contains(out, "Git") ||
+		!strings.Contains(out, "Status") || !strings.Contains(out, "Diff") {
+		t.Errorf("ctrl+v should open the root's Git menu with git commands:\n%s", out)
+	}
+
+	// esc back to the Project root.
+	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
+		t.Fatalf("esc should return to the Project root, got %T", tm.(core.Router).Top())
+	}
+}
+
+// TestRootGitKeyNotACheckout: with a non-git project root, ctrl+v doesn't navigate — the
+// Project root stays on top and the status line explains why. (No pump: the status
+// auto-clear rides the returned cmd's timer, which a pump would run synchronously.)
+func TestRootGitKeyNotACheckout(t *testing.T) {
+	tm := sized(routerAt(gitProject(t))) // project root is not a checkout
+	tm, _ = tm.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
+
+	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
+		t.Fatalf("ctrl+v on a non-checkout root should not navigate, got %T", tm.(core.Router).Top())
+	}
+	if out := tm.View(); !strings.Contains(out, "not a git checkout") {
+		t.Errorf("the status line should explain why nothing opened:\n%s", out)
+	}
+}
+

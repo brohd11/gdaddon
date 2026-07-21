@@ -57,13 +57,15 @@ func (s scope) matches(a addon.Addon) bool {
 // AllRepos is the project-wide git menu: fetch, pull, or push every checkout in the manifest,
 // narrowed by a cycling scope. Opened from Actions ▸ Git and "V" on the Project list. The
 // three scopes are handed to the shared repoui menu, which owns the cycling, confirm, and
-// batch execution.
+// batch execution. The project root's own repo rides along as an include-root toggle (it
+// isn't a manifest entry, so no scope covers it): appctx.Ctx.RootRepo supplies it, and the
+// menu appends it to the targets while the toggle is on.
 func AllRepos(sh *core.Shared) *components.PickerScreen {
 	return repoui.AllReposMenu(sh, []repoui.Scope{
 		newScope(scopeClones),
 		newScope(scopeSubmodules),
 		newScope(scopeAll),
-	})
+	}, repoui.RootOptionFor(func(sh *core.Shared) *repo.Repo { return appctx.Of(sh).RootRepo }))
 }
 
 // newScope builds one repoui.Scope: its label and a provider that reads the in-scope repos

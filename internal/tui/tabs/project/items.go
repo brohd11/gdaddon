@@ -97,8 +97,9 @@ func addonItem(r rowData) components.Item {
 	}
 	// A present row carries its own shortcuts (the framework dispatches Item.Keys for the
 	// highlighted row, see RootUpdate): "t" opens a terminal at the install path for any
-	// package or checkout; "v" opens the Git page, but only for a git checkout — on a package
-	// it isn't handled, so the key falls through (as "t" does on an absent row).
+	// package or checkout; "v" opens the Git page and "d" that checkout's diff list, but both
+	// only for a git checkout — on a package they aren't handled, so the key falls through (as
+	// "t" does on an absent row).
 	var keys func(*core.Shared, string) (core.Action, bool)
 	if s.Present() {
 		keys = func(sh *core.Shared, k string) (core.Action, bool) {
@@ -107,6 +108,8 @@ func addonItem(r rowData) components.Item {
 				return sysopen.Terminal(s.FullPath), true
 			case core.MatchKey(k, appctx.AppKeys.Git) && s.Addon.IsGitWorkdir():
 				return core.Push(repoui.RepoMenu(sh, repoFromStatus(s))), true
+			case core.MatchKey(k, appctx.AppKeys.Diff) && s.Addon.IsGitWorkdir():
+				return repoui.DiffAction(sh, repoFromStatus(s)), true
 			}
 			return core.Action{}, false
 		}
@@ -180,7 +183,9 @@ type rowData struct {
 }
 
 // projectListItems builds the browse list contents: one row per addon, decorated
-// with the cached update-check and dependency-check markers, ordered per mode.
+// with the cached update-check and dependency-check markers, ordered per mode. The
+// project root's own repo gets no row — its status rides the header's Root line
+// (see appctx.Ctx.RootRepo).
 func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	c := appctx.Of(sh)
 	statuses := inspect(sh)

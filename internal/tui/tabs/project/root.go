@@ -7,6 +7,7 @@ import (
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/gitstack/repoui"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -14,7 +15,7 @@ import (
 )
 
 // projectTitle is the browse list's base Title; the active sort mode is appended.
-const projectTitle = "Godot Addons"
+const projectTitle = "Project"
 
 // browseScreen is the permanent root: the addon list with the pinned Actions
 // row. It shows the status line and output pane below the list.
@@ -47,7 +48,9 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 			core.FullHint("terminal", appctx.AppKeys.Terminal),
 			core.FullHint("fetch", appctx.AppKeys.Fetch),
 			core.FullHint("git", appctx.AppKeys.Git),
+			core.FullHint("diff", appctx.AppKeys.Diff),
 			core.FullHint("git all", appctx.AppKeys.GitAll),
+			core.FullHint("root git", appctx.AppKeys.RootGit),
 			core.FullHint("focus log", core.Keys.ToggleOutput),
 			core.FullHint("toggle log", core.Keys.Output),
 			core.FullHint("wrap log", core.Keys.Wrap),
@@ -87,6 +90,14 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 		// per-row (an addon's own Git page) and lives in the row's Item.Keys instead.
 		case core.MatchKey(k.String(), appctx.AppKeys.GitAll):
 			return s, core.Push(gitflow.AllRepos(sh))
+		// "ctrl+v" opens the project repo's own Git page — the same RepoMenu an addon row
+		// opens, handed the root. V puts the root in the batch; ctrl+v works it on its own.
+		case core.MatchKey(k.String(), appctx.AppKeys.RootGit):
+			root := appctx.Of(sh).RootRepo
+			if root == nil {
+				return s, core.SetStatus("project root is not a git checkout")
+			}
+			return s, core.Push(repoui.RepoMenu(sh, *root))
 		}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)
@@ -132,14 +143,14 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 		// work but would re-fire the network-bound update check for no reason.
 		s.fetching = false
 		for _, r := range p.results {
-			sh.Log(fetchLine(r))
+			sh.Log(addon.FetchLine(r))
 		}
 		appctx.Of(sh).RefreshProject()
 		s.list.SetItems(projectListItems(sh, s.sort))
 		if len(p.results) == 0 {
 			return core.SetStatus("no git checkouts to fetch")
 		}
-		line, failed := fetchSummary(p.results)
+		line, failed := addon.FetchSummary(p.results, "git checkout(s)")
 		return core.SetStatusAndLog(line, failed) // force the log open only to show a failure's reason
 	}
 	return core.Action{}

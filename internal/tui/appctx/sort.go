@@ -15,10 +15,10 @@ const (
 )
 
 // SortTitle renders a list's base title with its active sort mode appended, e.g.
-// "Godot Addons — A→Z". Shared by each tab root's New* and CycleSort.
+// "Project — A→Z". Shared by each tab root's New* and CycleSort.
 func SortTitle(base string, m SortMode) string { return base + " — " + m.Label() }
 
-// Label is the short suffix shown in a list's Title, e.g. "Godot Addons — A→Z".
+// Label is the short suffix shown in a list's Title, e.g. "Project — A→Z".
 func (m SortMode) Label() string {
 	switch m {
 	case SortReverse:

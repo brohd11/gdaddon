@@ -18,6 +18,7 @@ import (
 	"gdaddon/internal/selfupdate"
 
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/gitstack/repo"
 	"github.com/brohd11/gitstack/repoui"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -75,6 +76,14 @@ type Ctx struct {
 	// recomputed synchronously in loadProject; the Project list reads it to draw the
 	// "unused dependency" marker.
 	OrphanDeps map[string]bool
+
+	// RootRepo is the Godot project's own git checkout, when the project root is one.
+	// It isn't a manifest entry, so the per-addon caches above don't cover it: it's
+	// re-described (branch/sync/dirty — all local reads) at the top of every loadProject,
+	// the header's Root line draws its status marker, the Project tab's fetch key always
+	// includes it, and the all-repos menu offers it behind an include-root toggle. Nil
+	// when the project root isn't a checkout.
+	RootRepo *repo.Repo
 }
 
 // New builds the context for a project root and performs the initial path scan.
@@ -106,6 +115,14 @@ func (c *Ctx) loadArchive() {
 }
 
 func (c *Ctx) loadProject() {
+	// The root repo's state is a local read like GitDirty/GitSync, but it doesn't depend
+	// on the manifest: refresh it even when there is none, so the header's Root line
+	// stays current on New/RefreshProject and after git ops.
+	if root, ok := repo.DescribeRoot(c.ProjectRoot); ok {
+		c.RootRepo = &root
+	} else {
+		c.RootRepo = nil
+	}
 	if c.ManifestPath == "" {
 		c.ProjectAddons = nil
 		c.DepStatuses = nil
@@ -342,9 +359,13 @@ func Header(sh *core.Shared) string {
 	if manifest == "" {
 		manifest = "(none — Actions ▸ Create manifest)"
 	}
+	// The project root's own repo isn't a manifest entry, so its status marker rides
+	// the Root line after the path; RootLineValue shrinks the path's truncation budget by
+	// the marker's rendered width so the line still fits the box.
+	rootValue := repoui.RootLineValue(c.ProjectRoot, c.RootRepo, valWidth)
 	body := strings.Join([]string{
 		core.Label("Project:  ") + core.Value(name),
-		line("Root:     ", c.ProjectRoot),
+		core.Label("Root:     ") + core.Value(rootValue),
 		line("Manifest: ", manifest),
 	}, "\n")
 	return core.HeaderBox(sh.Width(), body)
