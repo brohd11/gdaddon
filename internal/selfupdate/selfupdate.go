@@ -4,7 +4,8 @@
 // release listing via internal/source, compares the running version against the
 // latest tag with the same semver rules addons use (addon.SemverGE), and — when an
 // update is available — downloads the platform release zip and places the new binary
-// with internal/installer's copy/PATH/elevation logic.
+// with internal/installer's copy/PATH logic (whose copy is a temp-file-plus-rename, so
+// the binary being replaced may be the one running this).
 package selfupdate
 
 import (

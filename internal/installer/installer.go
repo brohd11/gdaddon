@@ -1,7 +1,7 @@
 // Package installer implements `gdaddon install`: copying the running binary to a
 // chosen destination (system / user / gdaddon-home) and wiring up PATH. The logic
 // is split so the cross-platform parts (destination enum, self-locate, byte copy)
-// live here and the per-OS parts (concrete dirs, PATH handling, elevation) live in
+// live here and the per-OS parts (concrete dirs, PATH handling, admin checks) live in
 // path_unix.go / path_windows.go. There is no TUI here — cmd/install.go selects a
 // Dest (via a bubbletea menu) and then calls Install, which keeps the privileged /
 // PATH side effects out of the terminal-owning UI.
@@ -19,7 +19,7 @@ import (
 type Dest int
 
 const (
-	System Dest = iota // on PATH by default, needs elevation
+	System Dest = iota // on PATH by default, needs a writable dir (run under sudo/admin)
 	User               // no elevation, may need PATH setup
 	Home               // ~/.gdaddon/bin, not on PATH (the Godot-plugin target)
 )
@@ -145,8 +145,8 @@ func binPath(d Dest) (string, error) {
 // present (binaries only — it leaves PATH entries and other ~/.gdaddon files
 // untouched). On unix the currently-running binary is removed too (unlinking a
 // running executable is safe); on Windows it can't be deleted while running, so it
-// is left in place and reported in skipped. System removal may prompt for sudo on
-// unix.
+// is left in place and reported in skipped. gdaddon never elevates on its own, so a
+// system copy in a root-owned dir reports a permission error — re-run under sudo.
 func Uninstall() (removed, skipped []string, err error) {
 	self, err := Self()
 	if err != nil {
@@ -188,6 +188,18 @@ func uninstallFrom(paths []string, self string) (removed, skipped []string, err 
 
 // copyExe streams src to dstPath as a 0755 executable, creating the parent dir. A
 // no-op when src == dstPath (re-installing from the same location).
+//
+// The write is never done *into* dstPath: the bytes go to a temp file beside it which
+// is then renamed over the target. That is what makes self-update work — linux refuses
+// to open a currently-executing binary for writing (ETXTBSY, "text file busy"), and
+// self-update's destination is by definition the running binary. A rename only swaps
+// the directory entry, so the running process keeps its old inode and is unaffected.
+// It also gives an all-or-nothing install: a failed copy can't leave a half-written
+// binary behind.
+//
+// A symlinked dstPath (the dev install, see install_unix.sh) is resolved first, so the
+// symlink is preserved and its target replaced — the same thing the old write-through
+// did.
 func copyExe(src, dstPath string) error {
 	if src == dstPath {
 		return nil
@@ -195,21 +207,71 @@ func copyExe(src, dstPath string) error {
 	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 		return err
 	}
+	if resolved, err := filepath.EvalSymlinks(dstPath); err == nil {
+		dstPath = resolved
+	}
+	if src == dstPath {
+		return nil // src reached through a symlink to it
+	}
+
+	tmp, err := writeTemp(src, dstPath)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp) // no-op once the rename below has consumed it
+
+	os.Remove(dstPath + oldSuffix) // stale leftover from a previous windows install
+	if err := os.Rename(tmp, dstPath); err == nil {
+		return nil
+	}
+	// Windows locks a running .exe against replacement, but does allow renaming it
+	// aside. Move the old binary out of the way and retry; the leftover is removed on
+	// the next install (it can't be deleted while it runs).
+	if _, statErr := os.Stat(dstPath); statErr != nil {
+		return err // nothing in the way — the rename failed for another reason
+	}
+	if renameErr := os.Rename(dstPath, dstPath+oldSuffix); renameErr != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dstPath); err != nil {
+		os.Rename(dstPath+oldSuffix, dstPath) // put the working binary back
+		return err
+	}
+	os.Remove(dstPath + oldSuffix)
+	return nil
+}
+
+// oldSuffix names the displaced previous binary on platforms that can't replace a
+// running executable outright (windows).
+const oldSuffix = ".old"
+
+// writeTemp copies src to a fresh 0755 file in dstPath's directory (so the rename that
+// follows stays on one filesystem) and returns its path.
+func writeTemp(src, dstPath string) (string, error) {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+
+	dir, base := filepath.Dir(dstPath), filepath.Base(dstPath)
+	out, err := os.CreateTemp(dir, "."+base+".new-*")
 	if err != nil {
-		return err
+		return "", err
 	}
+	tmp := out.Name()
 	if _, err := io.Copy(out, in); err != nil {
 		out.Close()
-		return err
+		os.Remove(tmp)
+		return "", err
 	}
 	if err := out.Close(); err != nil {
-		return err
+		os.Remove(tmp)
+		return "", err
 	}
-	return os.Chmod(dstPath, 0o755)
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		os.Remove(tmp)
+		return "", err
+	}
+	return tmp, nil
 }

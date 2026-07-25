@@ -13,8 +13,8 @@ var uninstallCmd = &cobra.Command{
 	Short: "Remove the gdaddon binary from all install locations",
 	Long: `Uninstall removes the gdaddon binary from every location 'install' uses
 (system, user, and ~/.gdaddon/bin), wherever it is present. It touches only the
-binary — PATH entries and other ~/.gdaddon files are left alone. Removing the
-system copy may prompt for sudo.`,
+binary — PATH entries and other ~/.gdaddon files are left alone. gdaddon does not
+elevate itself: if the system copy isn't removable, re-run this under sudo.`,
 	Args:          cobra.NoArgs,
 	SilenceUsage:  true,
 	SilenceErrors: false,

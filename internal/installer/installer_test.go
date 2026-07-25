@@ -129,3 +129,67 @@ func TestCopyExe(t *testing.T) {
 		t.Fatalf("same-path copy clobbered the file: %q", got)
 	}
 }
+
+// TestCopyExeReplace covers the rename-based replacement: an existing binary is
+// overwritten in place and no temp/displaced artifacts are left beside it.
+func TestCopyExeReplace(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.WriteFile(src, []byte("new-bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "gdaddon")
+	if err := os.WriteFile(dst, []byte("old-bytes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyExe(src, dst); err != nil {
+		t.Fatalf("copyExe: %v", err)
+	}
+	if got, _ := os.ReadFile(dst); string(got) != "new-bytes" {
+		t.Fatalf("replaced contents = %q", got)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		switch e.Name() {
+		case "src", "gdaddon":
+		default:
+			t.Fatalf("copyExe left debris behind: %s", e.Name())
+		}
+	}
+}
+
+// TestCopyExeSymlink covers the dev install shape (install_unix.sh symlinks the built
+// binary into ~/.local/bin): the symlink survives and its target gets the new bytes.
+func TestCopyExeSymlink(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.WriteFile(src, []byte("new-bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "target")
+	if err := os.WriteFile(target, []byte("old-bytes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "gdaddon")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := copyExe(src, link); err != nil {
+		t.Fatalf("copyExe: %v", err)
+	}
+	fi, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("symlink was replaced by a regular file")
+	}
+	if got, _ := os.ReadFile(target); string(got) != "new-bytes" {
+		t.Fatalf("symlink target contents = %q", got)
+	}
+}

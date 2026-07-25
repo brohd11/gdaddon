@@ -23,6 +23,7 @@ type Config struct {
 	ArchiveDir       string `yaml:"archive_dir,omitempty"`
 	CurrentTheme     string `yaml:"current_theme,omitempty"`      // last-selected TUI theme; loaded at startup, saved on change
 	LastSearchSource string `yaml:"last_search_source,omitempty"` // last-selected Search tab source; loaded at startup, saved on search
+	Terminal         string `yaml:"terminal,omitempty"`           // command opening a terminal, e.g. `kitty --directory {dir}` ({dir} = the target directory); empty = auto-detect (see internal/tui/sysopen)
 }
 
 // sourcesFile is the parsed ~/.gdaddon/config/sources.yml — the provider rules

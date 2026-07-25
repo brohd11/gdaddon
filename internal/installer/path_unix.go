@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"gdaddon/internal/config"
@@ -28,7 +27,7 @@ func optionLabel(d Dest) string {
 func optionDesc(d Dest) string {
 	switch d {
 	case System:
-		return "On PATH by default. Needs sudo."
+		return "On PATH by default. Run under sudo if not writable."
 	case User:
 		return "No sudo. May need PATH setup."
 	case Home:
@@ -75,7 +74,10 @@ func doInstall(d Dest, src string) (Result, error) {
 
 	switch d {
 	case System:
-		if err := installSystem(src, dir, dst); err != nil {
+		if err := copyExe(src, dst); err != nil {
+			if errors.Is(err, fs.ErrPermission) {
+				return Result{}, fmt.Errorf("%s is not writable: re-run as `sudo gdaddon install --dest system`, or install to ~/.local/bin with `--dest user`", dir)
+			}
 			return Result{}, err
 		}
 		return Result{Path: dst}, nil
@@ -93,44 +95,10 @@ func doInstall(d Dest, src string) (Result, error) {
 	return Result{}, fmt.Errorf("unknown destination %v", d)
 }
 
-// installSystem copies into /usr/local/bin, falling back to sudo when the dir
-// isn't writable. sudo prompts on the (now TUI-free) terminal.
-func installSystem(src, dir, dst string) error {
-	err := copyExe(src, dst)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, fs.ErrPermission) {
-		return err
-	}
-	fmt.Printf("writing to %s requires elevated permissions (sudo)...\n", dir)
-	if err := runSudo("mkdir", "-p", dir); err != nil {
-		return err
-	}
-	if err := runSudo("cp", src, dst); err != nil {
-		return err
-	}
-	return runSudo("chmod", "+x", dst)
-}
-
-// removeAt deletes path, falling back to sudo when it isn't writable (the system
-// copy in /usr/local/bin).
-func removeAt(path string) error {
-	err := os.Remove(path)
-	if err == nil || !errors.Is(err, fs.ErrPermission) {
-		return err
-	}
-	fmt.Printf("removing %s requires elevated permissions (sudo)...\n", path)
-	return runSudo("rm", "-f", path)
-}
-
-func runSudo(args ...string) error {
-	cmd := exec.Command("sudo", args...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
+// removeAt deletes path. gdaddon never elevates on its own — a system copy the user
+// can't remove reports the permission error, and re-running the command under sudo is
+// the fix (uninstallFrom wraps it as "remove <path>: ...").
+func removeAt(path string) error { return os.Remove(path) }
 
 // pathNote returns guidance to add dir to PATH, or "" if it's already there.
 func pathNote(dir string) string {

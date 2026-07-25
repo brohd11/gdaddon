@@ -23,7 +23,7 @@ var installCmd = &cobra.Command{
 	Short: "Copy this gdaddon binary to a chosen location (and wire up PATH)",
 	Long: `Install copies the running gdaddon binary to one of:
 
-  system   on PATH by default, needs sudo/admin
+  system   on PATH by default; re-run under sudo / as Administrator if it isn't writable
   user     ~/.local/bin / %LOCALAPPDATA%\Programs\gdaddon, sets up PATH
   home     ~/.gdaddon/bin, not on PATH (the target the Godot plugin launches)
 
@@ -67,8 +67,8 @@ func runInstallCmd(cmd *cobra.Command, args []string) error {
 		dest = d
 	}
 
-	// The privileged copy / PATH wiring runs here, after the TUI has released the
-	// terminal — so sudo can prompt and output prints to normal scrollback.
+	// The copy / PATH wiring runs here, after the TUI has released the terminal — so
+	// errors and PATH guidance print to normal scrollback.
 	res, err := installer.Install(dest)
 	if err != nil {
 		return err

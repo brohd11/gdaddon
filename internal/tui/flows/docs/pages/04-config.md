@@ -21,6 +21,16 @@ edit, and gdaddon reads whatever it finds. The folder is safe to commit: the shi
 
 - `archive_dir` — where downloaded package zips are kept. Defaults to `~/.gdaddon/archive`
 - `theme` — the color theme. Actions ▸ Theme changes it and writes it here
+- `terminal` — the command `t` / Open ▸ Terminal runs. Only needed when auto-detection
+  picks the wrong emulator; `{dir}` is replaced with the directory to open:
+
+```
+terminal: "kitty --directory {dir}"
+```
+
+Left unset, gdaddon looks for a terminal itself (Terminal.app on macOS, the usual
+emulators on Linux) and always launches it with the target directory as its working
+directory.
 
 The archive is what makes a re-install offline-capable: a zip gdaddon has already
 downloaded is stored per repo, listed back as an `(archived)` release, and reinstalled

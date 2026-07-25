@@ -191,12 +191,12 @@ internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, gitCheckedOutBranch, normalizeGitRemote) that classify a plugin folder's `.git`
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
   archive/           — local package archive (~/.gdaddon/archive or config/config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
-  config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, theme, last search source — Load) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
+  config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, theme, last search source, terminal — Load) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
   restrule/          — generic config-driven REST query engine used by `source` to talk to host APIs
   gitcred/           — git credential/token resolution for clones
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
   store/             — Asset Store URL detection/backend used by search/install
-  installer/         — `gdaddon install`/`uninstall`: copy the running binary to system/user/home, PATH/elevation (InstallFrom for an explicit source, CurrentDest for the running binary's location)
+  installer/         — `gdaddon install`/`uninstall`: copy the running binary to system/user/home, PATH wiring (InstallFrom for an explicit source, CurrentDest for the running binary's location). The copy is a temp-file-plus-rename, so the destination may be the running binary — see Installing the binary
   selfupdate/        — `gdaddon self-update`: check gdaddon's own repo for a newer release (source.AvailableVersions + addon.SemverGE) and download+install it via installer
   quarantine/        — Actions ▸ Dequarantine Addons: `Clear` walks <root>/addons removing com.apple.quarantine (x/sys/unix.Lremovexattr) and returns counts. Hidden dirs are pruned — an addon's .git is thousands of mode-0444 objects that can't own the attribute and only answer EACCES. darwin-only; `quarantine_other.go` is the non-macOS stub
   tui/               — bubbletea front-end (see internal/tui/doc.go)
@@ -204,6 +204,7 @@ internal/
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
     tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin, docs)
+    sysopen/         — hand a path/url to the OS: file manager (`Path`), browser (`URL`), terminal (`Terminal`, the `t` key / Open ▸ Terminal). The launched command always gets `cmd.Dir` = the target dir, because linux emulators disagree on the working-directory option and some wrappers (x-terminal-emulator → gnome-terminal.wrapper) silently drop it — which is why `t` used to open at gdaddon's own cwd. `linuxTerminals` is the probe order (desktop defaults first, x-terminal-emulator last), overridable by config.yml's `terminal` key (`{dir}` placeholder, split by `splitCommand` — direct exec, no shell). A launch failure now lands on the status line instead of being discarded
 The three modules below live in their OWN GitHub repos (github.com/brohd11/{bubblestack,gitstack,repoview}) — gdaddon `require`s bubblestack + gitstack as tagged versions (v0.1.0), no `replace`. For local co-development all four are checked out side by side under ~/main/go/ and tied by an *uncommitted* `go.work` there (`use ./gdaddon ./bubblestack ./gitstack ./repoview`), so cross-module edits are picked up without re-tagging; releases/CI/outside consumers use the tags. None of the three imports a gdaddon package. Their layouts:
 
 gitstack (github.com/brohd11/gitstack) — the reusable git module, extracted from addon so a second tool (repoview, below) can share it:
@@ -334,18 +335,32 @@ your repo path differs.
 `gdaddon install` (`cmd/install.go` + `internal/installer/`). It copies the running
 binary (`os.Executable()`) to a destination chosen via a small bubbletea menu (reusing
 the bubblestack stack), or non-interactively with `--dest system|user|home`. The three
-destinations: **system** (`/usr/local/bin` / `%ProgramFiles%\gdaddon`, on PATH, needs
-sudo/admin), **user** (`~/.local/bin` / `%LOCALAPPDATA%\Programs\gdaddon`, sets up PATH —
+destinations: **system** (`/usr/local/bin` / `%ProgramFiles%\gdaddon`, on PATH, needs a
+writable dir), **user** (`~/.local/bin` / `%LOCALAPPDATA%\Programs\gdaddon`, sets up PATH —
 registry on Windows, profile guidance on unix), or **gdaddon home** (`~/.gdaddon/bin`, no
 PATH change — the permission-free target a Godot plugin launches via
 `~/.gdaddon/bin/gdaddon` (`+.exe` on Windows) after probing PATH for a global `gdaddon`).
-The TUI only *selects*; the copy/sudo/PATH work runs after it exits (bubbletea owns the
+The TUI only *selects*; the copy/PATH work runs after it exits (bubbletea owns the
 terminal). Per-OS bits are build-tagged in `internal/installer/path_unix.go` /
 `path_windows.go`.
 
+**gdaddon never elevates itself.** A system install into a root-owned `/usr/local/bin`
+reports the permission error with the fix (`sudo gdaddon install --dest system`, or
+`--dest user`) rather than shelling out to sudo behind the user's back.
+
+`copyExe` (`internal/installer/installer.go`) never writes *into* the destination: it
+writes a temp file beside it and renames over the target. That's what lets self-update
+replace the binary it is running from — linux returns ETXTBSY ("text file busy") for a
+write to an executing binary, while a rename merely swaps the directory entry and leaves
+the running process on its old inode. A symlinked destination (the dev install) is
+resolved first so the symlink survives, and when the rename itself is refused (windows
+locks a running `.exe`) the old binary is renamed aside to `gdaddon.exe.old` and cleaned
+up on the next install.
+
 `gdaddon uninstall` (`installer.Uninstall`) removes the binary from all three locations
 wherever present — binaries only, leaving PATH entries and other `~/.gdaddon` files alone
-(sudo for the system copy; the running binary is skipped).
+(the running binary is skipped on Windows; an unwritable system copy reports a permission
+error to re-run under sudo).
 
 ### Self-update
 
