@@ -135,9 +135,17 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 		Pick: func(sh *core.Shared) core.Action { return guardDirty(sh, st, newRemoveConfirm(st)) },
 	})
 
+	// "t" opens a terminal at the install path from the command hub, so it works one level
+	// up from the Git menu too — but only for a present checkout/package (a real on-disk
+	// path); a not-yet-installed entry has none, so the key falls through (DirLocator).
+	dir := ""
+	if st.Present() {
+		dir = st.FullPath
+	}
 	return components.NewPicker(items, components.PickerOpts{
 		// Crumb:   "Plugin",
 		Title:   a.Name,
+		Dir:     dir,
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 	})
 }

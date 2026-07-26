@@ -5,6 +5,7 @@ import (
 	"gdaddon/internal/config"
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/docs"
+	"gdaddon/internal/tui/sysopen"
 	"gdaddon/internal/tui/tabs/actions"
 	"gdaddon/internal/tui/tabs/archive"
 	"gdaddon/internal/tui/tabs/global"
@@ -45,6 +46,7 @@ func Run(projectRoot, version string, firstRun bool) error {
 		RefreshAction: func(sh *bubblestack.Shared) bubblestack.Action {
 			return appctx.RefreshAll()
 		},
+		TerminalAction: func(dir string) bubblestack.Action { return sysopen.Terminal(dir) },
 		Tabs: []bubblestack.TabEntry{
 			{Title: appctx.TitleProject, New: func(sh *bubblestack.Shared) bubblestack.Screen { return project.NewProjectScreen(sh) }},
 			{Title: appctx.TitleGlobal, New: func(sh *bubblestack.Shared) bubblestack.Screen { return global.NewGlobalScreen(sh) }},
