@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"gdaddon/internal/config"
 	"gdaddon/internal/installer"
 
 	"github.com/brohd11/bubblestack"
@@ -87,11 +86,6 @@ func pickDest(src string) (installer.Dest, bool, error) {
 	var chosen installer.Dest
 	var ok bool
 
-	theme := "mono"
-	if cfg, err := config.Load(); err == nil && cfg.CurrentTheme != "" {
-		theme = cfg.CurrentTheme
-	}
-
 	items := make([]list.Item, 0, 4)
 	for _, opt := range installer.Dests() {
 		o := opt // capture
@@ -120,7 +114,7 @@ func pickDest(src string) (installer.Dest, bool, error) {
 	err := bubblestack.Run(bubblestack.Config{
 		App:    struct{}{},
 		Header: header,
-		Theme:  theme,
+		// Theme left unset — bubblestack.Run applies the shared ~/.bubblestack theme.
 		Tabs: []bubblestack.TabEntry{
 			{Title: "Install", New: func(sh *bubblestack.Shared) bubblestack.Screen {
 				return components.NewPicker(items, components.PickerOpts{Title: "Install gdaddon"})

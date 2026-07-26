@@ -2,7 +2,6 @@
 package tui
 
 import (
-	"gdaddon/internal/config"
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/docs"
 	"gdaddon/internal/tui/sysopen"
@@ -26,16 +25,12 @@ import (
 // firstRun (gdaddon had to create ~/.gdaddon) adds the docs welcome popup to the
 // startup hook — the one moment we know the user has never seen the tool.
 func Run(projectRoot, version string, firstRun bool) error {
-	theme := "mono"
-	if cfg, err := config.Load(); err == nil && cfg.CurrentTheme != "" {
-		theme = cfg.CurrentTheme
-	}
 	return bubblestack.Run(bubblestack.Config{
 		App:    appctx.New(projectRoot, version),
 		Header: appctx.Header,
 		Output: components.NewLogPane(),
 		Status: components.NewStatusLine(),
-		Theme:  theme,
+		// Theme is left unset so bubblestack.Run loads the shared ~/.bubblestack theme.
 		Init: func(sh *bubblestack.Shared) tea.Cmd {
 			cmds := []tea.Cmd{appctx.SelfUpdateCheckCmd(sh)}
 			if firstRun {

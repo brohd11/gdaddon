@@ -1,6 +1,7 @@
 // Package config loads gdaddon's user config from ~/.gdaddon/config/, split
-// across two files: config.yml (general knobs — archive_dir, current_theme,
-// last_search_source) and sources.yml (the list of provider rules for search and
+// across two files: config.yml (general knobs — archive_dir, last_search_source;
+// the TUI theme lives in the framework-wide ~/.bubblestack/config.yml, not here)
+// and sources.yml (the list of provider rules for search and
 // vcs resolution). Each file is read per call — there is no process-wide cache,
 // so callers always see the current on-disk state (and tests that swap $HOME keep
 // working). A missing file is not an error: it yields the zero value, and Ensure
@@ -21,8 +22,10 @@ import (
 // live in a separate file (sources.yml); see LoadSources.
 type Config struct {
 	ArchiveDir       string `yaml:"archive_dir,omitempty"`
-	CurrentTheme     string `yaml:"current_theme,omitempty"`      // last-selected TUI theme; loaded at startup, saved on change
 	LastSearchSource string `yaml:"last_search_source,omitempty"` // last-selected Search tab source; loaded at startup, saved on search
+	// The TUI theme is no longer stored here — it moved to the framework-wide
+	// ~/.bubblestack/config.yml (bubblestack/config), so a theme picked in any bubblestack
+	// tool follows the user everywhere. bubblestack.Run loads it; the picker persists it.
 }
 
 // sourcesFile is the parsed ~/.gdaddon/config/sources.yml — the provider rules
@@ -213,10 +216,6 @@ func saveConfigKey(key, value string) error {
 	}
 	return os.WriteFile(path, out, 0o644)
 }
-
-// SaveTheme persists name as current_theme in ~/.gdaddon/config/config.yml (surgical
-// edit — see saveConfigKey).
-func SaveTheme(name string) error { return saveConfigKey("current_theme", name) }
 
 // SaveLastSource persists name as last_search_source in ~/.gdaddon/config/config.yml
 // (surgical edit — see saveConfigKey).

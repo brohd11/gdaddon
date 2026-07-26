@@ -1,12 +1,12 @@
 package config
 
 // DefaultConfig is the general config dumped on first run (config.yml): the
-// default archive dir and theme. Add future general knobs here so Ensure picks
-// them up. The provider rules are dumped separately from DefaultSources (sources.yml).
+// default archive dir. Add future general knobs here so Ensure picks them up. The
+// provider rules are dumped separately from DefaultSources (sources.yml); the TUI
+// theme lives in the framework-wide ~/.bubblestack/config.yml, not here.
 func DefaultConfig() *Config {
 	return &Config{
-		ArchiveDir:   "~/.gdaddon/archive",
-		CurrentTheme: "mono",
+		ArchiveDir: "~/.gdaddon/archive",
 	}
 }
 

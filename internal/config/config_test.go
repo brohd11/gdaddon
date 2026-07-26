@@ -12,7 +12,7 @@ func TestLoadMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.ArchiveDir != "" || cfg.CurrentTheme != "" {
+	if cfg.ArchiveDir != "" || cfg.LastSearchSource != "" {
 		t.Fatalf("missing file should yield zero Config, got %+v", cfg)
 	}
 	srcs, err := LoadSources()

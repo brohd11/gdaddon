@@ -69,7 +69,7 @@ func actionItems(sh *core.Shared) []list.Item {
 	items = append(items, components.Item{
 		Name: "◑ Theme",
 		Desc: "change the color theme",
-		Pick: func(sh *core.Shared) core.Action { return core.Push(newThemePicker()) },
+		Pick: func(sh *core.Shared) core.Action { return core.Push(components.ThemePicker()) },
 	},
 	)
 
