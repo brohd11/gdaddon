@@ -106,6 +106,8 @@ func addonItem(r rowData) components.Item {
 			switch {
 			case core.MatchKey(k, appctx.AppKeys.Terminal):
 				return sysopen.Terminal(s.FullPath), true
+			case core.MatchKey(k, appctx.AppKeys.OpenDir):
+				return sysopen.Path(s.FullPath, false), true
 			case core.MatchKey(k, appctx.AppKeys.Git) && s.Addon.IsGitWorkdir():
 				return core.Push(repoui.RepoMenu(sh, repoFromStatus(s))), true
 			case core.MatchKey(k, appctx.AppKeys.Diff) && s.Addon.IsGitWorkdir():

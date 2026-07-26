@@ -46,6 +46,7 @@ func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 			core.FullHint("select", core.Keys.Select),
 			core.FullHint("sort", appctx.AppKeys.Sort),
 			core.FullHint("terminal", appctx.AppKeys.Terminal),
+			core.FullHint("open dir", appctx.AppKeys.OpenDir),
 			core.FullHint("fetch", appctx.AppKeys.Fetch),
 			core.FullHint("git", appctx.AppKeys.Git),
 			core.FullHint("diff", appctx.AppKeys.Diff),

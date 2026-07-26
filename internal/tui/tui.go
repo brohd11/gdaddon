@@ -47,6 +47,7 @@ func Run(projectRoot, version string, firstRun bool) error {
 			return appctx.RefreshAll()
 		},
 		TerminalAction: func(dir string) bubblestack.Action { return sysopen.Terminal(dir) },
+		OpenDirAction:  func(dir string) bubblestack.Action { return sysopen.Path(dir, false) },
 		Tabs: []bubblestack.TabEntry{
 			{Title: appctx.TitleProject, New: func(sh *bubblestack.Shared) bubblestack.Screen { return project.NewProjectScreen(sh) }},
 			{Title: appctx.TitleGlobal, New: func(sh *bubblestack.Shared) bubblestack.Screen { return global.NewGlobalScreen(sh) }},

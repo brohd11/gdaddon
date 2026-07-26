@@ -9,6 +9,7 @@ import "github.com/charmbracelet/bubbles/key"
 type appKeyMap struct {
 	Sort     key.Binding // cycle a data list's sort order (Project/Global/Archive)
 	Terminal key.Binding // open a terminal at an installed addon's install path (Project)
+	OpenDir  key.Binding // open an installed addon's install path in the OS file manager (Project)
 	Fetch    key.Binding // git-fetch every project git checkout, refreshing its ahead/behind (Project)
 	Git      key.Binding // open the highlighted addon's Git page (Project)
 	Diff     key.Binding // open the highlighted addon's diff list (Project; git checkouts only)
@@ -21,6 +22,7 @@ type appKeyMap struct {
 var AppKeys = appKeyMap{
 	Sort:     key.NewBinding(key.WithKeys("i"), key.WithHelp("s", "sort")),
 	Terminal: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "terminal")),
+	OpenDir:  key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "open dir")),
 	Fetch:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fetch")),
 	// v/V rather than g/G: bubbles binds g/G to jump-to-top/bottom on every list, and we keep
 	// that consistent across tabs rather than making one list behave differently. v = version
