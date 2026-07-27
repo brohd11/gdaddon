@@ -17,7 +17,7 @@ There are also non-interactive modes for scripting and CI (mutually exclusive):
 ```bash
 gdaddon --list         # print the manifest's install status, then exit
 gdaddon --install      # install/update everything in the manifest, then exit
-gdaddon --update       # update installed addons to their latest release, then exit
+gdaddon --update-packages  # update installed addons to their latest release, then exit
 ```
 
 `--list` also has a machine-parseable mode for tools (e.g. a Godot editor plugin)
@@ -275,7 +275,7 @@ proceed.) Each updated entry is re-pinned in the manifest with the new url/path/
 tag. A single addon failing is reported and skipped so the rest still update.
 
 Update everything at once via **Actions → Install/Update All** (interactive, with a
-confirm listing the plan) or `gdaddon --update` (non-interactive). Update checks run
+confirm listing the plan) or `gdaddon --update-packages` (non-interactive). Update checks run
 concurrently across addons, so a slow host doesn't stall the whole scan.
 
 ---

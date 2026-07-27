@@ -15,9 +15,9 @@ non-interactive runs):
 - `--list` → prints the manifest's install status without changing anything, then exits
   (`--json` modifier emits a JSON array for tools to parse; `--check-updates` adds the
   network-bound update state to that JSON — see Running)
-- `--update` → updates installed addons to their latest release non-interactively, then exits
+- `--update-packages` → updates installed addons to their latest release non-interactively, then exits
 
-(`--install`/`--list`/`--update` are mutually exclusive; `--json`/`--check-updates`
+(`--install`/`--list`/`--update-packages` are mutually exclusive; `--json`/`--check-updates`
 are modifiers on `--list`, not modes.)
 
 There is one subcommand, `repos`, a standalone CLI utility (no TUI) for running a
@@ -54,9 +54,9 @@ gdaddon --install      # non-interactive install of everything in the discovered
 gdaddon --list         # print the manifest's install status (state/local/pinned), then exit
 gdaddon --list --json  # same, as a JSON array for machine consumption (e.g. a Godot plugin UI)
 gdaddon --list --json --check-updates  # JSON + per-addon update state (network)
-gdaddon --update       # non-interactive update of installed addons to their latest release
-gdaddon self-update             # update gdaddon itself to the latest release (see below)
-gdaddon self-update --check --json  # report {current,latest_tag,available} for the Godot plugin
+gdaddon --update-packages     # non-interactive update of installed addons to their latest release
+gdaddon update                # update gdaddon itself to the latest release (see below)
+gdaddon update --check --json # report {current,latest_tag,available} for the Godot plugin
 ```
 
 `--list --json` (`printListJSON` in `cmd/root.go`) emits one `listEntryJSON` object per
@@ -197,7 +197,7 @@ internal/
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
   store/             — Asset Store URL detection/backend used by search/install
   installer/         — `gdaddon install`/`uninstall`: copy the running binary to system/user/home, PATH wiring (InstallFrom for an explicit source, CurrentDest for the running binary's location). The copy is a temp-file-plus-rename, so the destination may be the running binary — see Installing the binary
-  selfupdate/        — `gdaddon self-update`: resolve the latest release tag off the repo's /releases/latest redirect and install it by running the repo's own install.sh (BIN_DIR/VERSION env, --no-modify-path)
+  selfupdate/        — `gdaddon update`: resolve the latest release tag off the repo's /releases/latest redirect and install it by running the repo's own install.sh (BIN_DIR/VERSION env, --no-modify-path)
   quarantine/        — Actions ▸ Dequarantine Addons: `Clear` walks <root>/addons removing com.apple.quarantine (x/sys/unix.Lremovexattr) and returns counts. Hidden dirs are pruned — an addon's .git is thousands of mode-0444 objects that can't own the attribute and only answer EACCES. darwin-only; `quarantine_other.go` is the non-macOS stub
   tui/               — bubbletea front-end (see internal/tui/doc.go)
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
@@ -271,7 +271,7 @@ file) and passed to `tui.Run(projectRoot, version, firstRun)`. The popup rides
 `bubblestack.Config.Init` next to `appctx.SelfUpdateCheckCmd` — `docs.WelcomeCmd` returns
 a `core.Push` as a message, which the router applies. Enter `Replace`s the popup with the
 docs index (so esc from the index lands on the tab root, not back on the popup); esc
-dismisses. Non-interactive runs (`--install`/`--list`/`--update`) return before `tui.Run`,
+dismisses. Non-interactive runs (`--install`/`--list`/`--update-packages`) return before `tui.Run`,
 so their output is untouched.
 
 Key packages/functions:
@@ -364,7 +364,7 @@ error to re-run under sudo).
 
 ### Self-update
 
-`gdaddon self-update` (alias `gdaddon update`; `cmd/selfupdate.go` + `internal/selfupdate/`,
+`gdaddon update` (alias `gdaddon self-update`; `cmd/update.go` + `internal/selfupdate/`,
 which delegates the mechanism to `github.com/brohd11/goutil/selfupdate`) checks gdaddon's own
 repo (github.com/brohd11/gdaddon) for a newer release than the running binary's injected
 `version` by resolving the latest tag off the `/releases/latest` redirect (no GitHub API,

@@ -18,11 +18,11 @@ import (
 var version = "dev"
 
 var (
-	installFlag      bool
-	listFlag         bool
-	updateFlag       bool
-	jsonFlag         bool
-	checkUpdatesFlag bool
+	installFlag        bool
+	listFlag           bool
+	updatePackagesFlag bool
+	jsonFlag           bool
+	checkUpdatesFlag   bool
 )
 
 var rootCmd = &cobra.Command{
@@ -39,10 +39,10 @@ func init() {
 	rootCmd.SetVersionTemplate("gdaddon {{.Version}}\n")
 	rootCmd.Flags().BoolVar(&installFlag, "install", false, "install addons from the manifest non-interactively, then exit")
 	rootCmd.Flags().BoolVar(&listFlag, "list", false, "print the manifest's install status without installing, then exit")
-	rootCmd.Flags().BoolVar(&updateFlag, "update", false, "update installed addons to their latest release non-interactively, then exit")
+	rootCmd.Flags().BoolVar(&updatePackagesFlag, "update-packages", false, "update installed addons to their latest release non-interactively, then exit")
 	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "with --list, print status as JSON for machine consumption")
 	rootCmd.Flags().BoolVar(&checkUpdatesFlag, "check-updates", false, "with --list --json, also check each addon for a newer release (network)")
-	rootCmd.MarkFlagsMutuallyExclusive("install", "list", "update")
+	rootCmd.MarkFlagsMutuallyExclusive("install", "list", "update-packages")
 }
 
 func Execute() {
@@ -83,8 +83,8 @@ func runRoot(cmd *cobra.Command, args []string) error {
 		return runInstall(projectRoot)
 	case listFlag:
 		return runList(projectRoot)
-	case updateFlag:
-		return runUpdate(projectRoot)
+	case updatePackagesFlag:
+		return runUpdatePackages(projectRoot)
 	}
 	return tui.Run(projectRoot, version, firstRun)
 }
@@ -267,10 +267,10 @@ func printListJSON(statuses []addon.Status, projectRoot string) error {
 	return nil
 }
 
-// runUpdate is the non-interactive update path: discover the manifest, resolve an
+// runUpdatePackages is the non-interactive update path: discover the manifest, resolve an
 // update plan for every installed addon with a newer release, and install them,
 // reporting progress to stdout.
-func runUpdate(projectRoot string) error {
+func runUpdatePackages(projectRoot string) error {
 	manifest, err := discoverManifest(projectRoot)
 	if err != nil {
 		return err

@@ -10,16 +10,16 @@ import (
 
 // resetFlags clears the package-level flag vars between Execute calls — cobra does
 // not reset them to their defaults, so a prior parse would otherwise leak in.
-func resetFlags() { installFlag, listFlag, updateFlag = false, false, false }
+func resetFlags() { installFlag, listFlag, updatePackagesFlag = false, false, false }
 
-// TestFlagsMutuallyExclusive verifies the --install/--list/--update group is
+// TestFlagsMutuallyExclusive verifies the --install/--list/--update-packages group is
 // rejected when more than one is given. cobra's MarkFlagsMutuallyExclusive fires
 // during Execute before RunE, so runRoot (and the TUI) never launches.
 func TestFlagsMutuallyExclusive(t *testing.T) {
 	pairs := [][]string{
 		{"--install", "--list"},
-		{"--install", "--update"},
-		{"--list", "--update"},
+		{"--install", "--update-packages"},
+		{"--list", "--update-packages"},
 	}
 	for _, p := range pairs {
 		t.Run(strings.Join(p, "_"), func(t *testing.T) {

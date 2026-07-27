@@ -20,8 +20,10 @@ var (
 )
 
 var selfUpdateCmd = &cobra.Command{
-	Use:     "self-update",
-	Aliases: []string{"update"},
+	Use: "update",
+	// self-update stays as an alias: the Godot EditorPlugin shells out to
+	// `gdaddon self-update --check --json`.
+	Aliases: []string{"self-update"},
 	Short:   "Check for a newer gdaddon release and install it over this binary",
 	Long: `Self-update compares this binary's version against the latest gdaddon
 release. With no flags it downloads and installs the update when one is available

@@ -39,7 +39,7 @@ Overrides: `BIN_DIR=/usr/local/bin` to install elsewhere, `VERSION=v0.3.0` to pi
 [Releases](https://github.com/brohd11/gdaddon/releases).
 
 This path needs no quarantine handling — that attribute is set by browsers, not by `curl`.
-Afterwards, `gdaddon self-update` (alias `gdaddon update`) keeps it current; the
+Afterwards, `gdaddon update` (alias `gdaddon self-update`) keeps it current; the
 mechanism lives in [goutil/selfupdate](https://github.com/brohd11/goutil).
 
 #### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-EditorPlugin)
