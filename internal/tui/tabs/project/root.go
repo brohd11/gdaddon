@@ -24,7 +24,7 @@ type ProjectScreen struct {
 	sort appctx.SortMode
 	// fetching marks a fetch-all pass in flight (see fetchAllCmd), so a second "f"
 	// while the first is still running doesn't fan out a duplicate set of fetches.
-	// Cleared when its fetchDone arrives.
+	// Cleared when its repoui.FetchDoneMsg arrives.
 	fetching bool
 }
 
@@ -137,22 +137,18 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 		// unlike ProjectDirty it doesn't re-fire the network update check.
 		appctx.Of(sh).RefreshProject()
 		s.list.SetItems(projectListItems(sh, s.sort))
-	case fetchDone:
+	case repoui.FetchDoneMsg:
 		// The refs are now current, so re-inspecting recomputes each checkout's ahead/behind
-		// (RefreshProject → refreshGitChecks) and the markers appear. Logging here — rather
-		// than from the cmd — keeps Shared on the UI thread; a plain ProjectDirty would also
-		// work but would re-fire the network-bound update check for no reason.
+		// (RefreshProject → refreshGitChecks) and the markers appear. RefreshRoots then
+		// rebuilds every tab root from the refreshed state; repoui.LogFetchResults writes the
+		// per-repo lines and returns the summary (log forced open only on a failure).
 		s.fetching = false
-		for _, r := range p.results {
-			sh.Log(addon.FetchLine(r))
-		}
 		appctx.Of(sh).RefreshProject()
 		s.list.SetItems(projectListItems(sh, s.sort))
-		if len(p.results) == 0 {
-			return core.SetStatus("no git checkouts to fetch")
-		}
-		line, failed := addon.FetchSummary(p.results, "git checkout(s)")
-		return core.SetStatusAndLog(line, failed) // force the log open only to show a failure's reason
+		return core.Seq(
+			core.RefreshRoots(),
+			repoui.LogFetchResults(sh, p.Results, "git checkout(s)", "no git checkouts to fetch"),
+		)
 	}
 	return core.Action{}
 }

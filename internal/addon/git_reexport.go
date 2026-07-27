@@ -40,11 +40,13 @@ var (
 	FetchSummary          = repo.FetchSummary
 )
 
-// FetchAll fetches every present git checkout (clone or submodule) among statuses and reads
-// each one's post-fetch divergence. It's the manifest-aware adapter over the engine's
-// repo.FetchAll: it filters to the git checkouts that are actually on disk (nothing else can
-// be fetched) and maps each to a repo.Repo. Non-git and not-installed entries are skipped.
-func FetchAll(ctx context.Context, statuses []Status) []FetchResult {
+// FetchRepos is the manifest→engine adapter: it filters statuses to the git checkouts
+// (clone or submodule) actually on disk — the only things that can be fetched — and maps
+// each to a repo.Repo the engine understands. Non-git and not-installed entries are skipped.
+// It's the piece that knows the manifest, split out so the TUI can hand the repo set to the
+// shared repoui.FetchAllCmd (which runs the fan-out) while FetchAll below stays available for
+// any non-TUI caller.
+func FetchRepos(statuses []Status) []repo.Repo {
 	repos := make([]repo.Repo, 0, len(statuses))
 	for _, s := range statuses {
 		if !s.Addon.IsGitWorkdir() || !s.Present() {
@@ -52,5 +54,11 @@ func FetchAll(ctx context.Context, statuses []Status) []FetchResult {
 		}
 		repos = append(repos, repo.Repo{Name: s.Addon.Name, Dir: s.FullPath})
 	}
-	return repo.FetchAll(ctx, repos)
+	return repos
+}
+
+// FetchAll fetches every present git checkout among statuses and reads each one's post-fetch
+// divergence — FetchRepos to select the checkouts, then the engine's repo.FetchAll.
+func FetchAll(ctx context.Context, statuses []Status) []FetchResult {
+	return repo.FetchAll(ctx, FetchRepos(statuses))
 }
