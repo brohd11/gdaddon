@@ -20,8 +20,9 @@ var (
 )
 
 var selfUpdateCmd = &cobra.Command{
-	Use:   "self-update",
-	Short: "Check for a newer gdaddon release and install it over this binary",
+	Use:     "self-update",
+	Aliases: []string{"update"},
+	Short:   "Check for a newer gdaddon release and install it over this binary",
 	Long: `Self-update compares this binary's version against the latest gdaddon
 release. With no flags it downloads and installs the update when one is available
 (to wherever this binary is installed, or ~/.gdaddon/bin otherwise).

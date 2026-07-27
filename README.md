@@ -39,7 +39,8 @@ Overrides: `BIN_DIR=/usr/local/bin` to install elsewhere, `VERSION=v0.3.0` to pi
 [Releases](https://github.com/brohd11/gdaddon/releases).
 
 This path needs no quarantine handling — that attribute is set by browsers, not by `curl`.
-Afterwards, `gdaddon self-update` keeps it current.
+Afterwards, `gdaddon self-update` (alias `gdaddon update`) keeps it current; the
+mechanism lives in [goutil/selfupdate](https://github.com/brohd11/goutil).
 
 #### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-EditorPlugin)
 This is the Godot EditorPlugin companion to gdaddon. You can actually download and install the binary from here if you want. It should remove the need for quarantine management on macOS.

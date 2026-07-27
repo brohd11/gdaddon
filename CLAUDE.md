@@ -364,7 +364,8 @@ error to re-run under sudo).
 
 ### Self-update
 
-`gdaddon self-update` (`cmd/selfupdate.go` + `internal/selfupdate/`) checks gdaddon's own
+`gdaddon self-update` (alias `gdaddon update`; `cmd/selfupdate.go` + `internal/selfupdate/`,
+which delegates the mechanism to `github.com/brohd11/goutil/selfupdate`) checks gdaddon's own
 repo (github.com/brohd11/gdaddon) for a newer release than the running binary's injected
 `version` by resolving the latest tag off the `/releases/latest` redirect (no GitHub API,
 no rate limit) and comparing semvers locally — a `dev` build is never comparable, hence

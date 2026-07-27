@@ -10,6 +10,8 @@ github.com/brohd11/bubblestack v0.1.3 h1:hq028+ljIBM+1CP9jfRf9D6lxIN2lumsfUzERLe
 github.com/brohd11/bubblestack v0.1.3/go.mod h1:BzPmzyaVMUiukTRRBbFypDO0mgsrspsi5jAdiz6WJTY=
 github.com/brohd11/gitstack v0.1.5 h1:OiWz24kzwaO19S8csxfY1W3w4BmlGORATTidKxEwKXE=
 github.com/brohd11/gitstack v0.1.5/go.mod h1:EHrkacwuqWSUlbVS/f/7cxLzJCyI9f88nYl/WVMbFvY=
+github.com/brohd11/goutil v0.1.0 h1:RcSSuID/KpVv0k1xu2tWGeDb6EAQm2UwjlraSm4on3k=
+github.com/brohd11/goutil v0.1.0/go.mod h1:Eja+AVFG6HNHzZAKR4kH2oxYUSy4alAp5HfBDjuVSeM=
 github.com/charmbracelet/bubbles v1.0.0 h1:12J8/ak/uCZEMQ6KU7pcfwceyjLlWsDLAxB5fXonfvc=
 github.com/charmbracelet/bubbles v1.0.0/go.mod h1:9d/Zd5GdnauMI5ivUIVisuEm3ave1XwXtD1ckyV6r3E=
 github.com/charmbracelet/bubbletea v1.3.10 h1:otUDHWMMzQSB0Pkc87rm691KZ3SWa4KUlvF9nRvCICw=
