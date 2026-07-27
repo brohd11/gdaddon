@@ -270,15 +270,11 @@ func SelfUpdateCheckCmd(sh *core.Shared) tea.Cmd {
 
 // Receive handles App-level broadcasts (the router notifies App on every PropagateAll).
 // A theme change rebuilds the cached tab roots so each re-bakes its delegate/list styles
-// with the new palette — gdaddon is fine reinstancing roots (they reflect on-disk state,
-// see RefreshProject/RefreshGlobal/RefreshArchive). Other payloads (the Dirty markers)
-// are handled by the individual tab roots, so App ignores them.
+// with the new palette (core.OnThemeChange) — gdaddon is fine reinstancing roots (they
+// reflect on-disk state, see RefreshProject/RefreshGlobal/RefreshArchive). Other payloads
+// (the Dirty markers) are handled by the individual tab roots, so App ignores them.
 func (c *Ctx) Receive(sh *core.Shared, payload any) core.Action {
-	switch payload.(type) {
-	case core.MsgThemeChanged:
-		return core.RefreshRoots()
-	}
-	return core.Action{}
+	return core.OnThemeChange(payload)
 }
 
 // Tab titles, shared between the TabEntry wiring (in Run) and the ShowTab callers,
