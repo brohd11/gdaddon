@@ -7,6 +7,10 @@
 // submodules vs all) is gdaddon's: a clone is a repo you develop, a submodule is
 // parent-managed (pulling one dirties the parent's recorded pointer), so acting on
 // submodules is an opt-in the cycling scope makes explicit.
+//
+// The project root's own repo is no manifest entry; it rides along behind the shared menu's
+// include-root toggle. But it's a top-level clone, so the submodules scope marks itself
+// ExcludeRoot — the toggle won't add (or even offer) the root there, only under clones and all.
 package git
 
 import (
@@ -57,9 +61,10 @@ func (s scope) matches(a addon.Addon) bool {
 // AllRepos is the project-wide git menu: fetch, pull, or push every checkout in the manifest,
 // narrowed by a cycling scope. Opened from Actions ▸ Git and "V" on the Project list. The
 // three scopes are handed to the shared repoui menu, which owns the cycling, confirm, and
-// batch execution. The project root's own repo rides along as an include-root toggle (it
-// isn't a manifest entry, so no scope covers it): appctx.Ctx.RootRepo supplies it, and the
-// menu appends it to the targets while the toggle is on.
+// batch execution. The project root's own repo rides along as an include-root toggle (it isn't
+// a manifest entry, so no scope covers it): appctx.Ctx.RootRepo supplies it, and the menu
+// appends it to the targets while the toggle is on — except under the submodules scope, which
+// is ExcludeRoot (the root is a clone, not a submodule).
 func AllRepos(sh *core.Shared) *components.PickerScreen {
 	return repoui.AllReposMenu(sh, []repoui.Scope{
 		newScope(scopeClones),
@@ -70,17 +75,21 @@ func AllRepos(sh *core.Shared) *components.PickerScreen {
 
 // newScope builds one repoui.Scope: its label and a provider that reads the in-scope repos
 // fresh from the manifest each time it's called (menu build, confirm, run — the tree moves
-// under us).
+// under us). The submodules scope opts out of the include-root toggle (ExcludeRoot): the
+// project root is a top-level clone, so it has no place in a submodules-only batch.
 func newScope(sc scope) repoui.Scope {
 	return repoui.Scope{
-		Label: sc.label(),
-		Repos: func(sh *core.Shared) []repo.Repo { return reposFor(sh, sc) },
+		Label:       sc.label(),
+		Repos:       func(sh *core.Shared) []repo.Repo { return reposFor(sh, sc) },
+		ExcludeRoot: sc == scopeSubmodules,
 	}
 }
 
 // reposFor inspects the manifest and returns the present git checkouts in scope as repo.Repo
 // values, each annotated with the cached divergence (appctx.Ctx.GitSync) the confirm reads to
-// say "N behind". Read fresh rather than captured, since the tree changes between screens.
+// say "N behind". Read fresh rather than captured, since the tree changes between screens. The
+// project root is not a manifest entry, so it isn't here — it's handled by the menu's
+// include-root toggle (see AllRepos).
 func reposFor(sh *core.Shared, sc scope) []repo.Repo {
 	c := appctx.Of(sh)
 	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)

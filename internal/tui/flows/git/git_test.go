@@ -42,3 +42,19 @@ func TestScopeLabels(t *testing.T) {
 		t.Errorf("scope labels = %q, want %q", got, "clones submodules all")
 	}
 }
+
+// TestScopeExcludeRoot verifies only the submodules scope opts out of the include-root toggle:
+// the project root is a top-level clone, so it may ride the clones and all batches but never a
+// submodules-only one. (The toggle's actual add/suppress behavior is tested in repoui.)
+func TestScopeExcludeRoot(t *testing.T) {
+	cases := map[scope]bool{
+		scopeClones:     false,
+		scopeSubmodules: true,
+		scopeAll:        false,
+	}
+	for sc, want := range cases {
+		if got := newScope(sc).ExcludeRoot; got != want {
+			t.Errorf("newScope(%s).ExcludeRoot = %v, want %v", sc.label(), got, want)
+		}
+	}
+}
