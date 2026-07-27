@@ -71,7 +71,7 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 	// The tab's own keys, gated behind the filter guard so they don't hijack filter typing.
 	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() {
 		switch {
-		// "i" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
+		// "s" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
 		case core.MatchKey(k.String(), appctx.AppKeys.Sort):
 			appctx.CycleSort(&s.list, &s.sort, projectSortModes, projectTitle,
 				func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })

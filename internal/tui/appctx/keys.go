@@ -20,7 +20,7 @@ type appKeyMap struct {
 // AppKeys is the active custom keymap. Edit a WithKeys list here to rebind; the
 // tabs match against these bindings (via core.MatchKey), so nothing else changes.
 var AppKeys = appKeyMap{
-	Sort:     key.NewBinding(key.WithKeys("i"), key.WithHelp("s", "sort")),
+	Sort:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sort")),
 	Terminal: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "terminal")),
 	OpenDir:  key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "open dir")),
 	Fetch:    key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fetch")),

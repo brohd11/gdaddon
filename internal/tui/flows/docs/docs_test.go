@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brohd11/bubblestack/components"
+
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -33,7 +35,7 @@ func TestPagesParse(t *testing.T) {
 func TestRenderFitsWidth(t *testing.T) {
 	for _, width := range []int{40, 80} {
 		for _, p := range Pages() {
-			for i, line := range strings.Split(render(p.Body, width), "\n") {
+			for i, line := range strings.Split(components.RenderMarkdown(p.Body, width), "\n") {
 				if w := ansi.StringWidth(line); w > width {
 					t.Errorf("page %q at width %d: line %d is %d cols wide: %q", p.Title, width, i+1, w, line)
 				}

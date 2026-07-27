@@ -23,7 +23,7 @@ SUPPORTED="darwin-arm64 darwin-amd64 linux-amd64 linux-arm64"
 post_install_note() {
   cat <<EOF
 Run '$BINARY' in a Godot project to manage its addons.
-Later updates: '$BINARY self-update'.
+Later updates: '$BINARY update'.
 
 To also place a copy where the Godot EditorPlugin looks for it (~/.gdaddon/bin):
   $BINARY install --dest home

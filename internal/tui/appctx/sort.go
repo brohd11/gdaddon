@@ -1,47 +1,27 @@
 package appctx
 
-// SortMode selects the ordering of a data-backed tab list (Project/Global/Archive).
-// It is a per-screen session choice cycled by the "i" key; the owning screen holds
-// the value and rebuilds its list when it changes. Only the enum + label + cycle
-// live here (no bubbles/list dependency); the list-touching helpers are in
-// listsort.go, and the domain sort (by name / by install state) is applied in each
-// tab's item builder.
-type SortMode int
+import "github.com/brohd11/bubblestack/components"
+
+// The sort toggle mechanism (enum + label + cycle + the list.Model/list.Item helpers)
+// lives in bubblestack/components now — it names no domain type, so a second consumer
+// (repoview) can share it. appctx re-exports it under the historical names so gdaddon's
+// tab call sites are unchanged (same pattern as GitRefresh = repoui.RefreshMsg). The
+// domain sort — sortRows/attentionRank keyed on real addon.Status — stays in each tab's
+// item builder (see tabs/project/items.go).
+
+type SortMode = components.SortMode
 
 const (
-	SortAlpha   SortMode = iota // A→Z by name (case-insensitive)
-	SortReverse                 // Z→A by name (case-insensitive)
-	SortStatus                  // grouped by install state (Project only)
+	SortAlpha   = components.SortAlpha
+	SortReverse = components.SortReverse
+	SortStatus  = components.SortStatus
 )
 
-// SortTitle renders a list's base title with its active sort mode appended, e.g.
-// "Project — A→Z". Shared by each tab root's New* and CycleSort.
-func SortTitle(base string, m SortMode) string { return base + " — " + m.Label() }
-
-// Label is the short suffix shown in a list's Title, e.g. "Project — A→Z".
-func (m SortMode) Label() string {
-	switch m {
-	case SortReverse:
-		return "Z→A"
-	case SortStatus:
-		return "status"
-	default:
-		return "A→Z"
-	}
-}
-
-// NextSort advances cur to the next mode within the allowed set (wrapping), so a
-// tab can restrict the cycle — Project offers {Alpha, Reverse, Status} while
-// Global/Archive offer {Alpha, Reverse}. A cur not in modes (or an empty set)
-// falls back to the first allowed mode.
-func NextSort(cur SortMode, modes []SortMode) SortMode {
-	for i, m := range modes {
-		if m == cur {
-			return modes[(i+1)%len(modes)]
-		}
-	}
-	if len(modes) > 0 {
-		return modes[0]
-	}
-	return cur
-}
+var (
+	SortTitle        = components.SortTitle
+	NextSort         = components.NextSort
+	SortItemsByTitle = components.SortItemsByTitle
+	SelectedTitle    = components.SelectedTitle
+	SelectByTitle    = components.SelectByTitle
+	CycleSort        = components.CycleSort
+)
