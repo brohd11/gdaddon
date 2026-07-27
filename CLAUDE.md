@@ -197,7 +197,7 @@ internal/
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
   store/             — Asset Store URL detection/backend used by search/install
   installer/         — `gdaddon install`/`uninstall`: copy the running binary to system/user/home, PATH wiring (InstallFrom for an explicit source, CurrentDest for the running binary's location). The copy is a temp-file-plus-rename, so the destination may be the running binary — see Installing the binary
-  selfupdate/        — `gdaddon self-update`: check gdaddon's own repo for a newer release (source.AvailableVersions + addon.SemverGE) and download+install it via installer
+  selfupdate/        — `gdaddon self-update`: resolve the latest release tag off the repo's /releases/latest redirect and install it by running the repo's own install.sh (BIN_DIR/VERSION env, --no-modify-path)
   quarantine/        — Actions ▸ Dequarantine Addons: `Clear` walks <root>/addons removing com.apple.quarantine (x/sys/unix.Lremovexattr) and returns counts. Hidden dirs are pruned — an addon's .git is thousands of mode-0444 objects that can't own the attribute and only answer EACCES. darwin-only; `quarantine_other.go` is the non-macOS stub
   tui/               — bubbletea front-end (see internal/tui/doc.go)
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
@@ -365,13 +365,16 @@ error to re-run under sudo).
 ### Self-update
 
 `gdaddon self-update` (`cmd/selfupdate.go` + `internal/selfupdate/`) checks gdaddon's own
-repo (`selfupdate.RepoURL` = github.com/brohd11/gdaddon) for a newer release than the
-running binary's injected `version`, reusing `source.AvailableVersions` for the listing and
-`addon.SemverGE` for the tag comparison — the same machinery as the per-addon update check.
-When a newer release exists it downloads the platform release zip (`<os>-<arch>` token, e.g.
-`darwin-arm64`, matching `make package`'s asset names), extracts the binary, and installs it
-via `installer.InstallFrom(dest, …)` to `installer.DefaultDest()` — the managed location the
-running binary occupies (`installer.CurrentDest`), or `~/.gdaddon/bin` otherwise.
+repo (github.com/brohd11/gdaddon) for a newer release than the running binary's injected
+`version` by resolving the latest tag off the `/releases/latest` redirect (no GitHub API,
+no rate limit) and comparing semvers locally — a `dev` build is never comparable, hence
+never offered an update. When a newer release exists it downloads the repo's own
+`install.sh` and runs it with `BIN_DIR` set to the destination's directory
+(`installer.Dest.Dir`) and `VERSION` pinned to the checked tag, `--no-modify-path` so PATH
+is never touched — install.sh stages in a temp dir and `mv -f`s into place, so overwriting
+the running binary is safe. The default destination is `selfupdate.DefaultDest()` — the
+managed location the running binary occupies (`installer.CurrentDest`), or `~/.gdaddon/bin`
+otherwise.
 `--check [--json]` only reports (`{current,latest_tag,available}` for the Godot plugin to
 parse, like `--list --json`); `--interactive` opens the same dest picker as `install`. The
 check also runs automatically on TUI startup (wired as `bubblestack.Config.Init` →

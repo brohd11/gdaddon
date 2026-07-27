@@ -36,6 +36,11 @@ func (d Dest) String() string {
 	return "unknown"
 }
 
+// Dir resolves the concrete directory dest maps to (platform-specific, see destDir
+// in path_unix.go / path_windows.go). Exported so self-update can point install.sh's
+// BIN_DIR at the chosen destination.
+func (d Dest) Dir() (string, error) { return destDir(d) }
+
 // ParseDest maps the --dest flag value to a Dest.
 func ParseDest(s string) (Dest, error) {
 	switch s {
@@ -96,15 +101,14 @@ func Install(dest Dest) (Result, error) {
 }
 
 // InstallFrom copies an explicit source binary to dest and applies any PATH wiring.
-// Install is InstallFrom with src = the running binary; self-update passes a freshly
-// downloaded binary instead.
+// Install is InstallFrom with src = the running binary.
 func InstallFrom(dest Dest, src string) (Result, error) {
 	return doInstall(dest, src)
 }
 
 // ExeName is the gdaddon binary's filename on this platform ("gdaddon", or
-// "gdaddon.exe" on Windows). Exported so callers (e.g. self-update locating the
-// binary inside a downloaded release zip) don't duplicate the per-OS name.
+// "gdaddon.exe" on Windows). Exported so callers (e.g. self-update reporting the
+// installed path) don't duplicate the per-OS name.
 func ExeName() string { return exeName() }
 
 // CurrentDest reports which managed destination (System/User/Home) the running

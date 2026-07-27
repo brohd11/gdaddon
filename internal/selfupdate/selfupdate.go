@@ -1,104 +1,112 @@
-// Package selfupdate checks whether a newer gdaddon release than the running binary
-// exists and installs it over the current one. It mirrors the per-addon update check
-// (internal/addon CheckUpdate) but targets gdaddon's own repo: it fetches the repo's
-// release listing via internal/source, compares the running version against the
-// latest tag with the same semver rules addons use (addon.SemverGE), and — when an
-// update is available — downloads the platform release zip and places the new binary
-// with internal/installer's copy/PATH logic (whose copy is a temp-file-plus-rename, so
-// the binary being replaced may be the one running this).
+// Package selfupdate implements gdaddon's self-update: check GitHub for a newer
+// release and, when one exists, install it by running the repo's own install.sh —
+// the same script the README tells users to curl — with BIN_DIR pointed at the
+// destination's directory so the update lands in place, and --no-modify-path so an
+// installed binary is never asked about PATH again.
 package selfupdate
 
 import (
-	"archive/zip"
+	"bufio"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
-	"path"
+	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 
-	"gdaddon/internal/addon"
 	"gdaddon/internal/installer"
-	"gdaddon/internal/restrule"
-	"gdaddon/internal/source"
 )
 
-// RepoURL is gdaddon's own repository — the source of self-update releases. A plain
-// host/owner/repo URL, which source.AvailableVersions parses like any addon URL.
-const RepoURL = "https://github.com/brohd11/gdaddon"
+// Repo is the GitHub repository the releases and install.sh are fetched from.
+const Repo = "brohd11/gdaddon"
 
-// Info is the result of a self-update check: the running version, the latest release
-// tag, and — when an update for this platform is available — the asset to download.
+// latestReleaseURL is a var so tests can point it at an httptest server.
+var latestReleaseURL = "https://github.com/" + Repo + "/releases/latest"
+
+// installScriptURL is the raw install.sh the README's curl command pipes to sh.
+const installScriptURL = "https://raw.githubusercontent.com/" + Repo + "/main/install.sh"
+
+// Info is the outcome of Check: the running version, the latest release tag,
+// and whether the release is newer.
 type Info struct {
 	Current   string
 	LatestTag string
 	Available bool
-	AssetURL  string
-	AssetName string
 }
 
-// Check fetches gdaddon's release listing and compares the running version against
-// the latest release tag. Available is true only when current is a comparable semver
-// strictly older than the latest tag and a release asset exists for this platform.
-// A non-comparable version (a plain "dev" build), an already-current binary, a
-// missing platform asset, or no releases all yield Available=false with no error, so
-// no false update is ever surfaced. A fetch failure returns the error.
+// Check resolves the latest release tag via the /releases/latest redirect —
+// github.com/<repo>/releases/latest answers 302 to /releases/tag/<tag>, which
+// gives the tag without touching the rate-limited API — and reports whether it
+// is newer than current. A "dev" build is never comparable, hence never
+// offered an update.
 func Check(ctx context.Context, current string) (Info, error) {
 	info := Info{Current: current}
-	listing, err := source.AvailableVersions(ctx, RepoURL)
+	tag, err := latestTag(ctx)
 	if err != nil {
 		return info, err
 	}
-	if listing == nil {
-		return info, nil
-	}
-	latest, ok := addon.LatestRelease(listing.Releases)
-	if !ok {
-		return info, nil
-	}
-	info.LatestTag = latest.Tag
-
-	ge, comparable := addon.SemverGE(current, latest.Tag)
-	if !comparable || ge {
-		// "dev" build (uncomparable) or already on/ahead of the latest tag.
-		return info, nil
-	}
-
-	asset, ok := platformAsset(latest)
-	if !ok {
-		return info, nil
-	}
-	info.Available = true
-	info.AssetURL = asset.URL
-	info.AssetName = asset.Name
+	info.LatestTag = tag
+	info.Available = newer(normalize(current), tag)
 	return info, nil
 }
 
-// Apply downloads info's platform asset and installs the new binary to dest,
-// reporting progress lines. It returns the installed path. Not available / no asset
-// is an error (the caller should only Apply a result Check reported available).
+// Apply installs info.LatestTag by downloading install.sh and running it with
+// BIN_DIR set to dest's directory and VERSION pinned to the checked tag, so it
+// installs exactly what Check saw. Overwriting the running binary is safe:
+// install.sh stages in a temp dir and mv -f's into place. The script's output
+// is streamed line-by-line to report. Returns the installed binary's path.
 func Apply(ctx context.Context, info Info, dest installer.Dest, report func(string, ...any)) (string, error) {
-	if !info.Available || info.AssetURL == "" {
-		return "", fmt.Errorf("no gdaddon update available")
+	if report == nil {
+		report = func(string, ...any) {}
 	}
-	report("Downloading %s...", info.AssetName)
-	binPath, cleanup, err := downloadBinary(ctx, info.AssetURL)
+	dir, err := dest.Dir()
 	if err != nil {
 		return "", err
 	}
-	defer cleanup()
 
-	report("Installing %s to %s...", info.LatestTag, dest)
-	res, err := installer.InstallFrom(dest, binPath)
+	tmp, err := os.MkdirTemp("", "gdaddon-selfupdate-")
 	if err != nil {
 		return "", err
 	}
-	if res.Note != "" {
-		report("%s", res.Note)
+	defer os.RemoveAll(tmp)
+	script := filepath.Join(tmp, "install.sh")
+
+	// Download to a file rather than curling into sh: the env vars and the
+	// --no-modify-path flag are needed either way, and this keeps a failed
+	// download distinct from a failed install.
+	dl := exec.CommandContext(ctx, "curl", "-fsSL", "-o", script, installScriptURL)
+	if out, err := dl.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("downloading install.sh: %w\n%s", err, out)
 	}
-	return res.Path, nil
+
+	cmd := exec.CommandContext(ctx, "sh", script, "--no-modify-path")
+	cmd.Env = append(os.Environ(),
+		"BIN_DIR="+dir,
+		"VERSION="+info.LatestTag,
+	)
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	scanDone := make(chan struct{})
+	go func() {
+		defer close(scanDone)
+		sc := bufio.NewScanner(pr)
+		for sc.Scan() {
+			report("%s", sc.Text())
+		}
+	}()
+
+	runErr := cmd.Run()
+	pw.Close()
+	<-scanDone
+	if runErr != nil {
+		return "", fmt.Errorf("running install.sh: %w", runErr)
+	}
+	return filepath.Join(dir, installer.ExeName()), nil
 }
 
 // DefaultDest is the install target self-update uses without an explicit choice: the
@@ -112,81 +120,73 @@ func DefaultDest() installer.Dest {
 	return installer.Home
 }
 
-// platformAsset picks the release asset matching this OS/arch by name token
-// ("darwin-arm64" / "linux-amd64" / "windows-amd64", as produced by the Makefile's
-// package-* targets), ignoring the host-generated source archive. ok is false when
-// no uploaded asset matches the running platform.
-func platformAsset(rel source.Release) (source.Asset, bool) {
-	token := runtime.GOOS + "-" + runtime.GOARCH
-	for _, a := range rel.Assets {
-		if a.Generated {
-			continue
-		}
-		if strings.Contains(strings.ToLower(a.Name), token) {
-			return a, true
-		}
+// latestTag GETs the /releases/latest URL without following the redirect and
+// reads the tag off the Location header.
+func latestTag(ctx context.Context) (string, error) {
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
-	return source.Asset{}, false
-}
-
-// downloadBinary fetches the release zip and extracts just the gdaddon binary entry
-// to a temp file, returning its path and a cleanup that removes the temp artifacts.
-// ctx cancels the in-flight download.
-func downloadBinary(ctx context.Context, url string) (binPath string, cleanup func(), err error) {
-	tmpDir, err := os.MkdirTemp("", "gdaddon-selfupdate-*")
-	if err != nil {
-		return "", func() {}, err
-	}
-	cleanup = func() { os.RemoveAll(tmpDir) }
-
-	zipPath := filepath.Join(tmpDir, "release.zip")
-	if err := restrule.Download(ctx, url, zipPath); err != nil {
-		cleanup()
-		return "", func() {}, err
-	}
-
-	binPath, err = extractBinary(zipPath, tmpDir)
-	if err != nil {
-		cleanup()
-		return "", func() {}, err
-	}
-	return binPath, cleanup, nil
-}
-
-// extractBinary writes the zip's gdaddon binary entry (matched by base name) into
-// destDir as an executable and returns its path.
-func extractBinary(zipPath, destDir string) (string, error) {
-	zr, err := zip.OpenReader(zipPath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestReleaseURL, nil)
 	if err != nil {
 		return "", err
 	}
-	defer zr.Close()
-
-	want := installer.ExeName()
-	for _, f := range zr.File {
-		if f.FileInfo().IsDir() || path.Base(f.Name) != want {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return "", err
-		}
-		dst := filepath.Join(destDir, want)
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-		if err != nil {
-			rc.Close()
-			return "", err
-		}
-		if _, err := io.Copy(out, rc); err != nil {
-			rc.Close()
-			out.Close()
-			return "", err
-		}
-		rc.Close()
-		if err := out.Close(); err != nil {
-			return "", err
-		}
-		return dst, nil
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("no %s binary found in release archive", want)
+	defer resp.Body.Close()
+
+	loc := resp.Header.Get("Location")
+	const marker = "/releases/tag/"
+	i := strings.Index(loc, marker)
+	if i < 0 {
+		return "", fmt.Errorf("no release tag in redirect from %s (status %s)", latestReleaseURL, resp.Status)
+	}
+	return loc[i+len(marker):], nil
+}
+
+// normalize reduces a git describe version to its base tag: any dash in the
+// output introduces the -N-g<hash>[-dirty] suffix, e.g. "v0.1.1-2-gdfdcacf"
+// becomes "v0.1.1". "dev" stays "dev" and is never comparable.
+func normalize(v string) string {
+	if i := strings.Index(v, "-"); i >= 0 {
+		v = v[:i]
+	}
+	return v
+}
+
+// newer reports whether latest is a higher semver tag than current. Anything
+// unparseable ("dev", malformed tags) is treated as not newer — better to skip
+// an update than to reinstall on a misunderstanding.
+func newer(current, latest string) bool {
+	c, okC := parseSemver(current)
+	l, okL := parseSemver(latest)
+	if !okC || !okL {
+		return false
+	}
+	for i := range c {
+		if l[i] != c[i] {
+			return l[i] > c[i]
+		}
+	}
+	return false
+}
+
+// parseSemver parses a vX.Y.Z tag into its numeric components.
+func parseSemver(tag string) ([3]int, bool) {
+	var v [3]int
+	parts := strings.Split(strings.TrimPrefix(tag, "v"), ".")
+	if len(parts) != 3 {
+		return v, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return v, false
+		}
+		v[i] = n
+	}
+	return v, true
 }
