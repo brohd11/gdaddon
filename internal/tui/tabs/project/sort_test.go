@@ -115,11 +115,32 @@ func TestNextSort(t *testing.T) {
 	if got := appctx.NextSort(appctx.SortAlpha, modes); got != appctx.SortReverse {
 		t.Errorf("alpha -> %v, want reverse", got)
 	}
-	if got := appctx.NextSort(appctx.SortStatus, modes); got != appctx.SortAlpha {
-		t.Errorf("status -> %v (should wrap), want alpha", got)
+	if got := appctx.NextSort(appctx.SortStatus, modes); got != appctx.SortStatusInstalled {
+		t.Errorf("status -> %v, want status-installed", got)
+	}
+	if got := appctx.NextSort(appctx.SortStatusInstalled, modes); got != appctx.SortAlpha {
+		t.Errorf("status-installed -> %v (should wrap), want alpha", got)
 	}
 	if got := appctx.NextSort(appctx.SortStatus, globalTwo()); got != globalTwo()[0] {
 		t.Errorf("mode not in set -> %v, want first", got)
+	}
+}
+
+// TestSortStatusInstalled proves the status-installed mode hides rows whose addon is
+// not on disk (missing and invalid) and keeps the rest in attention-rank order.
+func TestSortStatusInstalled(t *testing.T) {
+	upd := row("hasUpdate", addon.StateInstalled)
+	upd.update = true
+	rows := []rowData{
+		row("gone", addon.StateMissing),
+		row("clean", addon.StateInstalled),
+		upd,
+		row("broken", addon.StateInvalid),
+	}
+	rows = visibleRows(rows, appctx.SortStatusInstalled)
+	sortRows(rows, appctx.SortStatusInstalled)
+	if want := []string{"hasUpdate", "clean"}; !eq(names(rows), want) {
+		t.Errorf("status-installed = %v, want %v", names(rows), want)
 	}
 }
 

@@ -168,9 +168,26 @@ func rowMarker(r rowData) string {
 	return "  ⚠ [" + strings.Join(parts, " / ") + "]"
 }
 
-// projectSortModes is the Project tab's sort cycle: name A→Z, name Z→A, then
-// grouped by install state. The "i" key advances through it (see ProjectScreen.Update).
-var projectSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse, appctx.SortStatus}
+// projectSortModes is the Project tab's sort cycle: name A→Z, name Z→A, then grouped
+// by install state, then the same status grouping with uninstalled rows hidden. The
+// "i" key advances through it (see ProjectScreen.Update).
+var projectSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse, appctx.SortStatus, appctx.SortStatusInstalled}
+
+// visibleRows drops the rows a mode hides: SortStatusInstalled shows only addons
+// installed on disk (Present), so missing and invalid entries get no row. Every other
+// mode shows everything.
+func visibleRows(rows []rowData, mode appctx.SortMode) []rowData {
+	if mode != appctx.SortStatusInstalled {
+		return rows
+	}
+	kept := rows[:0]
+	for _, r := range rows {
+		if r.s.Present() {
+			kept = append(kept, r)
+		}
+	}
+	return kept
+}
 
 // rowData pairs an inspected addon with its cached warning flags (the same signals
 // rowMarker draws), so a row can be both sorted — the status mode factors warnings,
@@ -202,6 +219,7 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 			sync:   c.GitSync[s.Addon.Name],
 		}
 	}
+	rows = visibleRows(rows, mode)
 	sortRows(rows, mode)
 	items := make([]list.Item, len(rows))
 	for i, r := range rows {
@@ -214,12 +232,13 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 // (case-insensitive), or by attentionRank (install state + warnings) with a name
 // tie-break. Sorting this domain-aware slice — not the finished rows — keeps the
 // status mode keyed on real state/warnings rather than the marker-suffixed Title.
+// SortStatusInstalled sorts identically; its hiding happens in visibleRows.
 func sortRows(rows []rowData, mode appctx.SortMode) {
 	name := func(i int) string { return strings.ToLower(rows[i].s.Addon.Name) }
 	switch mode {
 	case appctx.SortReverse:
 		sort.SliceStable(rows, func(i, j int) bool { return name(i) > name(j) })
-	case appctx.SortStatus:
+	case appctx.SortStatus, appctx.SortStatusInstalled:
 		sort.SliceStable(rows, func(i, j int) bool {
 			ri, rj := attentionRank(rows[i]), attentionRank(rows[j])
 			if ri != rj {
