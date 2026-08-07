@@ -20,6 +20,42 @@ import (
 // core.TaskEvent.Payload and read back in onDone.
 type installResult struct{ Path, Version string }
 
+// newInstallTaskScreen is the shared install task behind newInstallTask and
+// newStoreInstallTask: run installs target and onDone pins the resolved result via
+// pin (which returns the completion status line), then hands off to the shared
+// location form when the resolved path differs from the entry's prior manifest path
+// (a path-less or relocated entry) so the user can confirm/correct it and optionally
+// record it globally; a package shipping several addons (res.Path == "") can't be
+// tracked to one folder, so it finishes silently.
+func newInstallTaskScreen(selected addon.Addon, target addon.Addon, pin func(sh *core.Shared, res installResult) string) *components.TaskScreen {
+	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
+		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
+		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
+	}
+	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
+		if ev.Err != nil {
+			return core.Seq(
+				core.SetStatusAndLog(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err)),
+				core.SetStatusAndLog("install failed", true),
+				core.ResetToRoot(),
+			)
+		}
+		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
+		res, _ := ev.Payload.(installResult)
+		status := pin(sh, res)
+		if res.Path != "" && res.Path != selected.Path {
+			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: res.Version}
+			return core.Replace(postinstall.New(sh, []postinstall.Target{t}))
+		}
+		return core.Seq(
+			core.SetStatus(status),
+			core.PropagateAll(appctx.ProjectDirty{}),
+			core.ShowTab(appctx.TitleProject),
+		)
+	}
+	return components.NewTask("installing "+selected.Name+"…", run, onDone)
+}
+
 func newInstallTask(selected addon.Addon, local string, pick versionItem) *components.TaskScreen {
 	target := addon.Addon{Name: selected.Name, URL: pick.asset.URL, Path: selected.Path}
 	if !pick.branch {
@@ -34,37 +70,10 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 		target.Tag = pick.tag
 		target.Kind = addon.KindClone
 	}
-	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
-		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
-		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
-	}
-	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		if ev.Err != nil {
-			return core.Seq(
-				core.SetStatusAndLog(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err)),
-				core.SetStatusAndLog("install failed", true),
-				core.ResetToRoot(),
-			)
-		}
-		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
-		res, _ := ev.Payload.(installResult)
-		// Pin the resolved path immediately (matches the batch flows). When that path
-		// differs from the entry's prior manifest path (a path-less or relocated
-		// entry), hand off to the shared location form so the user can confirm/correct
-		// it and optionally record it globally; a package shipping several addons
-		// (res.Path == "") can't be tracked to one folder, so it finishes silently.
-		status := pinInstall(appctx.Of(sh).ManifestPath, selected, pick, res.Path, res.Version)
-		if res.Path != "" && res.Path != selected.Path {
-			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: res.Version}
-			return core.Replace(postinstall.New(sh, []postinstall.Target{t}))
-		}
-		return core.Seq(
-			core.SetStatus(status),
-			core.PropagateAll(appctx.ProjectDirty{}),
-			core.ShowTab(appctx.TitleProject),
-		)
-	}
-	return components.NewTask("installing "+selected.Name+"…", run, onDone)
+	return newInstallTaskScreen(selected, target, func(sh *core.Shared, res installResult) string {
+		// Pin the resolved path immediately (matches the batch flows).
+		return pinInstall(appctx.Of(sh).ManifestPath, selected, pick, res.Path, res.Version)
+	})
 }
 
 // newStoreInstallTask installs the chosen Asset Store version. Store assets have no
@@ -72,37 +81,14 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 // release (the store release identity, e.g. "v3.10.2", carried as the tag), and
 // addon.Install (→ storeInstall) resolves that release's download and unzips it. On
 // success it pins the installed plugin.cfg version + the release tag + resolved path
-// (url left untouched), mirroring pinInstall's version/tag split, and lands on Project,
-// handing off to the location form when the resolved path differs, like newInstallTask.
+// (url left untouched), mirroring pinInstall's version/tag split.
 func newStoreInstallTask(selected addon.Addon, local, version string) *components.TaskScreen {
 	target := selected
 	target.Tag = version
-	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
-		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
-		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
-	}
-	onDone := func(sh *core.Shared, ev core.TaskEvent) core.Action {
-		if ev.Err != nil {
-			return core.Seq(
-				core.SetStatusAndLog(fmt.Sprintf("[%s] error: %v", selected.Name, ev.Err)),
-				core.SetStatusAndLog("install failed", true),
-				core.ResetToRoot(),
-			)
-		}
-		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
-		res, _ := ev.Payload.(installResult)
+	return newInstallTaskScreen(selected, target, func(sh *core.Shared, res installResult) string {
 		// Pin the installed plugin.cfg version + the store release identity (tag) +
 		// resolved path; leave url empty so the canonical store url is untouched.
 		_ = addon.UpdateEntry(appctx.Of(sh).ManifestPath, selected.Name, "", res.Path, res.Version, version)
-		if res.Path != "" && res.Path != selected.Path {
-			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: res.Version}
-			return core.Replace(postinstall.New(sh, []postinstall.Target{t}))
-		}
-		return core.Seq(
-			core.SetStatus("installed "+selected.Name),
-			core.PropagateAll(appctx.ProjectDirty{}),
-			core.ShowTab(appctx.TitleProject),
-		)
-	}
-	return components.NewTask("installing "+selected.Name+"…", run, onDone)
+		return "installed " + selected.Name
+	})
 }

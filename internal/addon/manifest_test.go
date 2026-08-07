@@ -90,6 +90,42 @@ func TestEditEntrySetAndClear(t *testing.T) {
 	}
 }
 
+// TestEmptyValueSemantics pins the one behavioral difference between UpdateEntry and
+// EditEntry: an empty value for a present field. UpdateEntry leaves the existing line
+// untouched (pin-only-what-changed); EditEntry removes it (blank means clear).
+func TestEmptyValueSemantics(t *testing.T) {
+	write := func() string {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "addon_manifest.yml")
+		if err := os.WriteFile(path, []byte(sampleManifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	updated := write()
+	if err := UpdateEntry(updated, "Terrain3D", "", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(updated)
+	if !strings.Contains(string(got), `version: "1.0.1"`) {
+		t.Errorf("UpdateEntry with empty values should leave fields untouched; got:\n%s", got)
+	}
+
+	edited := write()
+	if err := EditEntry(edited, "Terrain3D", "", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = os.ReadFile(edited)
+	if strings.Contains(string(got), `version: "1.0.1"`) {
+		t.Errorf("EditEntry with empty values should remove field lines; got:\n%s", got)
+	}
+	// The untouched entry must survive verbatim in both cases.
+	if !strings.Contains(string(got), `version: "0.1.0"`) {
+		t.Errorf("other entry mutated; got:\n%s", got)
+	}
+}
+
 func TestSetKind(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "addon_manifest.yml")

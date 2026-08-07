@@ -9,9 +9,10 @@ import (
 	"gdaddon/internal/source"
 )
 
-// depsResolveTimeout caps each round's batch of release-listing fetches so a slow or
-// unreachable host can't hang the recursive install.
-const depsResolveTimeout = 30 * time.Second
+// DepsResolveTimeout caps a batch of release-listing fetches so a slow or unreachable
+// host can't hang dependency resolution. The recursive install's rounds and the TUI's
+// resolve commands share it so both cap the same way.
+const DepsResolveTimeout = 30 * time.Second
 
 // maxDepRounds bounds the install→import→install loop so an unresolvable or cyclic
 // dependency graph can't spin forever. In practice a handful of rounds covers any
@@ -80,35 +81,53 @@ func importDeps(parent context.Context, manifestPath, baseDir string, report Rep
 		return 0
 	}
 
-	ctx, cancel := context.WithTimeout(parent, depsResolveTimeout)
+	ctx, cancel := context.WithTimeout(parent, DepsResolveTimeout)
 	defer cancel()
 
 	added := 0
 	for _, d := range missing {
-		name := DeriveName(d.RepoURL)
-		if d.Tag == "" {
-			if err := AddEntry(manifestPath, name, NormalizeRepoURL(d.RepoURL), ""); err != nil {
-				report("  -> Could not add %s: %v", d.RepoID, err)
-				continue
-			}
-			report("  -> Added %s (no version)", name)
-			added++
+		name, ok, err := AddDepEntry(ctx, manifestPath, d, false)
+		if err != nil {
+			report("  -> Could not add %s: %v", d.RepoID, err)
 			continue
 		}
-
-		asset, ok := ResolveDepAsset(ctx, d)
 		if !ok {
 			report("  -> Skipping %s: no asset for %s", d.RepoID, d.Tag)
 			continue
 		}
-		if err := AddEntryFull(manifestPath, Addon{Name: name, URL: asset.URL, Tag: d.Tag}); err != nil {
-			report("  -> Could not add %s: %v", d.RepoID, err)
-			continue
+		if d.Tag == "" {
+			report("  -> Added %s (no version)", name)
+		} else {
+			report("  -> Added %s %s", name, d.Tag)
 		}
-		report("  -> Added %s %s", name, d.Tag)
 		added++
 	}
 	return added
+}
+
+// AddDepEntry resolves one declared dependency and appends it to the manifest: a
+// tagless dep is added repo-only (Install clones it; the user can pin a tag later),
+// a tagged dep is added at its resolved release asset (archive-first, then network —
+// see ResolveDepAsset). asDependency records the is_dependency provenance on the new
+// entry. added is false (with err nil) when a tagged dep's asset can't be resolved;
+// the caller decides how to report the skip. The ctx only bounds the asset lookup —
+// the caller owns the timeout.
+func AddDepEntry(ctx context.Context, manifestPath string, d Dependency, asDependency bool) (name string, added bool, err error) {
+	name = DeriveName(d.RepoURL)
+	entry := Addon{Name: name, URL: NormalizeRepoURL(d.RepoURL), Dependency: asDependency}
+	if d.Tag != "" {
+		asset, ok := ResolveDepAsset(ctx, d)
+		if !ok {
+			return name, false, nil
+		}
+		entry.URL, entry.Tag = asset.URL, d.Tag
+	}
+	// AddEntryFull with an empty tag behaves like a bare AddEntry; unlike AddEntry it
+	// also records the is_dependency provenance when asDependency is set.
+	if err := AddEntryFull(manifestPath, entry); err != nil {
+		return name, false, err
+	}
+	return name, true, nil
 }
 
 // ResolveDepAsset finds the dependency's required release and picks its install asset

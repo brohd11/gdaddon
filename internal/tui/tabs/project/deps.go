@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/tui/appctx"
@@ -16,10 +15,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 )
-
-// depsResolveTimeout caps the batch of release-listing fetches so a slow host
-// can't leave the Get-dependencies action pending forever.
-const depsResolveTimeout = 30 * time.Second
 
 // plannedDep is one dependency the plan will add to the manifest: a resolved
 // install url + tag (tag empty for a tagless repo-only add). Resolving (the network
@@ -246,23 +241,17 @@ func newAddOneDepLoading(st addon.Status, d addon.Dependency, sh *core.Shared) *
 func resolveOneDepCmd(manifestPath string, d addon.Dependency) func(context.Context) tea.Cmd {
 	return func(parent context.Context) tea.Cmd {
 		return func() tea.Msg {
-			name := addon.DeriveName(d.RepoURL)
-			if d.Tag == "" {
-				// AddEntryFull with an empty tag behaves like a bare AddEntry, but also
-				// records the is_dependency provenance the plain AddEntry can't.
-				if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: name, URL: addon.NormalizeRepoURL(d.RepoURL), Dependency: true}); err != nil {
-					return addResult{err: err}
-				}
-				return addResult{status: fmt.Sprintf("added %s (no version)", name)}
-			}
-			ctx, cancel := context.WithTimeout(parent, depsResolveTimeout)
+			ctx, cancel := context.WithTimeout(parent, addon.DepsResolveTimeout)
 			defer cancel()
-			asset, ok := addon.ResolveDepAsset(ctx, d)
-			if !ok {
+			name, added, err := addon.AddDepEntry(ctx, manifestPath, d, true)
+			if err != nil {
+				return addResult{err: err}
+			}
+			if !added {
 				return addResult{err: fmt.Errorf("no asset for %s %s", d.RepoID, d.Tag)}
 			}
-			if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: name, URL: asset.URL, Tag: d.Tag, Dependency: true}); err != nil {
-				return addResult{err: err}
+			if d.Tag == "" {
+				return addResult{status: fmt.Sprintf("added %s (no version)", name)}
 			}
 			return addResult{status: fmt.Sprintf("added %s %s", name, d.Tag)}
 		}
@@ -308,7 +297,7 @@ func resolveDepsCmd(manifestPath, addonDir, name string) func(context.Context) t
 			byRepo := addon.IndexByRepo(entries)
 			suppressed := suppressSet(entries, name)
 
-			ctx, cancel := context.WithTimeout(parent, depsResolveTimeout)
+			ctx, cancel := context.WithTimeout(parent, addon.DepsResolveTimeout)
 			defer cancel()
 
 			var plan depPlan

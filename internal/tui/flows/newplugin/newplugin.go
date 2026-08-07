@@ -8,11 +8,7 @@
 package newplugin
 
 import (
-	"fmt"
-	"strings"
-
 	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -37,44 +33,25 @@ func NewNewPluginForm() *components.FormScreen { return NewWithURL("") }
 // empty url behaves like NewNewPluginForm. The Search tab uses this to hand off a
 // chosen asset's repo URL.
 func NewWithURL(url string) *components.FormScreen {
-	urlF := components.NewTextField("url", "URL:     ", "https://github.com/owner/repo")
-	nameF := components.NewTextField("name", "Name:    ", "(optional — derived from url)")
-	pathF := components.NewTextField("path", "Path:    ", "(optional — derived on install)")
 	target := components.NewToggleField("target", "Add to:  ", targetOptions, "|")
 
 	focus := "url"
 	if url != "" {
-		urlF.SetValue(url)
 		focus = "name"
 	}
 
-	return components.NewForm(components.FormOpts{
-		Crumb: "New Plugin",
-		Fields: []components.FormField{
-			components.NewHeading("Add plugin"),
-			components.NewSpacer(),
-			urlF, nameF, pathF,
-			components.NewSpacer(),
-			target,
-		},
-		Focus: focus,
-		Help: []key.Binding{
-			core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
-			core.Hint("target", core.Keys.Left, core.Keys.Right),
-			core.Hint("next", core.Keys.Select),
-			core.Hint("cancel", core.Keys.Back),
-		},
-		OnSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
-			url := strings.TrimSpace(f.Value("url"))
-			if url == "" {
-				return core.Async(f.Focus("url"))
-			}
-			name := strings.TrimSpace(f.Value("name"))
-			if name == "" {
-				name = addon.DeriveName(url)
-			}
-			path := strings.TrimSpace(f.Value("path"))
-			return core.Push(newNewPluginConfirm(name, addon.NormalizeRepoURL(url), path, target.Index()))
+	return newAddonForm(formSpec{
+		crumb:          "New Plugin",
+		heading:        "Add plugin",
+		urlPlaceholder: "https://github.com/owner/repo",
+		focus:          focus,
+		toggleLabel:    "target",
+		values:         map[string]string{"url": url},
+		tail:           []components.FormField{target},
+		onSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
+			return submitAddonForm(f, addon.NormalizeRepoURL, func(name, url, path string) core.Action {
+				return core.Push(newNewPluginConfirm(name, url, path, target.Index()))
+			})
 		},
 	})
 }
@@ -88,62 +65,19 @@ var newPluginConfirmHelp = []key.Binding{
 }
 
 func newNewPluginConfirm(name, url, path string, addTarget int) *components.DialogScreen {
-	target := addTarget // local copy the toggle mutates
-	return &components.DialogScreen{
-		Render: func(sh *core.Shared) string { return sh.Box(newPluginConfirmBody(sh, name, url, path, target)) },
-		OnKey: func(sh *core.Shared, k string) core.Action {
-			if core.MatchKey(k, core.Keys.Left) || core.MatchKey(k, core.Keys.Right) {
-				target = otherTarget(target)
-			}
-			return core.Action{}
+	return newTargetConfirm(addTarget,
+		func(sh *core.Shared, target int) string {
+			return confirmBody(sh, "Add plugin", name, "", url, path, addToLine(target))
 		},
-		OnYes: func(sh *core.Shared) core.Action { return commitNewPlugin(sh, name, url, path, target) },
-		Help:  newPluginConfirmHelp,
-	}
-}
-
-func newPluginConfirmBody(sh *core.Shared, name, url, path string, addTarget int) string {
-	urlBlock := core.IndentLines(core.HardWrap(url, sh.ConfirmWidth()-4), "    ")
-	if path == "" {
-		path = "(derived on install)"
-	}
-	return fmt.Sprintf(
-		"Add plugin\n\n  name:     %s\n  url:\n%s\n  path:     %s\n\n  add to:   %s",
-		name, urlBlock, path, components.RenderToggle(targetOptions, addTarget, ""))
+		func(sh *core.Shared, target int) core.Action { return commitNewPlugin(sh, name, url, path, target) })
 }
 
 // commitNewPlugin writes the pending entry to the project manifest or the global
 // list, then unwinds to the root (rebuilding the Browse list for a project add).
 func commitNewPlugin(sh *core.Shared, name, url, path string, addTarget int) core.Action {
-	if addTarget == targetGlobal {
-		globalPath, err := addon.GlobalListPath()
-		if err == nil {
-			err = addon.AddEntry(globalPath, name, url, path)
-		}
-		if err != nil {
-			return core.SeqErr(err, core.ResetToRoot())
-		}
-		// Show the Global tab rebuilt with the new entry (parallel to a project add
-		// switching to Browse).
-		return core.Seq(
-			core.SetStatus(fmt.Sprintf("added %s to global list", name)),
-			core.PropagateAll(appctx.GlobalDirty{}),
-			core.ShowTab(appctx.TitleGlobal),
-		)
-	}
-
-	if err := addon.AddEntry(appctx.Of(sh).ManifestPath, name, url, path); err != nil {
-		return core.Seq(
-			core.SetStatus("error: "+err.Error()),
-			core.ResetToRoot(),
-		)
-	}
-	return core.Seq(
-		core.ResetToRoot(),
-		core.SetStatus("added "+name),
-		core.PropagateAll(appctx.ProjectDirty{}),
-		core.ShowTab(appctx.TitleProject),
-	)
+	return commitAdd(sh, name, url, path, addTarget, func(manifestPath string) error {
+		return addon.AddEntry(manifestPath, name, url, path)
+	})
 }
 
 // otherTarget toggles between the Project and Global add targets.

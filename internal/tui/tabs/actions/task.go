@@ -21,7 +21,13 @@ func newInstallAllTask() *components.TaskScreen {
 		if err != nil {
 			report("error: %v", err)
 		} else {
-			outcomes, _ = addon.InstallAll(ctx, c.ManifestPath, statuses, c.ProjectRoot, report)
+			// InstallAll's error is currently always nil (per-addon failures are
+			// reported inline); check it anyway so a future real error can't
+			// silently pass as "install complete".
+			outcomes, err = addon.InstallAll(ctx, c.ManifestPath, statuses, c.ProjectRoot, report)
+			if err != nil {
+				report("error: %v", err)
+			}
 		}
 		done <- core.TaskEvent{Done: true, Payload: outcomes}
 	}

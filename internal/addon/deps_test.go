@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -235,5 +236,50 @@ func TestSatisfiedByTag(t *testing.T) {
 	}
 	if sat, verified := d.SatisfiedByTag(""); sat || verified {
 		t.Errorf("a tag-less (HEAD) install should be unverified, not satisfied")
+	}
+}
+
+// TestAddDepEntry covers the shared resolve+add used by both the recursive install and
+// the TUI's per-dep add: a tagless dep lands repo-only, and the is_dependency flag
+// follows asDependency. The tagged resolution path needs a network/archive hit and is
+// covered indirectly through ResolveDepAsset.
+func TestAddDepEntry(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+	dep := Dependency{RepoID: "github.com/u/widget", RepoURL: "https://github.com/u/Widget"}
+
+	name, added, err := AddDepEntry(context.Background(), path, dep, true)
+	if err != nil || !added || name != "Widget" {
+		t.Fatalf("AddDepEntry = (%q, %v, %v), want (Widget, true, nil)", name, added, err)
+	}
+	addons, err := Parse(path)
+	if err != nil || len(addons) != 1 {
+		t.Fatalf("Parse = %v, %v; want one entry", addons, err)
+	}
+	got := addons[0]
+	if got.Name != "Widget" || got.URL != "https://github.com/u/Widget.git" || got.Tag != "" || !got.Dependency {
+		t.Errorf("tagless dep should land repo-only with is_dependency set; got %+v", got)
+	}
+
+	// A user-chosen add records no provenance.
+	if _, _, err := AddDepEntry(context.Background(), path, Dependency{RepoID: "github.com/u/plain", RepoURL: "https://github.com/u/Plain"}, false); err != nil {
+		t.Fatal(err)
+	}
+	addons, _ = Parse(path)
+	plain := IndexByRepo(addons)["github.com/u/plain"]
+	if len(addons) != 2 || plain.Dependency {
+		t.Errorf("asDependency=false should leave is_dependency unset; got %+v", addons)
+	}
+
+	// A tagged dep whose asset can't be resolved (dead ctx fails the lookup fast)
+	// reports a skip and writes nothing.
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	tagged := Dependency{RepoID: "github.com/u/nope", RepoURL: "https://github.com/u/Nope", Tag: "v9.9.9"}
+	if _, added, err := AddDepEntry(dead, path, tagged, true); err != nil || added {
+		t.Errorf("unresolvable tagged dep = (added=%v, err=%v), want (false, nil)", added, err)
+	}
+	if addons, _ = Parse(path); len(addons) != 2 {
+		t.Errorf("a skipped dep should write nothing; got %+v", addons)
 	}
 }

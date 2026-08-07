@@ -1,9 +1,6 @@
 package newplugin
 
 import (
-	"fmt"
-	"strings"
-
 	"gdaddon/internal/addon"
 	"gdaddon/internal/store"
 	"gdaddon/internal/tui/appctx"
@@ -29,51 +26,40 @@ var trackConfirmHelp = []key.Binding{
 // path/version on a matching pathless entry (the cogito case) or adding a new one —
 // so a bundled/sideloaded plugin (or submodule) starts being tracked.
 func NewFromInstall(path, name, version, suggestedURL string, kind addon.Kind, branch string) *components.FormScreen {
-	urlF := components.NewTextField("url", "URL:     ", "https://github.com/owner/repo")
-	nameF := components.NewTextField("name", "Name:    ", "(optional — derived from url)")
-	pathF := components.NewTextField("path", "Path:    ", "(optional — derived on install)")
 	kindF := components.NewToggleField("kind", "Kind:    ", addon.KindOptions, "|")
-
-	urlF.SetValue(suggestedURL)
-	nameF.SetValue(name)
-	pathF.SetValue(path)
 	kindF.SetIndex(addon.KindIndex(kind))
 
-	return components.NewForm(components.FormOpts{
-		Crumb: "Track Plugin",
-		Fields: []components.FormField{
-			components.NewHeading("Track installed plugin"),
-			components.NewSpacer(),
-			urlF, nameF, pathF,
-			components.NewSpacer(),
+	return newAddonForm(formSpec{
+		crumb:          "Track Plugin",
+		heading:        "Track installed plugin",
+		urlPlaceholder: "https://github.com/owner/repo",
+		focus:          "url",
+		toggleLabel:    "kind",
+		values:         map[string]string{"url": suggestedURL, "name": name, "path": path},
+		tail: []components.FormField{
 			kindF,
 			components.NewNote("  installed " + versionLabel(version)),
 		},
-		Focus: "url",
-		Help: []key.Binding{
-			core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
-			core.Hint("kind", core.Keys.Left, core.Keys.Right),
-			core.Hint("next", core.Keys.Select),
-			core.Hint("cancel", core.Keys.Back),
-		},
-		OnSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
-			url := strings.TrimSpace(f.Value("url"))
-			if url == "" {
-				return core.Async(f.Focus("url"))
-			}
-			if !store.IsStoreURL(url) {
-				url = addon.NormalizeRepoURL(url)
-			}
-			name := strings.TrimSpace(f.Value("name"))
-			if name == "" {
-				name = addon.DeriveName(url)
-			}
-			path := strings.TrimSpace(f.Value("path"))
-			return core.Push(newTrackConfirm(name, url, path, version, addon.ParseKind(kindF.Value()), branch))
+		onSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
+			return submitAddonForm(f, normalizeTrackURL, func(name, url, path string) core.Action {
+				return core.Push(newTrackConfirm(name, url, path, version, addon.ParseKind(kindF.Value()), branch))
+			})
 		},
 	})
 }
 
+// normalizeTrackURL normalizes a git url but leaves a store url as typed — store urls
+// are canonical and must never gain a .git suffix.
+func normalizeTrackURL(url string) string {
+	if store.IsStoreURL(url) {
+		return url
+	}
+	return addon.NormalizeRepoURL(url)
+}
+
+// newTrackConfirm is the track flow's own confirm: unlike the plugin/store confirms
+// there is no Project/Global toggle (tracking always targets the project manifest),
+// so it only renders the body and commits on yes.
 func newTrackConfirm(name, url, path, version string, kind addon.Kind, branch string) *components.DialogScreen {
 	return &components.DialogScreen{
 		Render: func(sh *core.Shared) string {
@@ -85,21 +71,14 @@ func newTrackConfirm(name, url, path, version string, kind addon.Kind, branch st
 }
 
 func trackConfirmBody(sh *core.Shared, name, url, path, version string, kind addon.Kind, branch string) string {
-	urlBlock := core.IndentLines(core.HardWrap(url, sh.ConfirmWidth()-4), "    ")
-	if path == "" {
-		path = "(derived on install)"
-	}
-	body := fmt.Sprintf(
-		"Track plugin\n\n  name:     %s\n  version:  %s\n  url:\n%s\n  path:     %s",
-		name, versionLabel(version), urlBlock, path)
+	extra := ""
 	if kind != addon.KindPackage {
-		kindLine := "\n  kind:     " + string(kind)
+		extra = "\n  kind:     " + string(kind)
 		if branch != "" {
-			kindLine += " (branch " + branch + ")"
+			extra += " (branch " + branch + ")"
 		}
-		body += kindLine
 	}
-	return body
+	return confirmBody(sh, "Track plugin", name, versionLabel(version), url, path, extra)
 }
 
 // commitTrack upserts the installed plugin into the project manifest: UpsertEntry

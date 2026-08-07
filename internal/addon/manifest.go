@@ -15,69 +15,7 @@ import (
 // It assumes the flat manifest shape: top-level entry keys at column 0 with
 // indented url/path/version/tag fields beneath them.
 func UpdateEntry(manifestPath, name, url, path, version, tag string) error {
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return err
-	}
-
-	lines := strings.Split(string(data), "\n")
-
-	keyIdx, end, ok := findEntryBlock(lines, name)
-	if !ok {
-		return fmt.Errorf("addon %q not found in %s", name, manifestPath)
-	}
-
-	indent := "    "
-	urlDone, pathDone, versionDone, tagDone := false, false, false, false
-	for i := keyIdx + 1; i < end; i++ {
-		ind, key, ok := splitField(lines[i])
-		if !ok {
-			continue
-		}
-		indent = ind
-		switch key {
-		case "url":
-			if url != "" {
-				lines[i] = ind + "url: " + url
-			}
-			urlDone = true
-		case "path":
-			if path != "" {
-				lines[i] = ind + "path: " + path
-			}
-			pathDone = true
-		case "version":
-			if version != "" {
-				lines[i] = ind + `version: "` + version + `"`
-			}
-			versionDone = true
-		case "tag":
-			if tag != "" {
-				lines[i] = ind + `tag: "` + tag + `"`
-			}
-			tagDone = true
-		}
-	}
-
-	var inserts []string
-	if !urlDone && url != "" {
-		inserts = append(inserts, indent+"url: "+url)
-	}
-	if !pathDone && path != "" {
-		inserts = append(inserts, indent+"path: "+path)
-	}
-	if !versionDone && version != "" {
-		inserts = append(inserts, indent+`version: "`+version+`"`)
-	}
-	if !tagDone && tag != "" {
-		inserts = append(inserts, indent+`tag: "`+tag+`"`)
-	}
-	if len(inserts) > 0 {
-		tail := append(inserts, lines[keyIdx+1:]...)
-		lines = append(lines[:keyIdx+1], tail...)
-	}
-
-	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
+	return writeEntryFields(manifestPath, name, url, path, version, tag, false)
 }
 
 // EditEntry rewrites a single manifest entry's url, path, version, and tag in place
@@ -89,6 +27,17 @@ func UpdateEntry(manifestPath, name, url, path, version, tag string) error {
 // comments, the kind line, indentation — is left byte-for-byte intact. kind is an
 // enum and stays out of here; use SetKind for it.
 func EditEntry(manifestPath, name, url, path, version, tag string) error {
+	return writeEntryFields(manifestPath, name, url, path, version, tag, true)
+}
+
+// writeEntryFields is the shared body behind UpdateEntry and EditEntry: it rewrites a
+// single manifest entry's url, path, version, and tag in place — updating present
+// field lines, inserting absent ones (non-empty values only) after the key line, and
+// leaving every other line byte-for-byte intact. The two callers differ only in what
+// an empty value does to an existing field line: removeEmpty == false leaves the line
+// untouched (UpdateEntry's pin-only-what-changed rule), removeEmpty == true removes it
+// (EditEntry's blank-means-clear rule).
+func writeEntryFields(manifestPath, name, url, path, version, tag string, removeEmpty bool) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return err
@@ -116,7 +65,7 @@ func EditEntry(manifestPath, name, url, path, version, tag string) error {
 
 	indent := "    "
 	urlDone, pathDone, versionDone, tagDone := false, false, false, false
-	var drop []int // indices of field lines to remove (cleared values), descending-safe via later sort
+	var drop []int // indices of field lines to remove (empty values, removeEmpty only)
 	for i := keyIdx + 1; i < end; i++ {
 		ind, key, ok := splitField(lines[i])
 		if !ok {
@@ -140,10 +89,12 @@ func EditEntry(manifestPath, name, url, path, version, tag string) error {
 		if !seen {
 			continue
 		}
-		if val == "" {
+		switch {
+		case val == "" && removeEmpty:
 			drop = append(drop, i)
-		} else {
+		case val != "":
 			lines[i] = render(ind, key, val)
+		// An empty value with removeEmpty == false leaves the existing line untouched.
 		}
 	}
 

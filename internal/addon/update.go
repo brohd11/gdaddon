@@ -70,33 +70,47 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	if a.IsLocked() {
 		return UpdateInfo{State: UpdateLocked}
 	}
+	latest, state := walkUpdate(ctx, a)
+	if state == UpdateUnknown {
+		return UpdateInfo{}
+	}
+	return UpdateInfo{State: state, LatestTag: latest.Tag}
+}
+
+// walkUpdate is the shared release-listing walk behind CheckUpdate and ResolveUpdate:
+// fetch the addon's releases and classify the pinned url against the latest one,
+// handing back that release for the caller's tag/asset use. UpdateUnknown covers
+// every can't-tell case — fetch error, no releases, a branch-tracked url (HEAD has no
+// release tag to compare against), uncomparable versions — so neither caller flags a
+// false update.
+func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 	listing, err := source.AvailableVersions(ctx, a.URL)
 	if err != nil || listing == nil {
-		return UpdateInfo{}
+		return source.Release{}, UpdateUnknown
 	}
 	// A branch-tracked install follows HEAD, which can't be matched against a
 	// release tag — leave it unknown rather than always flagging an update.
 	if listing.Branch != nil {
 		for _, asset := range listing.Branch.Assets {
 			if asset.URL == a.URL {
-				return UpdateInfo{}
+				return source.Release{}, UpdateUnknown
 			}
 		}
 	}
 
 	latest, ok := LatestRelease(listing.Releases)
 	if !ok {
-		return UpdateInfo{}
+		return source.Release{}, UpdateUnknown
 	}
 	// On the latest release: its url is one of that release's assets.
 	for _, asset := range latest.Assets {
 		if asset.URL == a.URL {
-			return UpdateInfo{State: UpdateCurrent, LatestTag: latest.Tag}
+			return latest, UpdateCurrent
 		}
 	}
 	// A precisely pinned asset from an older release: definitely outdated.
 	if urlInReleases(a.URL, listing.Releases) {
-		return UpdateInfo{State: UpdateAvailable, LatestTag: latest.Tag}
+		return latest, UpdateAvailable
 	}
 	// Otherwise the url is a bare repo/clone url (e.g. a scanned install tracked
 	// from a `source=` key) that matches no asset — fall back to comparing the
@@ -104,11 +118,11 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	// stay unknown so no false update is flagged.
 	if current, ok := currentByVersion(a, latest.Tag); ok {
 		if current {
-			return UpdateInfo{State: UpdateCurrent, LatestTag: latest.Tag}
+			return latest, UpdateCurrent
 		}
-		return UpdateInfo{State: UpdateAvailable, LatestTag: latest.Tag}
+		return latest, UpdateAvailable
 	}
-	return UpdateInfo{}
+	return source.Release{}, UpdateUnknown
 }
 
 // urlInReleases reports whether url is one of the assets across any of the releases.
@@ -173,35 +187,9 @@ func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePla
 	if a.IsLocked() {
 		return UpdatePlan{}, ResolveNone
 	}
-	listing, err := source.AvailableVersions(ctx, a.URL)
-	if err != nil || listing == nil {
+	latest, state := walkUpdate(ctx, a)
+	if state != UpdateAvailable {
 		return UpdatePlan{}, ResolveNone
-	}
-	if listing.Branch != nil {
-		for _, asset := range listing.Branch.Assets {
-			if asset.URL == a.URL {
-				return UpdatePlan{}, ResolveNone
-			}
-		}
-	}
-	latest, ok := LatestRelease(listing.Releases)
-	if !ok {
-		return UpdatePlan{}, ResolveNone
-	}
-	// Already on the latest release: its url is one of that release's assets.
-	for _, asset := range latest.Assets {
-		if asset.URL == a.URL {
-			return UpdatePlan{}, ResolveNone
-		}
-	}
-	// A bare repo/clone url (a scanned install) matches no asset, so fall back to a
-	// version/tag comparison: don't plan an update when it's already current or the
-	// version can't be compared — only when it's verifiably older.
-	if !urlInReleases(a.URL, listing.Releases) {
-		current, ok := currentByVersion(a, latest.Tag)
-		if !ok || current {
-			return UpdatePlan{}, ResolveNone
-		}
 	}
 	asset, ok := source.AutoAsset(latest)
 	if !ok {

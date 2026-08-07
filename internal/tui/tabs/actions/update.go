@@ -21,9 +21,12 @@ const updateResolveTimeout = 60 * time.Second
 
 // updatePlansMsg carries the resolved update plans (and the addons skipped as
 // ambiguous) from the background fetch to the loading screen's result handler.
+// A failed resolution (e.g. an unreadable manifest) rides along as err — dropping
+// it would misreport the failure as "all installed addons are up to date".
 type updatePlansMsg struct {
 	plans   []addon.UpdatePlan
 	skipped []addon.SkippedUpdate
+	err     error
 }
 
 // newUpdateAllLoading captures the manifest paths, then fetches every installed
@@ -39,6 +42,9 @@ func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 		m, ok := msg.(updatePlansMsg)
 		if !ok {
 			return core.Action{}
+		}
+		if m.err != nil {
+			return core.Seq(core.SetStatusAndLog("update check failed: "+m.err.Error()), core.Pop())
 		}
 		for _, s := range m.skipped {
 			sh.Log(fmt.Sprintf("[%s] update skipped: multiple packages (%s) — update manually", s.Name, s.Tag))
@@ -68,10 +74,7 @@ func resolveUpdatePlansCmd(manifestPath, projectRoot string) func(context.Contex
 			ctx, cancel := context.WithTimeout(parent, updateResolveTimeout)
 			defer cancel()
 			plans, skipped, err := addon.ResolveUpdatePlans(ctx, manifestPath, projectRoot)
-			if err != nil {
-				return updatePlansMsg{}
-			}
-			return updatePlansMsg{plans: plans, skipped: skipped}
+			return updatePlansMsg{plans: plans, skipped: skipped, err: err}
 		}
 	}
 }
