@@ -188,7 +188,7 @@ cmd/
   repos.go           — the `repos` subcommand: run a shell command in every nested git repo (uses addon.FindGitRepos / addon.HasUncommittedChanges)
   paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
 internal/
-  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, gitCheckedOutBranch, normalizeGitRemote) that classify a plugin folder's `.git`
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/CurrentBranch/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, isGitCheckout, normalizeGitRemote) that classify a plugin folder's `.git`
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
   archive/           — local package archive (~/.gdaddon/archive or config/config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, theme, last search source — Load) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
@@ -275,7 +275,7 @@ dismisses. Non-interactive runs (`--install`/`--list`/`--update-packages`) retur
 so their output is untouched.
 
 Key packages/functions:
-- `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing. For git checkouts (clone/submodule) it reads the live checked-out branch (`gitCheckedOutBranch`, exposed on `Status.LiveBranch`) and reports `StateBranchChanged` when it differs from the recorded `tag` — branch drift, reconciled by re-recording the tag via the per-addon **Update branch record** action. A present git checkout is never touched by `Install All` (it skips clones/submodules whether unversioned or drifted).
+- `addon.Inspect(manifest, root)` — parses the manifest and computes each entry's local state (missing/installed/mismatch/…). url-only entries (no path yet) read as missing. For git checkouts (clone/submodule) it reads the live checked-out branch (`CurrentBranch`, gitstack's `repo.CurrentBranch` re-exported, exposed on `Status.LiveBranch`) and reports `StateBranchChanged` when it differs from the recorded `tag` — branch drift, reconciled by re-recording the tag via the per-addon **Update branch record** action. A present git checkout is never touched by `Install All` (it skips clones/submodules whether unversioned or drifted).
 - `addon.Install` / `addon.InstallAll` — fetch (`.zip` download / `.git` clone / **local `.zip` path** for archived packages), derive the install dir from the package's `plugin.cfg`/`version.cfg` (`internal/addon/cfg.go`), and report progress via a callback. `Install` returns the resolved path+version. Both take a leading `ctx context.Context` (as do `UpdateAll`/`InstallAllDeps`) — cancelling it aborts the in-flight download/clone (HTTP request + `git clone` are context-bound), which is how the TUI's task-abort works.
 - `addon.GitSyncStatus` / `addon.GitFetch` / `addon.FetchAll` (engine in `gitstack/repo`,
   re-exported as `addon.*`; `FetchAll` is gdaddon's `[]Status` adapter over `repo.FetchAll`) — a git checkout's
@@ -381,8 +381,11 @@ parse, like `--list --json`); `--interactive` opens the same dest picker as `ins
 check also runs automatically on TUI startup (wired as `bubblestack.Config.Init` →
 `appctx.SelfUpdateCheckCmd`, a generic app-level startup hook in `bubblestack/core`'s Router)
 and writes an "update available" line to the status/log; Actions ▸ Update gdaddon runs the
-loading → confirm → task flow in-TUI (`internal/tui/tabs/actions/selfupdate.go`). A
-self-update doesn't change the already-running process — relaunch to use the new binary.
+loading → confirm → task flow in-TUI. Both ends share the flow in
+`bubblestack/components/selfupdate.go` — `internal/tui/tabs/actions/selfupdate.go` and
+`appctx.SelfUpdateHooks` are just the gdaddon wiring (app name, version, the
+internal/selfupdate mechanism). A self-update doesn't change the already-running process
+— relaunch to use the new binary.
 
 `make package` zips each platform build into `dist/` (`zip -j`, binary only). Caveat:
 macOS Gatekeeper warns on the unsigned binary first run (right-click → Open, or clear

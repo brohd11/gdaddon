@@ -35,6 +35,7 @@ var (
 	GitSyncStatus         = repo.GitSyncStatus
 	GitChanges            = repo.GitChanges
 	HasUncommittedChanges = repo.HasUncommittedChanges
+	CurrentBranch         = repo.CurrentBranch
 	FindGitRepos          = repo.FindGitRepos
 	FetchLine             = repo.FetchLine
 	FetchSummary          = repo.FetchSummary

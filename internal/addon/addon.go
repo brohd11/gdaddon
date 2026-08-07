@@ -234,7 +234,7 @@ func statusFor(a Addon, baseDir string) Status {
 	// (StateBranchChanged); otherwise it stays unversioned (which InstallAll skips). A
 	// detached HEAD or unreadable repo yields "" and reads as unversioned, no false drift.
 	if a.IsGitWorkdir() {
-		s.LiveBranch = gitCheckedOutBranch(fullPath)
+		s.LiveBranch = CurrentBranch(fullPath)
 		if s.LiveBranch != "" && s.LiveBranch != a.Tag {
 			s.State = StateBranchChanged
 		} else {

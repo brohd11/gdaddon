@@ -8,15 +8,14 @@ package appctx
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/archive"
 	"gdaddon/internal/selfupdate"
 
+	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repo"
 	"github.com/brohd11/gitstack/repoui"
@@ -242,30 +241,36 @@ func LockToggle(path, name string, cur bool) (newLock bool, verb string, err err
 	return newLock, verb, nil
 }
 
-// selfUpdateCheckTimeout caps the startup self-update check's network fetch so a slow
-// or unreachable host can't leave it pending.
-const selfUpdateCheckTimeout = 30 * time.Second
+// SelfUpdateHooks builds the shared self-update flow's (bubblestack/components) hook
+// set for gdaddon: the app name, the running version, and the check/install mechanism
+// in internal/selfupdate (which wraps goutil's self-update library). The conversion
+// between goutil's selfupdate.Info and the flow's app-agnostic SelfUpdateInfo is a
+// direct one — the structs are field-identical by design. Built here so the startup
+// check below and the Actions ▸ Update gdaddon screen wire the same operations.
+func SelfUpdateHooks(version string) components.SelfUpdateHooks {
+	return components.SelfUpdateHooks{
+		AppName: "gdaddon",
+		Check: func(ctx context.Context) (components.SelfUpdateInfo, error) {
+			info, err := selfupdate.Check(ctx, version)
+			return components.SelfUpdateInfo(info), err
+		},
+		Apply: func(ctx context.Context, info components.SelfUpdateInfo, report func(string, ...any)) error {
+			// The installed path goes unread: the flow's done handler reports the
+			// tag and relaunch hint, never the location.
+			_, err := selfupdate.Apply(ctx, selfupdate.Info(info), selfupdate.DefaultDest(), report)
+			return err
+		},
+	}
+}
 
 // SelfUpdateCheckCmd is the app-level startup command (wired onto bubblestack
 // Config.Init): it checks gdaddon's own repo for a newer release off the UI thread
 // and, only when an update is available, writes an "update available" line to the
 // shared status line and log. Anything else (up to date, dev build, fetch error) is
-// silent. The returned Action rides back on the cmd's tea.Msg and is applied by the
-// router, the same pattern as the project tab's update check.
+// silent. The flow and timeout are the shared ones in bubblestack/components; only
+// the hooks are gdaddon's.
 func SelfUpdateCheckCmd(sh *core.Shared) tea.Cmd {
-	version := Of(sh).Version
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), selfUpdateCheckTimeout)
-		defer cancel()
-		info, err := selfupdate.Check(ctx, version)
-		if err != nil || !info.Available {
-			return nil
-		}
-		return core.SetStatusAndLog(
-			fmt.Sprintf("gdaddon update available: %s → %s · Actions ▸ Update gdaddon", info.Current, info.LatestTag),
-			true,
-		)
-	}
+	return components.SelfUpdateCheckCmd(SelfUpdateHooks(Of(sh).Version))
 }
 
 // Receive handles App-level broadcasts (the router notifies App on every PropagateAll).
