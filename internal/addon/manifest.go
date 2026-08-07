@@ -94,7 +94,7 @@ func writeEntryFields(manifestPath, name, url, path, version, tag string, remove
 			drop = append(drop, i)
 		case val != "":
 			lines[i] = render(ind, key, val)
-		// An empty value with removeEmpty == false leaves the existing line untouched.
+			// An empty value with removeEmpty == false leaves the existing line untouched.
 		}
 	}
 

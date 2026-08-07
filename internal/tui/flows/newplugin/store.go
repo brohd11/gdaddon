@@ -43,7 +43,9 @@ func newStoreConfirm(name, url, path, version string, addTarget int) *components
 			}
 			return confirmBody(sh, "Add store asset", name, v, url, path, addToLine(target))
 		},
-		func(sh *core.Shared, target int) core.Action { return commitStoreAsset(sh, name, url, path, version, target) })
+		func(sh *core.Shared, target int) core.Action {
+			return commitStoreAsset(sh, name, url, path, version, target)
+		})
 }
 
 // commitStoreAsset writes the store entry to the project manifest (pinning the store

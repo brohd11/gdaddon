@@ -27,13 +27,13 @@ import (
 // — heading, the three text fields, the spacer layout, and the
 // field/toggle/next/cancel help row — stays in newAddonForm.
 type formSpec struct {
-	crumb          string                          // router breadcrumb
-	heading        string                          // form heading line
-	urlPlaceholder string                          // github repo vs canonical store url
-	focus          string                          // key of the initially focused field
-	toggleLabel    string                          // help label for the Left/Right toggle ("target" or "kind")
-	values         map[string]string               // prefilled field values (empty values are skipped)
-	tail           []components.FormField          // trailing fields: the toggle plus an optional note
+	crumb          string                 // router breadcrumb
+	heading        string                 // form heading line
+	urlPlaceholder string                 // github repo vs canonical store url
+	focus          string                 // key of the initially focused field
+	toggleLabel    string                 // help label for the Left/Right toggle ("target" or "kind")
+	values         map[string]string      // prefilled field values (empty values are skipped)
+	tail           []components.FormField // trailing fields: the toggle plus an optional note
 	onSubmit       func(*core.Shared, *components.FormScreen) core.Action
 }
 
