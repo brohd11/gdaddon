@@ -98,7 +98,7 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 			if root == nil {
 				return s, core.SetStatus("project root is not a git checkout")
 			}
-			return s, core.Push(repoui.RepoMenu(sh, *root))
+			return s, core.Push(repoui.RepoMenu(sh, *root, root.Name))
 		}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)

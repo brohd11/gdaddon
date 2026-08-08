@@ -109,9 +109,11 @@ func addonItem(r rowData) components.Item {
 			case core.MatchKey(k, appctx.AppKeys.OpenDir):
 				return sysopen.Path(s.FullPath, false), true
 			case core.MatchKey(k, appctx.AppKeys.Git) && s.Addon.IsGitWorkdir():
-				return core.Push(repoui.RepoMenu(sh, repoFromStatus(s))), true
+				rp := repoFromStatus(s)
+				return core.Push(repoui.RepoMenu(sh, rp, rp.Name)), true
 			case core.MatchKey(k, appctx.AppKeys.Diff) && s.Addon.IsGitWorkdir():
-				return repoui.DiffAction(sh, repoFromStatus(s)), true
+				rp := repoFromStatus(s)
+				return repoui.DiffAction(sh, rp, rp.Name), true
 			}
 			return core.Action{}, false
 		}
