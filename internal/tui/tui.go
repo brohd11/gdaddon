@@ -28,7 +28,9 @@ func Run(projectRoot, version string, firstRun bool) error {
 	return bubblestack.Run(bubblestack.Config{
 		App:    appctx.New(projectRoot, version),
 		Header: appctx.Header,
-		Output: components.NewLogPane(),
+		// A header click opens the project repo's own Git page, same as ctrl+v.
+		HeaderClick: func(sh *bubblestack.Shared, _, _ int) bubblestack.Action { return project.RootGitAction(sh) },
+		Output:      components.NewLogPane(),
 		Status: components.NewStatusLine(),
 		// Theme is left unset so bubblestack.Run loads the shared ~/.bubblestack theme.
 		Init: func(sh *bubblestack.Shared) tea.Cmd {

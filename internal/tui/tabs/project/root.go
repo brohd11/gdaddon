@@ -94,14 +94,20 @@ func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 		// "ctrl+v" opens the project repo's own Git page — the same RepoMenu an addon row
 		// opens, handed the root. V puts the root in the batch; ctrl+v works it on its own.
 		case core.MatchKey(k.String(), appctx.AppKeys.RootGit):
-			root := appctx.Of(sh).RootRepo
-			if root == nil {
-				return s, core.SetStatus("project root is not a git checkout")
-			}
-			return s, core.Push(repoui.RepoMenu(sh, *root, root.Name))
+			return s, RootGitAction(sh)
 		}
 	}
 	return s, components.RootUpdate(sh, &s.list, msg)
+}
+
+// RootGitAction opens the project repo's own Git page — the ctrl+v key and a header
+// click both resolve to it. A non-checkout root only reports on the status line.
+func RootGitAction(sh *core.Shared) core.Action {
+	root := appctx.Of(sh).RootRepo
+	if root == nil {
+		return core.SetStatus("project root is not a git checkout")
+	}
+	return core.Push(repoui.RepoMenu(sh, *root, root.Name))
 }
 
 // View renders just the addon list; the status line and output box are drawn by

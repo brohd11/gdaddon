@@ -58,10 +58,12 @@ func gitProject(t *testing.T) string {
 }
 
 // routerAt builds the router the same way newTestRouter does but rooted at a real project,
-// so the Project tab inspects a live manifest.
+// so the Project tab inspects a live manifest. The header gets the OnClick tui.Run wires.
 func routerAt(root string) core.Router {
 	sh := core.NewShared(appctx.New(root, "dev"))
-	sh.Chrome = &core.Chrome{Header: core.NewHeaderPane(appctx.Header), Output: components.NewLogPane(), Status: components.NewStatusLine()}
+	header := core.NewHeaderPane(appctx.Header)
+	header.OnClick = func(sh *core.Shared, _, _ int) core.Action { return project.RootGitAction(sh) }
+	sh.Chrome = &core.Chrome{Header: header, Output: components.NewLogPane(), Status: components.NewStatusLine()}
 	return core.NewRouter(sh, []core.TabEntry{
 		{Title: appctx.TitleProject, New: func(sh *core.Shared) core.Screen { return project.NewProjectScreen(sh) }},
 	})
@@ -150,3 +152,24 @@ func TestRootGitKeyNotACheckout(t *testing.T) {
 	}
 }
 
+
+// TestHeaderClickOpensRootGit: a click on the header fires the OnClick tui.Run wires —
+// the same root-git action as ctrl+v — opening the project repo's own Git page.
+func TestHeaderClickOpensRootGit(t *testing.T) {
+	root := gitProject(t)
+	// Make the project root itself a checkout (gitProject only inits the nested addon).
+	init := exec.Command("git", "-C", root, "init", "-q", "-b", "main")
+	if out, err := init.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+
+	tm := sized(routerAt(root))
+	tm = pump(tm, tea.MouseMsg{X: 5, Y: 0, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
+		t.Fatalf("a header click should open the project repo's Git page (PickerScreen), got %T", tm.(core.Router).Top())
+	}
+	if out := tm.View(); !strings.Contains(out, "Git") ||
+		!strings.Contains(out, "Status") || !strings.Contains(out, "Diff") {
+		t.Errorf("a header click should open the root's Git menu with git commands:\n%s", out)
+	}
+}
