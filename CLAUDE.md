@@ -28,22 +28,27 @@ submodule/addon repos a Godot project accumulates (see `cmd/repos.go`).
 ## Build commands
 
 ```bash
-# Build for current platform only
-go build -o build/mac-arm64/gdaddon .
-
-# Cross-compile all targets (mac-arm64, mac-x86_64, linux, windows)
+# Build for the host platform only (default target)
 make
+
+# Run the test suite (gdaddon module only; the sibling repos have their own CI)
+make test
+
+# Cross-compile all release targets (darwin/arm64, darwin/amd64, linux/amd64,
+# linux/arm64, windows/amd64)
+make all
 
 # Clean build artifacts
 make clean
 ```
 
-Build outputs go to `build/<platform>/gdaddon[.exe]`.
+Build outputs go to `build/<os>-<arch>/gdaddon[.exe]` (e.g. `build/darwin-arm64/gdaddon`).
 
 `bubblestack`, `gitstack`, and `repoview` are separate repos (see Architecture). For local
-cross-repo work, check them out beside this one under `~/main/go/` and run
-`go work init ./gdaddon ./bubblestack ./gitstack ./repoview` there (the `go.work`
-stays uncommitted). Ordinary `make`/`go build` here builds against the tagged module versions.
+cross-repo work they sit beside this one under `~/main/go/`, tied by the `go.work` there
+(`use ./bubblestack ./gdaddon ./gitstack ./golaunch ./goutil ./repoview ./gossh` — it lives
+in the workspace repo, not in this one). Ordinary `make`/`go build` here builds against the
+tagged module versions.
 
 ## Running
 
@@ -68,12 +73,13 @@ manifest entry with stable snake_case keys: `name`, `state`
 `lock` (bool; version-pinned, no update alerts),
 `is_dependency` (bool; entry auto-added because another plugin declares it as a dep),
 `orphan` (bool; an `is_dependency` entry nothing installed still requires),
-`update` (`unknown`/`current`/`available`), `latest_tag`,
+`update` (`unknown`/`current`/`available`/`locked`), `latest_tag`,
 `ahead`/`behind` (a git checkout's divergence from its upstream; `0` otherwise),
 `missing_deps`
 (array of `{repo_id, tag, url}`). Always valid JSON (`[]` when empty). Everything is
-local/instant except `update`/`latest_tag`, which stay `"unknown"` unless
-`--check-updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`).
+local/instant except `update`/`latest_tag`, which stay `"unknown"`/`""` unless
+`--check-updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`;
+a locked entry reports `update: "locked"` with or without the check).
 `ahead`/`behind` are local too — they read the remote-tracking refs git already has — so
 they're only as current as that checkout's last `git fetch`; a `--list` never fetches.
 `missing_deps` comes from `addon.MissingDeps` (local; deps absent from the manifest,
@@ -191,9 +197,9 @@ internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/CurrentBranch/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, isGitCheckout, normalizeGitRemote) that classify a plugin folder's `.git`
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
   archive/           — local package archive (~/.gdaddon/archive or config/config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
-  config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, theme, last search source — Load) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
+  config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, last search source — Load; the theme moved out to the framework-wide ~/.bubblestack/config.yml) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
   restrule/          — generic config-driven REST query engine used by `source` to talk to host APIs
-  gitcred/           — git credential/token resolution for clones
+  gitcred/           — git credential/token resolution backing restrule's authenticated HTTP GETs (host APIs, archive downloads); clones don't use it — they run with GIT_TERMINAL_PROMPT=0 against the user's own git credentials
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
   store/             — Asset Store URL detection/backend used by search/install
   installer/         — `gdaddon install`/`uninstall`: copy the running binary to system/user/home, PATH wiring (InstallFrom for an explicit source, CurrentDest for the running binary's location). The copy is a temp-file-plus-rename, so the destination may be the running binary — see Installing the binary
@@ -202,18 +208,18 @@ internal/
   tui/               — bubbletea front-end (see internal/tui/doc.go)
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
     appctx/          — the domain↔framework seam: gdaddon's Ctx (ManifestPath/ProjectRoot) on Shared.App, the Header renderer, and the Project/Global/Archive refresh targets
-    tabs/<domain>/   — one package per top-level tab (project, global, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
+    tabs/<domain>/   — one package per top-level tab (project, global, sets, archive, actions, search): its root screen, flow screens, and the builders that wire components to features
     flows/<name>/    — domain-aware flow screens shared by >1 tab (e.g. newplugin, docs)
     sysopen/         — thin domain adapter over `bubblestack/sysopen` (the shared OS-open helpers). `Path`/`Terminal` delegate straight through; `URL` first reduces a file-extension addon url to its repo host (`source.RepoURL`) so the browser lands on the repo, not the asset. The launcher logic (per-OS emulator table, the `cmd.Dir` fix so `t` no longer opens at gdaddon's own cwd, x-terminal-emulator demoted to last, command-in-terminal support) lives in bubblestack now, shared with repoview + go-ssh. NOTE: the old config.yml `terminal` override is not honored right now — it's slated to return via a future bubblestack-owned config (settable config path, supplying terminal override + theme)
-The three modules below live in their OWN GitHub repos (github.com/brohd11/{bubblestack,gitstack,repoview}) — gdaddon `require`s bubblestack + gitstack as tagged versions (v0.1.0), no `replace`. For local co-development all four are checked out side by side under ~/main/go/ and tied by an *uncommitted* `go.work` there (`use ./gdaddon ./bubblestack ./gitstack ./repoview`), so cross-module edits are picked up without re-tagging; releases/CI/outside consumers use the tags. None of the three imports a gdaddon package. Their layouts:
+The three modules below live in their OWN GitHub repos (github.com/brohd11/{bubblestack,gitstack,repoview}) — gdaddon `require`s bubblestack + gitstack as tagged versions, no `replace`. For local co-development all of them are checked out side by side under ~/main/go/ and tied by the workspace `go.work` there (`use ./bubblestack ./gdaddon ./gitstack ./golaunch ./goutil ./repoview ./gossh` — committed in the workspace repo, not in this one), so cross-module edits are picked up without re-tagging; releases/CI/outside consumers use the tags. None of the three imports a gdaddon package. Their layouts:
 
 gitstack (github.com/brohd11/gitstack) — the reusable git module, extracted from addon so a second tool (repoview, below) can share it:
-  repo/              — domain-neutral git engine (stdlib only): FindGitRepos, Scan (folder → []Repo), Describe/CurrentBranch, HasUncommittedChanges, GitSyncStatus, GitChanges, GitFetch, FetchAll([]Repo), GitStream + GitStatus/GitPull/GitPush/GitCommit; types Repo{Name,Dir,Branch,Sync,Dirty}, GitSync, GitChange, FetchResult, Reporter
-  repoui/            — git-viewing screens over bubblestack (name no domain type): RepoMenu (per-repo status/fetch/pull/push/commit submenu), AllReposMenu(sh, []Scope, RootOption) (batch fetch/pull/push, consumer supplies the scopes; RootOption adds an include-root toggle), Task, RefreshMsg. gdaddon consumes these behind thin adapters (flows/git/git.go builds its clone/submodule/all scopes; tabs/project/git.go maps Status→repo.Repo); appctx.GitRefresh is an alias of repoui.RefreshMsg
-repoview (github.com/brohd11/repoview) — a separate binary/repo, the manifest-free sibling of gdaddon: scan a plain directory for git checkouts (repo.Scan) and show each one's status (branch/ahead/behind/dirty) in one list screen, driving fetch/pull/push/commit through the shared gitstack/repoui screens. One repo-list tab (no tab strip) + an "a" Actions menu (theme, refresh); no manifest, fresh scan each run. gdaddon does NOT depend on it — it's a second consumer of bubblestack + gitstack, developed in its own repo (see its main.go + internal/app/).
+  repo/              — domain-neutral git engine (stdlib + goutil/stream for output streaming): FindGitRepos, Scan (folder → []Repo), Describe/CurrentBranch, HasUncommittedChanges, GitSyncStatus, GitChanges, GitFetch, FetchAll([]Repo), GitStream + GitStatus/GitPull/GitPush/GitCommit, diff reads (Diff/DiffStat/DiffStats) and tag ops (LocalTags/RemoteTags/NextTag/GitTag/GitPushTag/GitDeleteTag); types Repo{Name,Dir,Branch,Sync,Dirty,Root}, GitSync, GitChange, FetchResult, Reporter
+  repoui/            — git-viewing screens over bubblestack (name no domain type): RepoMenu (per-repo status/fetch/pull/push/commit submenu), AllReposMenu(sh, []Scope, RootOption) (batch fetch/pull/push, consumer supplies the scopes; RootOption adds an include-root toggle), DiffScreen, TagsScreen, Task, RefreshMsg/FetchDoneMsg. gdaddon consumes these behind thin adapters (flows/git/git.go builds its clone/submodule/all scopes; tabs/project/git.go maps Status→repo.Repo); appctx.GitRefresh is an alias of repoui.RefreshMsg
+repoview (github.com/brohd11/repoview) — a separate binary/repo, the manifest-free sibling of gdaddon: scan a plain directory for git checkouts (repo.Scan) and show each one's status (branch/ahead/behind/dirty) in one list screen, driving fetch/pull/push/commit through the shared gitstack/repoui screens. One repo-list tab (no tab strip) + an "a" Actions menu (the shared components.NewActionsMenu: theme, docs, self-update, refresh) with its manual embedded from doc/embedded/ (the standard bubblestack docs layout, same as gdaddon's); no manifest, fresh scan each run. gdaddon does NOT depend on it — it's a second consumer of bubblestack + gitstack, developed in its own repo (see its main.go + internal/app/).
 bubblestack (github.com/brohd11/bubblestack) — the reusable TUI framework:
-  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask; plus a router-drawn breadcrumb bar under the tab strip, built each frame from the live stack via the optional Crumber interface — CrumbLabel(short bool) — and RenderBreadcrumb), Router over a screen stack, nav commands that return a core.Action (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, core.Action): Action bundles a control Msg the router applies synchronously and an async Cmd; Async wraps a cmd-only Action, the zero Action is a no-op) + optional interfaces (incl. Overlayer — a popup drawn over the screen below it; Composite/PopupBox in overlay.go do the ANSI-aware compositing), router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers
-  components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, DialogScreen (a confirm box, or a modal overlay when its Overlay flag is set — composited by core.PopupBox), LoadingScreen, TaskScreen, FormScreen, DocScreen (a scrollable read-only text page: a viewport under an optional title bar, its body supplied by a `Render(width) string` closure re-run on resize, so the caller owns formatting and DocScreen owns only scrolling); LogPane = default core.Output, with a wrap render mode (`w`, via the optional core.Wrapper capability) that folds long lines the viewport would otherwise clip at the pane edge) — they name no domain type. TaskScreen (streaming work) and LoadingScreen (fetch spinner) each own a context.WithCancel and let esc abort the in-flight work — their work closures (TaskScreen's RunFunc, LoadingScreen's Run) take that ctx as their first arg, so a cancellable closure threads it into its network/process call
+  core/              — Shared state (consumer context behind App any, recovered via App[T]; optional Chrome = header closure + status line + pluggable Output pane, each toggleable and gateable per-screen via ChromeMasker/FullscreenMask; plus a router-drawn breadcrumb bar under the tab strip, built each frame from the live stack via the optional Crumber interface — CrumbLabel(short bool) — and RenderBreadcrumb), Router over a screen stack, nav commands that return a core.Action (Push/Pop/Replace/ResetToRoot/ShowTab, plus Seq to group several), Screen (Update returns (Screen, core.Action): Action bundles a control Msg the router applies synchronously and an async Cmd; Async wraps a cmd-only Action, the zero Action is a no-op) + optional interfaces (incl. Overlayer — a popup drawn over the screen below it; Composite/PopupBox in overlay.go do the ANSI-aware compositing), router messages (PropagateAll broadcast with opaque payload to every Receiver, streaming TaskEvent with opaque Payload), list/help/style helpers. Mouse support: cell-motion tracking (toggled with `m` — off restores terminal text selection), with the router hit-testing its own chrome on a left click — a breadcrumb segment pops the stack to it, a tab activates+unwinds via ShowTab (spans computed arithmetically from the titles, so spaces hit-test fine), and a consumer-supplied Config.HeaderClick fires on the header box (gdaddon wires it to the root's git page, same as ctrl+v)
+  components/        — reusable, context-agnostic pieces configured by closures (Item self-dispatching list row; PickerScreen, DialogScreen (a confirm box, or a modal overlay when its Overlay flag is set — composited by core.PopupBox), LoadingScreen, TaskScreen, FormScreen, DocScreen (a scrollable read-only text page: a viewport under an optional title bar, its body supplied by a `Render(width) string` closure re-run on resize, so the caller owns formatting and DocScreen owns only scrolling); LogPane = default core.Output, with a wrap render mode (`w`, via the optional core.Wrapper capability) that folds long lines the viewport would otherwise clip at the pane edge) — they name no domain type. TaskScreen (streaming work) and LoadingScreen (fetch spinner) each own a context.WithCancel and let esc abort the in-flight work — their work closures (TaskScreen's RunFunc, LoadingScreen's Run) take that ctx as their first arg, so a cancellable closure threads it into its network/process call. Also here: NewActionsMenu (the standard Actions sheet — theme, docs when the app ships pages via DocsItem, self-update, refresh), the in-TUI manual engine (ParseDocPages/DocsIndex/RenderMarkdown over embedded markdown), the shared self-update flow, plus the sysopen (OS terminal/file-manager launchers) and config (framework-wide ~/.bubblestack theme) packages
 ```
 
 ### TUI design goals
@@ -221,7 +227,7 @@ bubblestack (github.com/brohd11/bubblestack) — the reusable TUI framework:
 The TUI was restructured for scalability around three ideas:
 
 - **Tabs are domains.** Each top-level tab is its own package under `tui/tabs/`
-  (`project`, `global`, `archive`, `actions`, `search`) owning its root screen and flows.
+  (`project`, `global`, `sets`, `archive`, `actions`, `search`) owning its root screen and flows.
   Adding a feature area means adding a tab package, not editing a monolith.
 - **Domains share `components` to simplify logic.** Reusable screens
   (picker/confirm/loading/popup/streaming-task) live in `bubblestack/components`, are
@@ -254,14 +260,18 @@ to add a tab.
 
 ### Docs & onboarding
 
-The manual ships inside the binary: `internal/tui/flows/docs/` embeds `pages/*.md`
-(`//go:embed`) and renders them in a `components.DocScreen`. **Adding a page is dropping
-a numbered `.md` into `pages/`** — no code change. The filename orders it (`embed.FS`
+The manual ships inside the binary: the pages live at `doc/embedded/*.md` (the repo's
+doc folder, so they're easy to find and edit), embedded by the tiny `gdaddon/doc`
+package — `go:embed` can't reach a parent directory, so the embed must live at that
+level. `internal/tui/flows/docs/` is only the TUI flow (index + first-run welcome),
+rendering them in a `components.DocScreen`. **Adding a page is dropping a numbered
+`.md` into `doc/embedded/`** — no code change. The filename orders it (`embed.FS`
 reads sorted), its first `# ` heading is the title (breadcrumb + index row), and the
-first line under that heading is the index description. `render.go` is a deliberately
-partial markdown reader (headings / bullets / fenced code / inline code / re-flowed
-paragraphs) styled from the live theme — no renderer dependency, so pages repaint on a
-theme switch like everything else.
+first line under that heading is the index description. The renderer (in
+bubblestack/components) is a deliberately partial markdown reader (headings /
+bullets / fenced code / inline code / re-flowed paragraphs) styled from the live
+theme — no renderer dependency, so pages repaint on a theme switch like everything
+else.
 
 It's a `flows/` package because two layers reach it: **Actions ▸ Docs** (`docs.Index()`)
 and `tui.Run`, which shows the first-run welcome popup. "First run" is *`~/.gdaddon` did
@@ -286,7 +296,7 @@ Key packages/functions:
   synchronous `appctx.Ctx.refreshGitChecks` pass next to `GitDirty` and populates `Ctx.GitSync`
   on every refresh — but it can only *see* new upstream commits after a fetch. **`GitFetch` is
   the only network call**, so it's bound to an explicit key (Project tab `f` →
-  `tabs/project/fetch.go`, an async cmd broadcasting `fetchDone`, mirroring `checkUpdatesCmd`)
+  `tabs/project/fetch.go`, an async cmd broadcasting `repoui.FetchDoneMsg`, mirroring `checkUpdatesCmd`)
   and never runs on its own. Both `GitFetch` and the clone paths set `GIT_TERMINAL_PROMPT=0`
   so a repo with uncached credentials fails fast instead of hanging the TUI on an invisible
   auth prompt. The counts surface as the `behind origin N` / `ahead N` row markers alongside
@@ -320,7 +330,7 @@ Key packages/functions:
   `appctx.GitRefresh`) so the Project list's local markers settle without re-firing the network
   update check. Keys: `v` (row-level, an addon's own Git page) and `V` (the all-repos page) —
   deliberately not `g`/`G`, which bubbles binds to jump-to-top/bottom on every list.
-- `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` / `addon.SetIsDependency` write single scalar lines the same way (empty/false value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha, `SetIsDependency` records/clears a dep's auto-added provenance. `addon.OrphanDeps` reports which `is_dependency` entries nothing installed still needs (the "unused dependency" marker).
+- `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version/tag in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` / `addon.SetIsDependency` write single scalar lines the same way (empty/false value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha, `SetIsDependency` records/clears a dep's auto-added provenance. `addon.OrphanDeps` reports which `is_dependency` entries nothing installed still needs (the "unused dependency" marker).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails). A commit-pinned branch package is stored under `<branch>@<sha>` (so distinct commits of the same branch don't overwrite), and `parseArchiveTag` recovers the branch + `Asset.Commit` pin when the archive is listed back.
 - `archive.RemoveRepo` / `archive.Remove` — delete a repo's whole archive (used by Global → Remove "+ archive"), or one archived package by its local path, pruning emptied folders (the Archive tab).

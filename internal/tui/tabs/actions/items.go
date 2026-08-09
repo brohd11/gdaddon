@@ -73,11 +73,11 @@ func actionItems(sh *core.Shared) []list.Item {
 	},
 	)
 
-	items = append(items, components.Item{
-		Name: "? Docs",
-		Desc: "getting started, manifest format, dependencies, config",
-		Pick: func(sh *core.Shared) core.Action { return core.Push(docs.Index()) },
-	})
+	// The standard docs row (shared with the bubblestack Actions menu); absent if
+	// the pages didn't compile into the build.
+	if docsRow, ok := components.DocsItem(docs.Pages()); ok {
+		items = append(items, docsRow)
+	}
 
 	items = append(items, components.Item{
 		Name: "⟲ Update gdaddon",

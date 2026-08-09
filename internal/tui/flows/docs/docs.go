@@ -1,18 +1,15 @@
-// Package docs is gdaddon's in-TUI manual: a set of markdown pages compiled into the
-// binary, browsed from Actions ▸ Docs, and offered to first-run users by a welcome popup.
+// Package docs is gdaddon's in-TUI manual flow: the Docs index and the first-run
+// welcome popup that offers it. The manual's pages themselves live in the repo's
+// doc folder (gdaddon/doc/embedded, exposed by the doc package) so they're easy to
+// find and edit; the parse/render/index machinery is shared bubblestack machinery
+// (components). This package owns only the TUI glue and the welcome copy.
 //
-// It's a flow rather than a tab because two layers reach it: the Actions tab (the menu
-// row) and tui.Run (the first-run popup, via WelcomeCmd).
-//
-// The parse/render/index machinery is shared — it lives in bubblestack/components (used by
-// repoview too); this package owns only gdaddon's embedded pages and the welcome copy.
-// Adding a page is dropping a numbered .md file into pages/ — no code change. The
-// filename orders it, the first "# " heading is its title, and the first line after that
-// heading is its one-line description in the index.
+// It's a flow rather than a tab because two layers reach it: the Actions tab (the
+// menu row) and tui.Run (the first-run popup, via WelcomeCmd).
 package docs
 
 import (
-	"embed"
+	"gdaddon/doc"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -20,11 +17,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-//go:embed pages/*.md
-var pagesFS embed.FS
-
-// Pages returns the embedded pages in filename order.
-func Pages() []components.DocPage { return components.ParseDocPages(pagesFS, "pages") }
+// Pages returns the embedded manual pages in filename order (see gdaddon/doc).
+func Pages() []components.DocPage { return doc.Pages() }
 
 // Index is the docs menu: one self-dispatching row per page, each pushing its own reader.
 func Index() *components.PickerScreen { return components.DocsIndex("Docs", "Docs", Pages()) }
