@@ -10,6 +10,7 @@
  - Global manifest - quickly add your favorite addons to your project
  - Addon sets - save a collection of addons that can be added together
  - Archive - save a copy of any package locally, can be used for install
+ - One-shot CLI install - `gdaddon install owner/repo`, dependencies and all
 
 ### Examples
 Installing 25 addons: [here](https://youtu.be/1EIBzfUs50g)
@@ -56,7 +57,7 @@ On macOS, binaries downloaded **in a browser** may have quarantine status that n
 
 Alternatively, build with Go and this is not a problem.
 
-With your fresh binary, run `gdaddon install` from the download or build directory. This will launch an installer with a few options:
+With your fresh binary, run `gdaddon self-install` from the download or build directory. This will launch an installer with a few options:
  - system - Can be directly accessed by name `gdaddon`, needs permissions
  - local - Can be directly accessed by name, if directory is in PATH, no permissions
  - ~/.gdaddon - Can not be directly accessed by name, but can be launched directly from the companion EditorPlugin, no permissions
@@ -92,6 +93,28 @@ When the addon is installed, the plugin.cfg will be read and checked for depende
 If you don't have a tagged version, just the repo will be added to your project where you can add the proper version manually.
 
 There is also an "Install All + Deps" command that will  install, check for dependencies, loop, until there are none left that can be installed.
+
+### Installing one addon from the command line
+
+`gdaddon install` adds a single addon to the current project without opening the TUI,
+along with the dependencies that addon declares (and theirs, and so on) — unlike
+"Install All + Deps", nothing else in the manifest is touched.
+
+```bash
+gdaddon install brohd11/Godot-Script-Tabs          # latest release
+gdaddon install brohd11/Godot-Script-Tabs@v0.1.4   # a specific release
+gdaddon install codeberg.org/someone/their-addon   # a host other than github.com
+gdaddon install brohd11/Godot-Script-Tabs --clone  # live git checkout, default branch
+gdaddon install brohd11/Godot-Script-Tabs@dev --clone
+```
+
+The project root is the git toplevel (or `--root`), and a manifest is created if there
+isn't one — so this works in a fresh project. Other flags: `--asset` to pick a release
+asset when a release ships several, `--name` to record it under a different name, and
+`--no-deps` to skip dependency resolution.
+
+Note this is not the same command as `gdaddon self-install`, which installs the gdaddon
+binary itself.
 
 
 More docs can be found [here](doc/docs.md)

@@ -20,9 +20,13 @@ non-interactive runs):
 (`--install`/`--list`/`--update-packages` are mutually exclusive; `--json`/`--check-updates`
 are modifiers on `--list`, not modes.)
 
-There is one subcommand, `repos`, a standalone CLI utility (no TUI) for running a
-shell command across every git checkout nested under a directory — handy for the
-submodule/addon repos a Godot project accumulates (see `cmd/repos.go`).
+The subcommands split into two unrelated jobs, distinguished by the `self-` prefix.
+**Godot addons:** `install <owner/repo>[@tag]` installs one addon plus the dependency
+closure it declares (`cmd/addoninstall.go` — see Installing one addon below).
+**The gdaddon binary itself:** `self-install`, `self-update` (alias `update`),
+`uninstall` (alias `self-uninstall`). Plus `repos`, a standalone CLI utility (no TUI)
+for running a shell command across every git checkout nested under a directory — handy
+for the submodule/addon repos a Godot project accumulates (see `cmd/repos.go`).
 
 
 ## Build commands
@@ -60,8 +64,10 @@ gdaddon --list         # print the manifest's install status (state/local/pinned
 gdaddon --list --json  # same, as a JSON array for machine consumption (e.g. a Godot plugin UI)
 gdaddon --list --json --check-updates  # JSON + per-addon update state (network)
 gdaddon --update-packages     # non-interactive update of installed addons to their latest release
+gdaddon install owner/repo    # install ONE addon (+ the deps it declares) into this project
 gdaddon update                # update gdaddon itself to the latest release (see below)
 gdaddon update --check --json # report {current,latest_tag,available} for the Godot plugin
+gdaddon self-install          # copy the gdaddon binary somewhere and wire up PATH
 ```
 
 `--list --json` (`printListJSON` in `cmd/root.go`) emits one `listEntryJSON` object per
@@ -86,6 +92,54 @@ they're only as current as that checkout's last `git fetch`; a `--list` never fe
 excluding any the declaring entry's `suppress_deps` ignores). `is_dependency`/`orphan` are
 local too: `orphan` comes from `addon.OrphanDeps` (the union of every non-suppressed dep
 declared by a *present* plugin — an `is_dependency` entry outside that union is orphaned).
+
+### Installing one addon (`gdaddon install <owner/repo>[@tag]`)
+
+The targeted counterpart to `--install`: record and install **one** addon plus the
+dependency closure *it* declares, touching nothing else in the manifest.
+`cmd/addoninstall.go` is thin wiring; the reusable flow is `addon.InstallOne` /
+`addon.InstallDepsFor` in `internal/addon/install_one.go` (no cobra, no bubbletea — a
+per-addon TUI action can call them unchanged).
+
+The repo spec is parsed by `addon.ParseRepoSpec`, which is `parseDependency` exported:
+the CLI argument and a `plugin.cfg` `deps` item are deliberately the same syntax
+(`owner/repo`, `host/owner/repo`, optional `@tag`) parsed by the same code, so they
+can't drift. `@tag` matches a release via `TagEqual` (leading `v` tolerated either way);
+no tag means `addon.LatestRelease`. Asset choice is `addon.SelectRelease` +
+`addon.SelectAsset` (`internal/addon/select.go`) — the latter wraps `source.AutoAsset`
+and returns `*addon.AmbiguousAssetError` when a release ships 2+ uploaded assets, which
+the CLI prints as a candidate list pointing at `--asset` (the TUI's answer to the same
+condition is a picker).
+
+Flags: `--root` (project root; default the git toplevel via the non-prompting
+`resolveRootQuiet` in `cmd/paths.go`, *not* `resolveRoot`, which prompts and can
+`os.Exit`), `--asset`, `--name`, `--clone`, `--no-deps`. The manifest is found by
+`addon.FindManifest` and **created** at the root when absent (`findOrCreateManifest`) —
+deliberately unlike `discoverManifest`, which errors on a miss for the read-only paths.
+
+`--clone` installs a live git checkout instead of a release; the branch comes from
+`@ref`, and a bare `--clone` takes the remote's default branch. `gitCloneBranch` omits
+`--branch` entirely when none is named, and `InstallOne` reads the checked-out branch
+back (`CurrentBranch`) and records it as the entry's `tag` — a clone whose tag doesn't
+match its live branch reads as `branch_changed` forever otherwise. A clone records no
+`version:` (it tracks a branch), matching the TUI's `pinInstall`.
+
+**`InstallDepsFor` vs `InstallAllDeps`** — the distinction is the point.
+`InstallAllDeps` is a manifest-wide fixed-point loop (inspect → `InstallAll` →
+`importDeps` → repeat) that installs *everything*; right for "set up this project",
+wrong for "install this one plugin". `InstallDepsFor` is a breadth-first walk outward
+from a single installed addon, deduped by `source.RepoID` (so a diamond resolves once
+and a cycle terminates) and depth-bounded by `maxDepRounds`. Per dep, `ensureDep` either
+skips it (installed and satisfying, by the same rule as `MissingDeps`/`DepStatuses`:
+tagless → presence suffices, uncomparable tags → trusted), adds it via `AddDepEntry`
+(carrying `is_dependency: true`), or re-pins a verifiably-older entry via `UpsertEntry`.
+It then looks the entry up **by name, not by repo id** — a repo renamed upstream serves
+release assets under its new name, so the written url's `RepoID` no longer matches the
+declared spec's; the same reason `ensureDep` falls back to a name lookup when the
+by-repo lookup misses, and marks both identities as seen.
+
+`addon.ErrNameTaken` is the sentinel `AddEntry` wraps on a key collision with a
+*different* repo's entry, so the CLI can suggest `--name` without matching message text.
 
 ### `repos` subcommand
 
@@ -191,8 +245,10 @@ in fetch.go); an unrecognized level is assumed to be the author's and kept.
 main.go              — calls cmd.Execute()
 cmd/
   root.go            — the root `gdaddon` cobra command: TUI by default, --install for non-interactive
+  addoninstall.go    — the `install <owner/repo>[@tag]` subcommand: install ONE addon + its declared dep closure (thin wiring over addon.InstallOne)
+  selfinstall.go     — the `self-install` subcommand: copy the gdaddon binary somewhere (internal/installer). Named for the `self-` prefix that separates binary commands from addon ones
   repos.go           — the `repos` subcommand: run a shell command in every nested git repo (uses addon.FindGitRepos / addon.HasUncommittedChanges)
-  paths.go           — resolveRoot (project-root arg / git-root detection; manifest is discovered by the TUI context scan, see appctx.Ctx.Scan)
+  paths.go           — resolveRoot (project-root arg / git-root detection, may prompt on stdin — TUI path only) and resolveRootQuiet (never prompts or exits — the subcommand path). The manifest is discovered by the TUI context scan (appctx.Ctx.Scan) or by findOrCreateManifest in addoninstall.go
 internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/CurrentBranch/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, isGitCheckout, normalizeGitRemote) that classify a plugin folder's `.git`
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
@@ -202,7 +258,7 @@ internal/
   gitcred/           — git credential/token resolution backing restrule's authenticated HTTP GETs (host APIs, archive downloads); clones don't use it — they run with GIT_TERMINAL_PROMPT=0 against the user's own git credentials
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
   store/             — Asset Store URL detection/backend used by search/install
-  installer/         — `gdaddon install`/`uninstall`: copy the running binary to system/user/home, PATH wiring (InstallFrom for an explicit source, CurrentDest for the running binary's location). The copy is a temp-file-plus-rename, so the destination may be the running binary — see Installing the binary
+  installer/         — `gdaddon self-install`/`uninstall`: copy the running binary to system/user/home, PATH wiring (InstallFrom for an explicit source, CurrentDest for the running binary's location). The copy is a temp-file-plus-rename, so the destination may be the running binary — see Installing the binary
   selfupdate/        — `gdaddon update`: resolve the latest release tag off the repo's /releases/latest redirect and install it by running the repo's own install.sh (BIN_DIR/VERSION env, --no-modify-path)
   quarantine/        — Actions ▸ Dequarantine Addons: `Clear` walks <root>/addons removing com.apple.quarantine (x/sys/unix.Lremovexattr) and returns counts. Hidden dirs are pruned — an addon's .git is thousands of mode-0444 objects that can't own the attribute and only answer EACCES. darwin-only; `quarantine_other.go` is the non-macOS stub
   tui/               — bubbletea front-end (see internal/tui/doc.go)
@@ -330,6 +386,8 @@ Key packages/functions:
   `appctx.GitRefresh`) so the Project list's local markers settle without re-firing the network
   update check. Keys: `v` (row-level, an addon's own Git page) and `V` (the all-repos page) —
   deliberately not `g`/`G`, which bubbles binds to jump-to-top/bottom on every list.
+- `addon.InstallOne` / `addon.InstallDepsFor` (`internal/addon/install_one.go`) — install one addon and pin it, and walk the dependency closure rooted at one installed addon. The targeted counterpart to `InstallAll`/`InstallAllDeps`; front-end agnostic, so the CLI's `gdaddon install` and (later) a per-addon TUI action share them. See "Installing one addon" above for the semantics that differ from the manifest-wide flow.
+- `addon.ParseRepoSpec` / `addon.SelectRelease` / `addon.SelectAsset` — parse an `owner/repo[@tag]` spec (the exported `parseDependency`, shared with `deps=` items), pick the release for a tag (or the latest non-prerelease), and pick its install asset (`*AmbiguousAssetError` when a release ships several uploads).
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version/tag in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` / `addon.SetIsDependency` write single scalar lines the same way (empty/false value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha, `SetIsDependency` records/clears a dep's auto-added provenance. `addon.OrphanDeps` reports which `is_dependency` entries nothing installed still needs (the "unused dependency" marker).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails). A commit-pinned branch package is stored under `<branch>@<sha>` (so distinct commits of the same branch don't overwrite), and `parseArchiveTag` recovers the branch + `Asset.Commit` pin when the archive is listed back.
@@ -342,7 +400,7 @@ Key packages/functions:
 your repo path differs.
 
 **Release (general users):** the install logic lives in the binary itself —
-`gdaddon install` (`cmd/install.go` + `internal/installer/`). It copies the running
+`gdaddon self-install` (`cmd/selfinstall.go` + `internal/installer/`). It copies the running
 binary (`os.Executable()`) to a destination chosen via a small bubbletea menu (reusing
 the bubblestack stack), or non-interactively with `--dest system|user|home`. The three
 destinations: **system** (`/usr/local/bin` / `%ProgramFiles%\gdaddon`, on PATH, needs a
@@ -355,7 +413,7 @@ terminal). Per-OS bits are build-tagged in `internal/installer/path_unix.go` /
 `path_windows.go`.
 
 **gdaddon never elevates itself.** A system install into a root-owned `/usr/local/bin`
-reports the permission error with the fix (`sudo gdaddon install --dest system`, or
+reports the permission error with the fix (`sudo gdaddon self-install --dest system`, or
 `--dest user`) rather than shelling out to sudo behind the user's back.
 
 `copyExe` (`internal/installer/installer.go`) never writes *into* the destination: it
@@ -367,7 +425,7 @@ resolved first so the symlink survives, and when the rename itself is refused (w
 locks a running `.exe`) the old binary is renamed aside to `gdaddon.exe.old` and cleaned
 up on the next install.
 
-`gdaddon uninstall` (`installer.Uninstall`) removes the binary from all three locations
+`gdaddon uninstall` (alias `self-uninstall`; `installer.Uninstall`) removes the binary from all three locations
 wherever present — binaries only, leaving PATH entries and other `~/.gdaddon` files alone
 (the running binary is skipped on Windows; an unwritable system copy reports a permission
 error to re-run under sudo).
@@ -387,7 +445,7 @@ the running binary is safe. The default destination is `selfupdate.DefaultDest()
 managed location the running binary occupies (`installer.CurrentDest`), or `~/.gdaddon/bin`
 otherwise.
 `--check [--json]` only reports (`{current,latest_tag,available}` for the Godot plugin to
-parse, like `--list --json`); `--interactive` opens the same dest picker as `install`. The
+parse, like `--list --json`); `--interactive` opens the same dest picker as `self-install`. The
 check also runs automatically on TUI startup (wired as `bubblestack.Config.Init` →
 `appctx.SelfUpdateCheckCmd`, a generic app-level startup hook in `bubblestack/core`'s Router)
 and writes an "update available" line to the status/log; Actions ▸ Update gdaddon runs the

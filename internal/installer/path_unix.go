@@ -76,7 +76,7 @@ func doInstall(d Dest, src string) (Result, error) {
 	case System:
 		if err := copyExe(src, dst); err != nil {
 			if errors.Is(err, fs.ErrPermission) {
-				return Result{}, fmt.Errorf("%s is not writable: re-run as `sudo gdaddon install --dest system`, or install to ~/.local/bin with `--dest user`", dir)
+				return Result{}, fmt.Errorf("%s is not writable: re-run as `sudo gdaddon self-install --dest system`, or install to ~/.local/bin with `--dest user`", dir)
 			}
 			return Result{}, err
 		}

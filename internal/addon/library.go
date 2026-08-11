@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -137,6 +138,12 @@ func CreateManifest(path string) error {
 	return os.WriteFile(path, []byte{}, 0o644)
 }
 
+// ErrNameTaken marks AddEntry's name-collision failure: the key is already used by a
+// *different* repo's entry, so the caller has to choose another name (a same-repo
+// duplicate is a separate, more specific error, and UpsertEntry avoids both). Exposed
+// as a sentinel so a front-end can offer the fix without matching on message text.
+var ErrNameTaken = errors.New("that name is taken by another entry")
+
 // AddEntry appends a new top-level entry to a manifest-shaped YAML file, creating
 // the file (and its parent dir) if absent. The block uses the flat 4-space shape:
 //
@@ -175,7 +182,7 @@ func AddEntry(manifestPath, name, url, path string) error {
 	}
 	for _, ln := range strings.Split(string(existing), "\n") {
 		if isEntryKey(ln, name) {
-			return fmt.Errorf("%q is already in %s", name, filepath.Base(manifestPath))
+			return fmt.Errorf("%q is already in %s (%w)", name, filepath.Base(manifestPath), ErrNameTaken)
 		}
 	}
 

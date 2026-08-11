@@ -1,10 +1,13 @@
-// Package installer implements `gdaddon install`: copying the running binary to a
-// chosen destination (system / user / gdaddon-home) and wiring up PATH. The logic
+// Package installer implements `gdaddon self-install`: copying the running binary to
+// a chosen destination (system / user / gdaddon-home) and wiring up PATH. The logic
 // is split so the cross-platform parts (destination enum, self-locate, byte copy)
 // live here and the per-OS parts (concrete dirs, PATH handling, admin checks) live in
-// path_unix.go / path_windows.go. There is no TUI here — cmd/install.go selects a
+// path_unix.go / path_windows.go. There is no TUI here — cmd/selfinstall.go selects a
 // Dest (via a bubbletea menu) and then calls Install, which keeps the privileged /
 // PATH side effects out of the terminal-owning UI.
+//
+// Note this is about the gdaddon binary, not Godot addons — `gdaddon install
+// <owner/repo>` (cmd/addoninstall.go) is the addon installer.
 package installer
 
 import (

@@ -67,6 +67,15 @@ func parseDependencyList(raw string) []Dependency {
 	return deps
 }
 
+// ParseRepoSpec parses an `owner/repo[@tag]` (or `host/owner/repo[@tag]`) spec into
+// the same Dependency shape a plugin.cfg `deps` item yields — the host defaults to
+// github.com and RepoURL/RepoID come out canonical. Exported for the CLI's
+// `gdaddon install <owner/repo>` argument, which deliberately shares this parser so a
+// hand-typed spec and a declared dependency can never diverge.
+func ParseRepoSpec(spec string) (Dependency, bool) {
+	return parseDependency(strings.TrimSpace(spec))
+}
+
 func parseDependency(item string) (Dependency, bool) {
 	// An `@tag` suffix is optional: with it the dependency is version-pinned; without
 	// it the repo is added version-less (the unambiguous case).

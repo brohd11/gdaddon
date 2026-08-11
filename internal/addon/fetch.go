@@ -160,14 +160,27 @@ func fetchGit(ctx context.Context, url, addonName string, report Reporter) (stri
 // gitCloneBranch clones url's <branch> directly into dest as a live working copy:
 // full history, .git kept (unlike fetchGit, which shallow-clones to staging and
 // strips .git). The parent dir is created first. ctx cancels the in-flight clone.
+//
+// An empty branch omits --branch entirely, so the clone lands on whatever the remote's
+// default branch is — the "just clone it" case the CLI's bare `--clone` needs, where no
+// branch was named and gdaddon shouldn't guess at "main" vs "master". The caller is
+// then responsible for reading the checked-out branch back (CurrentBranch) and
+// recording it, since a clone entry with no tag reads as branch-drifted.
 func gitCloneBranch(ctx context.Context, url, branch, dest, addonName string, report Reporter) error {
-	report("[%s] Cloning %s (branch %s)...", addonName, url, branch)
+	args := []string{"clone"}
+	if branch == "" {
+		report("[%s] Cloning %s (default branch)...", addonName, url)
+	} else {
+		report("[%s] Cloning %s (branch %s)...", addonName, url, branch)
+		args = append(args, "--branch", branch)
+	}
+	args = append(args, url, dest)
 
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "clone", "--branch", branch, url, dest)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		report("  -> Failed to clone %s:\n%s", addonName, string(out))

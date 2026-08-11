@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -36,6 +37,25 @@ func resolveRoot(args []string) (projectRoot string, err error) {
 	}
 
 	return projectRoot, nil
+}
+
+// resolveRootQuiet resolves the project root without ever prompting or exiting: the
+// explicit override when given, else the git toplevel, else the current directory.
+// Where resolveRoot asks the user what to do about a missing git root (fine before a
+// TUI), a scriptable subcommand must just pick something and say what it picked — so
+// callers should report the resolved root.
+func resolveRootQuiet(override string) (string, error) {
+	if override != "" {
+		return filepath.Abs(override)
+	}
+	if root := getGitDirectory(); root != "" {
+		return root, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("could not get current working directory: %w", err)
+	}
+	return cwd, nil
 }
 
 func getGitDirectory() string {

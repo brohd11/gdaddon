@@ -17,29 +17,32 @@ import (
 
 var installDest string
 
-var installCmd = &cobra.Command{
-	Use:   "install",
+var selfInstallCmd = &cobra.Command{
+	Use:   "self-install",
 	Short: "Copy this gdaddon binary to a chosen location (and wire up PATH)",
-	Long: `Install copies the running gdaddon binary to one of:
+	Long: `Self-install copies the running gdaddon binary to one of:
 
   system   on PATH by default; re-run under sudo / as Administrator if it isn't writable
   user     ~/.local/bin / %LOCALAPPDATA%\Programs\gdaddon, sets up PATH
   home     ~/.gdaddon/bin, not on PATH (the target the Godot plugin launches)
 
 With no flags it opens a menu to pick the destination; pass --dest for a
-non-interactive install.`,
+non-interactive install.
+
+This installs gdaddon itself. To install a Godot addon into a project, see
+'gdaddon install'.`,
 	Args:          cobra.NoArgs,
 	SilenceUsage:  true,
 	SilenceErrors: false,
-	RunE:          runInstallCmd,
+	RunE:          runSelfInstallCmd,
 }
 
 func init() {
-	installCmd.Flags().StringVar(&installDest, "dest", "", "non-interactive destination: system|user|home")
-	rootCmd.AddCommand(installCmd)
+	selfInstallCmd.Flags().StringVar(&installDest, "dest", "", "non-interactive destination: system|user|home")
+	rootCmd.AddCommand(selfInstallCmd)
 }
 
-func runInstallCmd(cmd *cobra.Command, args []string) error {
+func runSelfInstallCmd(cmd *cobra.Command, args []string) error {
 	src, err := installer.Self()
 	if err != nil {
 		return err

@@ -169,6 +169,10 @@ func archivedDepAsset(d Dependency) (source.Asset, bool) {
 	return source.Asset{}, false
 }
 
+// TagEqual is the exported wrapper over tagEqual, for callers outside the package
+// matching a requested tag against a release tag.
+func TagEqual(a, b string) bool { return tagEqual(a, b) }
+
 // tagEqual matches a required tag against a release tag, tolerating a leading "v" on
 // either side (e.g. "1.2.0" matches "v1.2.0").
 func tagEqual(a, b string) bool {

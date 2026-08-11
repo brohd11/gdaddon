@@ -9,9 +9,10 @@ import (
 )
 
 var uninstallCmd = &cobra.Command{
-	Use:   "uninstall",
-	Short: "Remove the gdaddon binary from all install locations",
-	Long: `Uninstall removes the gdaddon binary from every location 'install' uses
+	Use:     "uninstall",
+	Aliases: []string{"self-uninstall"},
+	Short:   "Remove the gdaddon binary from all install locations",
+	Long: `Uninstall removes the gdaddon binary from every location 'self-install' uses
 (system, user, and ~/.gdaddon/bin), wherever it is present. It touches only the
 binary — PATH entries and other ~/.gdaddon files are left alone. gdaddon does not
 elevate itself: if the system copy isn't removable, re-run this under sudo.`,
