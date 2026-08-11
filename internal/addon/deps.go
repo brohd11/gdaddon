@@ -124,6 +124,12 @@ func parseRepoShorthand(s string) (host, owner, repo, url string, ok bool) {
 //
 // Note this is manifest-presence only (not on-disk state); DepStatuses is the
 // install-aware form used by the Dependencies screen and the missing-deps warning.
+//
+// Matching is by canonical repo identity, falling back to the name the dep would be
+// added under. The fallback exists because a repo renamed upstream serves its release
+// assets under the *new* name, so the recorded entry's url parses to an id the declared
+// spec no longer matches — without it such a dep reads as perpetually missing and
+// "Add all" fails on it with a duplicate-repo error.
 func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, error) {
 	if a.Path == "" {
 		return nil, nil
@@ -134,6 +140,7 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 	}
 
 	byRepo := IndexByRepo(manifest)
+	byName := IndexByName(manifest)
 	suppressed := stringSet(a.SuppressDeps)
 
 	var missing []Dependency
@@ -142,6 +149,9 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 			continue
 		}
 		e, present := byRepo[d.RepoID]
+		if !present {
+			e, present = byName[DeriveName(d.RepoURL)]
+		}
 		switch {
 		case !present:
 			missing = append(missing, d)
@@ -240,6 +250,11 @@ func DepStatuses(a Addon, projectRoot string, statuses []Status) ([]DepStatus, e
 	for _, d := range deps {
 		ds := DepStatus{Dep: d, Suppressed: suppressed[d.RepoID]}
 		st, present := byRepo[d.RepoID]
+		if !present {
+			// Same upstream-rename fallback as MissingDeps, so the screen and the
+			// "Add all missing" set never disagree about what's present.
+			st, present = statusNamed(statuses, DeriveName(d.RepoURL))
+		}
 		switch {
 		case !present:
 			ds.State = DepMissing

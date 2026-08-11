@@ -57,12 +57,19 @@ On macOS, binaries downloaded **in a browser** may have quarantine status that n
 
 Alternatively, build with Go and this is not a problem.
 
-With your fresh binary, run `gdaddon self-install` from the download or build directory. This will launch an installer with a few options:
- - system - Can be directly accessed by name `gdaddon`, needs permissions
- - local - Can be directly accessed by name, if directory is in PATH, no permissions
- - ~/.gdaddon - Can not be directly accessed by name, but can be launched directly from the companion EditorPlugin, no permissions
+Put the binary wherever you want it on PATH, or let `install.sh` do it — `BIN_DIR`
+picks the destination:
 
-After install you can delete the download folder.
+```bash
+BIN_DIR=/usr/local/bin   curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh  # needs permissions
+BIN_DIR="$HOME/.gdaddon/bin" curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh  # where the EditorPlugin looks
+```
+
+The default is `~/.local/bin`. `~/.gdaddon/bin` isn't on PATH, but it's the location the
+companion EditorPlugin launches, and it needs no permissions.
+
+After install you can delete the download folder. `gdaddon update` keeps the binary
+current from then on, installing in place over wherever it lives.
 
 ---
 
@@ -113,8 +120,23 @@ isn't one — so this works in a fresh project. Other flags: `--asset` to pick a
 asset when a release ships several, `--name` to record it under a different name, and
 `--no-deps` to skip dependency resolution.
 
-Note this is not the same command as `gdaddon self-install`, which installs the gdaddon
-binary itself.
+### The full command line
+
+```bash
+gdaddon                       # the TUI (project root: the git toplevel, or name one)
+gdaddon install --all         # install everything the manifest lists, plus declared deps
+gdaddon install owner/repo    # install one addon, plus its declared deps
+gdaddon list                  # the manifest's install status
+gdaddon list --json           # the same, as JSON for tools to parse
+gdaddon list --updates        # also check each addon for a newer release (network)
+gdaddon update-addons         # update installed addons to their latest release
+gdaddon update                # update the gdaddon binary itself
+gdaddon repos -- git status   # run a command in every git repo under the project
+```
+
+`update` is the gdaddon binary; `update-addons` is the Godot addons. Everything else is
+project-scoped and takes the project root as an optional argument (`install` takes it as
+`--root`, since its argument is the repo).
 
 
 More docs can be found [here](doc/docs.md)

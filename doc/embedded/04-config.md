@@ -10,7 +10,7 @@ gdaddon keeps everything of its own under `~/.gdaddon`, created on first run.
   config/sources.yml   search sources and per-host VCS rules
   archive/             downloaded package zips
   plugins.yml          your global addon list
-  bin/                 the gdaddon binary, when installed here
+  bin/                 the gdaddon binary, when install.sh put it here
 ```
 
 Both config files are written once, with defaults, and then left alone — they're yours to
@@ -53,6 +53,14 @@ lose any edits you made to it, so copy them out first.
 
 ## Updating gdaddon itself
 
-Actions ▸ Update gdaddon checks for a newer release and installs it in place. gdaddon
-also checks on startup and drops a line in the status bar when one is waiting. A
-self-update doesn't change the process already running, so relaunch to pick it up.
+Actions ▸ Update gdaddon (or `gdaddon update` from a shell) checks for a newer release
+and installs it in place, over wherever this binary lives. gdaddon also checks on
+startup and drops a line in the status bar when one is waiting. A self-update doesn't
+change the process already running, so relaunch to pick it up.
+
+Placing the binary in the first place is `install.sh`'s job, not gdaddon's — including
+the `~/.gdaddon/bin` copy the Godot EditorPlugin launches:
+
+```
+BIN_DIR="$HOME/.gdaddon/bin" curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh
+```

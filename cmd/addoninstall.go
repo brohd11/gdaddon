@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	addonInstallAll    bool
 	addonInstallRoot   string
 	addonInstallAsset  string
 	addonInstallName   string
@@ -25,12 +26,15 @@ var (
 const manifestFileName = "addon_manifest.yml"
 
 var addonInstallCmd = &cobra.Command{
-	Use:   "install <owner/repo>[@tag]",
-	Short: "Install a Godot addon into this project and record it in the manifest",
-	Long: `Install downloads one addon and records it in the project's addon manifest,
-along with the dependencies that addon declares (and theirs, and so on).
+	Use:   "install [--all | <owner/repo>[@tag]]",
+	Short: "Install Godot addons into this project and record them in the manifest",
+	Long: `Install downloads addons into the project and records them in its addon
+manifest, along with the dependencies they declare (and theirs, and so on).
 
-The repo is named as owner/repo, or host/owner/repo for a host other than
+Name a repo to install one addon, or pass --all to install everything the
+manifest already lists.
+
+A repo is named as owner/repo, or host/owner/repo for a host other than
 github.com — the same shorthand a plugin.cfg 'deps' entry uses. An optional
 @tag pins a release; without one the latest non-prerelease is installed.
 
@@ -40,17 +44,18 @@ has its plugin folders mirrored under the project's addons/, and anything else
 is located by its plugin.cfg/version.cfg files. An addon can override this by
 declaring dir="addons/whatever" in its own config.
 
-The project root is the git toplevel unless --root says otherwise, and the
-manifest is found by walking down from it — one is created if there is none.
+The project root is the git toplevel unless --root says otherwise (this command
+takes it as a flag because its argument is the repo). Naming one addon creates
+a manifest if the project has none; --all requires one to already exist.
 
+  gdaddon install --all                            # the whole manifest, plus deps
+  gdaddon install --all --no-deps                  # the manifest's own entries only
   gdaddon install brohd11/my-addon
   gdaddon install brohd11/my-addon@v1.2.0
   gdaddon install codeberg.org/someone/their-addon
   gdaddon install brohd11/my-addon --clone         # git checkout, default branch
-  gdaddon install brohd11/my-addon@dev --clone     # git checkout, branch dev
-
-To install the gdaddon binary itself, see 'gdaddon self-install'.`,
-	Args:          cobra.ExactArgs(1),
+  gdaddon install brohd11/my-addon@dev --clone     # git checkout, branch dev`,
+	Args:          cobra.MaximumNArgs(1),
 	SilenceUsage:  true,
 	SilenceErrors: false,
 	RunE:          runAddonInstall,
@@ -58,15 +63,23 @@ To install the gdaddon binary itself, see 'gdaddon self-install'.`,
 
 func init() {
 	f := addonInstallCmd.Flags()
+	f.BoolVar(&addonInstallAll, "all", false, "install every addon the manifest lists, instead of one named repo")
 	f.StringVar(&addonInstallRoot, "root", "", "project root (default: the git toplevel, else the current directory)")
 	f.StringVar(&addonInstallAsset, "asset", "", "pick a release asset by name (substring) when the release ships several")
 	f.StringVar(&addonInstallName, "name", "", "manifest entry name (default: derived from the repo)")
 	f.BoolVar(&addonInstallClone, "clone", false, "install as a git checkout of a branch (@ref names the branch) instead of a release")
-	f.BoolVar(&addonInstallNoDeps, "no-deps", false, "don't install the dependencies the addon declares")
+	f.BoolVar(&addonInstallNoDeps, "no-deps", false, "don't install declared dependencies")
 	rootCmd.AddCommand(addonInstallCmd)
 }
 
 func runAddonInstall(cmd *cobra.Command, args []string) error {
+	if err := checkInstallArgs(args); err != nil {
+		return err
+	}
+	if addonInstallAll {
+		return runInstallAll()
+	}
+
 	spec, ok := addon.ParseRepoSpec(args[0])
 	if !ok {
 		return fmt.Errorf("could not parse %q: expected owner/repo, host/owner/repo, either with an optional @tag", args[0])
@@ -111,6 +124,66 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  dependency %s → %s\n", d.Name, d.Path)
 	}
 	return nil
+}
+
+// checkInstallArgs rejects the combinations that name no target, two targets, or a
+// single-addon option alongside --all. Cobra can express none of these: --all and the
+// positional are different kinds of thing, and --asset/--name/--clone are only
+// meaningful when there is one addon to describe.
+func checkInstallArgs(args []string) error {
+	switch {
+	case addonInstallAll && len(args) == 1:
+		return fmt.Errorf("--all installs the whole manifest; drop %q (or drop --all to install just it)", args[0])
+	case !addonInstallAll && len(args) == 0:
+		return fmt.Errorf("name a repo to install (owner/repo[@tag]), or pass --all for the whole manifest")
+	}
+	if !addonInstallAll {
+		return nil
+	}
+	for flag, set := range map[string]bool{
+		"--asset": addonInstallAsset != "",
+		"--name":  addonInstallName != "",
+		"--clone": addonInstallClone,
+	} {
+		if set {
+			return fmt.Errorf("%s describes a single addon and can't be combined with --all", flag)
+		}
+	}
+	return nil
+}
+
+// runInstallAll installs every entry the manifest lists. It resolves declared
+// dependencies by default (InstallAllDeps), matching the single-addon form — --no-deps
+// stops at the manifest's own entries, which is what the old --install flag did.
+//
+// Unlike the targeted install this needs a manifest to already exist: creating an empty
+// one only to install nothing out of it would be a confusing no-op.
+func runInstallAll() error {
+	projectRoot, err := resolveRootQuiet(addonInstallRoot)
+	if err != nil {
+		return err
+	}
+	manifest, err := discoverManifest(projectRoot)
+	if err != nil {
+		return err
+	}
+	statuses, err := addon.Inspect(manifest, projectRoot)
+	if err != nil {
+		return err
+	}
+	if len(statuses) == 0 {
+		fmt.Println("No addons found in YAML.")
+		return nil
+	}
+
+	ctx := context.Background()
+	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
+	if addonInstallNoDeps {
+		_, err = addon.InstallAll(ctx, manifest, statuses, projectRoot, report)
+		return err
+	}
+	_, err = addon.InstallAllDeps(ctx, manifest, projectRoot, report)
+	return err
 }
 
 // resolveEntry turns the parsed spec into the manifest entry to install: a clone entry

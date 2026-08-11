@@ -39,6 +39,18 @@ func resolveRoot(args []string) (projectRoot string, err error) {
 	return projectRoot, nil
 }
 
+// resolveRootArg resolves the project root from an optional positional [project_root]
+// argument, the shape the root command and the project-scoped subcommands share. It
+// never prompts (see resolveRootQuiet); `install` takes its root as --root instead,
+// because its positional slot holds the repo spec.
+func resolveRootArg(args []string) (string, error) {
+	override := ""
+	if len(args) == 1 {
+		override = args[0]
+	}
+	return resolveRootQuiet(override)
+}
+
 // resolveRootQuiet resolves the project root without ever prompting or exiting: the
 // explicit override when given, else the git toplevel, else the current directory.
 // Where resolveRoot asks the user what to do about a missing git root (fine before a

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -17,32 +15,24 @@ import (
 // (-X gdaddon/cmd.version=...); defaults to "dev" for a plain `go build`.
 var version = "dev"
 
-var (
-	installFlag        bool
-	listFlag           bool
-	updatePackagesFlag bool
-	jsonFlag           bool
-	checkUpdatesFlag   bool
-)
+// firstRun records whether ~/.gdaddon was absent when this process started, sampled in
+// bootstrap() before config.Ensure creates it. runRoot reads it to decide whether the
+// TUI opens the welcome popup.
+var firstRun bool
 
 var rootCmd = &cobra.Command{
-	Use:           "gdaddon [project_root]",
-	Short:         "Browse and install Godot addons (interactive TUI by default; --install for non-interactive)",
-	Version:       version,
-	Args:          cobra.MaximumNArgs(1),
-	SilenceUsage:  true, // don't dump usage on runtime (non-flag) errors
-	SilenceErrors: false,
-	RunE:          runRoot,
+	Use:               "gdaddon [project_root]",
+	Short:             "Browse and install Godot addons (interactive TUI by default)",
+	Version:           version,
+	Args:              cobra.MaximumNArgs(1),
+	SilenceUsage:      true, // don't dump usage on runtime (non-flag) errors
+	SilenceErrors:     false,
+	PersistentPreRunE: bootstrap,
+	RunE:              runRoot,
 }
 
 func init() {
 	rootCmd.SetVersionTemplate("gdaddon {{.Version}}\n")
-	rootCmd.Flags().BoolVar(&installFlag, "install", false, "install addons from the manifest non-interactively, then exit")
-	rootCmd.Flags().BoolVar(&listFlag, "list", false, "print the manifest's install status without installing, then exit")
-	rootCmd.Flags().BoolVar(&updatePackagesFlag, "update-packages", false, "update installed addons to their latest release non-interactively, then exit")
-	rootCmd.Flags().BoolVar(&jsonFlag, "json", false, "with --list, print status as JSON for machine consumption")
-	rootCmd.Flags().BoolVar(&checkUpdatesFlag, "check-updates", false, "with --list --json, also check each addon for a newer release (network)")
-	rootCmd.MarkFlagsMutuallyExclusive("install", "list", "update-packages")
 }
 
 func Execute() {
@@ -51,14 +41,17 @@ func Execute() {
 	}
 }
 
-// runRoot resolves the project root and either runs the non-interactive install
-// (--install) or launches the TUI (default). The manifest is discovered under the root
-// (by runInstall here, or the TUI context's scan).
-func runRoot(cmd *cobra.Command, args []string) error {
+// bootstrap prepares ~/.gdaddon before any command runs. It is persistent (and no
+// subcommand overrides it) so a non-interactive run gets the same config the TUI does —
+// the modes used to be root flags handled inside runRoot, and moving them to
+// subcommands would otherwise have skipped this.
+//
+// Everything it prints goes to stderr, keeping `gdaddon list --json`'s stdout pure JSON.
+func bootstrap(cmd *cobra.Command, args []string) error {
 	// Sampled before Ensure creates it: no ~/.gdaddon means the user has never run
 	// gdaddon, which is when the TUI offers the docs. (Ensure's created-paths return
 	// would also fire for someone who merely deleted one config file.)
-	firstRun := isFirstRun()
+	firstRun = isFirstRun()
 
 	// Dump the default config files on first run so they're the editable source
 	// of truth (config.yml: archive dir/theme; sources.yml: search/vcs rules). A
@@ -73,18 +66,15 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	if created, path, err := config.EnsureGitignore(); err == nil && created {
 		fmt.Fprintf(os.Stderr, "wrote %s\n", path)
 	}
+	return nil
+}
 
+// runRoot resolves the project root and launches the TUI. Every non-interactive mode is
+// a subcommand (install / list / update-addons / repos), so this path does one thing.
+func runRoot(cmd *cobra.Command, args []string) error {
 	projectRoot, err := resolveRoot(args)
 	if err != nil {
 		return err
-	}
-	switch {
-	case installFlag:
-		return runInstall(projectRoot)
-	case listFlag:
-		return runList(projectRoot)
-	case updatePackagesFlag:
-		return runUpdatePackages(projectRoot)
 	}
 	return tui.Run(projectRoot, version, firstRun)
 }
@@ -100,7 +90,9 @@ func isFirstRun() bool {
 }
 
 // discoverManifest finds the manifest under the project root, returning a helpful
-// error when there isn't one (shared by the non-interactive paths).
+// error when there isn't one. Shared by the read-only and whole-manifest paths, which
+// have nothing to do without one — unlike a targeted `install <owner/repo>`, which
+// bootstraps a manifest instead (findOrCreateManifest in addoninstall.go).
 func discoverManifest(projectRoot string) (string, error) {
 	manifest, err := addon.FindManifest(projectRoot)
 	if err != nil {
@@ -110,205 +102,4 @@ func discoverManifest(projectRoot string) (string, error) {
 		return "", fmt.Errorf("no addon_manifest.yml found under %s; create one in the TUI or add it manually", projectRoot)
 	}
 	return manifest, nil
-}
-
-// runList is the read-only path: discover the manifest, inspect it, and print each
-// addon's local state and version without touching the filesystem.
-func runList(projectRoot string) error {
-	manifest, err := discoverManifest(projectRoot)
-	if err != nil {
-		return err
-	}
-	statuses, err := addon.Inspect(manifest, projectRoot)
-	if err != nil {
-		return err
-	}
-	if jsonFlag {
-		return printListJSON(statuses, projectRoot)
-	}
-	if len(statuses) == 0 {
-		fmt.Println("No addons found in YAML.")
-		return nil
-	}
-	for _, s := range statuses {
-		ver := s.Addon.Version
-		if ver == "" {
-			ver = "-"
-		}
-		local := s.LocalVersion
-		if local == "" {
-			local = "-"
-		}
-		fmt.Printf("%-12s %-24s local=%s pinned=%s\n", s.State.String(), s.Addon.Name, local, ver)
-	}
-	return nil
-}
-
-// listEntryJSON is the stable, machine-parseable shape of one addon's status,
-// emitted by `--list --json` for the GDScript side to consume.
-type listEntryJSON struct {
-	Name          string `json:"name"`
-	State         string `json:"state"` // missing/installed/mismatch/unversioned/branch_changed/invalid
-	Kind          string `json:"kind"`  // package/clone/submodule
-	Path          string `json:"path"`  // manifest-relative
-	FullPath      string `json:"full_path"`
-	LocalVersion  string `json:"local_version"`
-	PinnedVersion string `json:"pinned_version"`
-	Tag           string `json:"tag"`
-	Commit        string `json:"commit"`      // pinned branch-package HEAD sha; "" for non-pinned entries
-	LiveBranch    string `json:"live_branch"` // git checkout's current branch; "" for non-git entries
-	URL           string `json:"url"`
-	Lock          bool   `json:"lock"`          // pinned: no update alerts, never bulk-updated
-	IsDependency  bool   `json:"is_dependency"` // auto-added because another plugin declares it as a dep
-	Orphan        bool   `json:"orphan"`        // an is_dependency entry nothing installed still requires
-	Update        string `json:"update"`        // unknown/current/available
-	LatestTag     string `json:"latest_tag"`
-	// Ahead/Behind are a git checkout's divergence from its upstream (0 for everything
-	// else). They're read locally from the remote-tracking refs, so they cost nothing —
-	// but for the same reason they're only as current as the last `git fetch` in that
-	// checkout; gdaddon never fetches on a --list.
-	Ahead       int           `json:"ahead"`
-	Behind      int           `json:"behind"`
-	MissingDeps []missDepJSON `json:"missing_deps"`
-}
-
-// missDepJSON is one unsatisfied dependency declared by an installed addon.
-type missDepJSON struct {
-	RepoID string `json:"repo_id"`
-	Tag    string `json:"tag"`
-	URL    string `json:"url"`
-}
-
-// kindLabel renders an addon.Kind as a readable label (the empty package kind
-// becomes "package").
-func kindLabel(k addon.Kind) string {
-	if k == addon.KindPackage {
-		return "package"
-	}
-	return string(k)
-}
-
-// printListJSON marshals the inspected statuses as a JSON array to stdout. It's
-// local-only unless --check-updates is set, in which case each addon's update state
-// is resolved over the network. The array is always valid JSON ("[]" when empty).
-func printListJSON(statuses []addon.Status, projectRoot string) error {
-	manifestAddons := make([]addon.Addon, 0, len(statuses))
-	for _, s := range statuses {
-		manifestAddons = append(manifestAddons, s.Addon)
-	}
-
-	// Resolve every addon's update state up front and concurrently (only when asked,
-	// since it's network-bound); the per-entry loop below reads the cached result.
-	var checks map[string]addon.UpdateInfo
-	if checkUpdatesFlag {
-		checks = addon.CheckUpdates(context.Background(), statuses)
-	}
-
-	// Orphan state is local (which is_dependency entries nothing installed still needs),
-	// computed once over the whole set and read per-entry below.
-	orphans := addon.OrphanDeps(statuses)
-
-	entries := make([]listEntryJSON, 0, len(statuses))
-	for _, s := range statuses {
-		deps := make([]missDepJSON, 0)
-		if missing, err := addon.MissingDeps(s.Addon, projectRoot, manifestAddons); err == nil {
-			for _, d := range missing {
-				deps = append(deps, missDepJSON{RepoID: d.RepoID, Tag: d.Tag, URL: d.RepoURL})
-			}
-		}
-
-		// Lock is a local fact (no network), so report "locked" regardless of
-		// --check-updates; otherwise resolve the update state over the network only when
-		// --check-updates is set.
-		update, latestTag := addon.UpdateUnknown.String(), ""
-		switch {
-		case s.Addon.Lock:
-			update = addon.UpdateLocked.String()
-		case checkUpdatesFlag:
-			info := checks[s.Addon.Name]
-			update, latestTag = info.State.String(), info.LatestTag
-		}
-
-		// Divergence only means anything for a checkout that's actually on disk; everything
-		// else reports 0/0. Local read, so it needs no --check-updates gate.
-		var sync addon.GitSync
-		if s.Addon.IsGitWorkdir() && s.Present() {
-			sync = addon.GitSyncStatus(s.FullPath)
-		}
-
-		entries = append(entries, listEntryJSON{
-			Name:          s.Addon.Name,
-			State:         s.State.String(),
-			Kind:          kindLabel(s.Addon.Kind),
-			Path:          s.Addon.Path,
-			FullPath:      s.FullPath,
-			LocalVersion:  s.LocalVersion,
-			PinnedVersion: s.Addon.Version,
-			Tag:           s.Addon.Tag,
-			Commit:        s.Addon.Commit,
-			LiveBranch:    s.LiveBranch,
-			URL:           s.Addon.URL,
-			Lock:          s.Addon.Lock,
-			IsDependency:  s.Addon.Dependency,
-			Orphan:        orphans[s.Addon.Name],
-			Update:        update,
-			LatestTag:     latestTag,
-			Ahead:         sync.Ahead,
-			Behind:        sync.Behind,
-			MissingDeps:   deps,
-		})
-	}
-
-	out, err := json.MarshalIndent(entries, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(out))
-	return nil
-}
-
-// runUpdatePackages is the non-interactive update path: discover the manifest, resolve an
-// update plan for every installed addon with a newer release, and install them,
-// reporting progress to stdout.
-func runUpdatePackages(projectRoot string) error {
-	manifest, err := discoverManifest(projectRoot)
-	if err != nil {
-		return err
-	}
-	plans, skipped, err := addon.ResolveUpdatePlans(context.Background(), manifest, projectRoot)
-	if err != nil {
-		return err
-	}
-	for _, s := range skipped {
-		fmt.Printf("Skipping %s (%s): multiple packages — update manually.\n", s.Name, s.Tag)
-	}
-	if len(plans) == 0 {
-		if len(skipped) == 0 {
-			fmt.Println("All installed addons are up to date.")
-		}
-		return nil
-	}
-	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
-	_, err = addon.UpdateAll(context.Background(), manifest, plans, projectRoot, report)
-	return err
-}
-
-// runInstall is the non-interactive path: discover the manifest under the project root,
-// inspect it, and install/update everything, reporting progress to stdout.
-func runInstall(projectRoot string) error {
-	manifest, err := discoverManifest(projectRoot)
-	if err != nil {
-		return err
-	}
-	statuses, err := addon.Inspect(manifest, projectRoot)
-	if err != nil {
-		return err
-	}
-	if len(statuses) == 0 {
-		fmt.Println("No addons found in YAML.")
-		return nil
-	}
-	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
-	_, err = addon.InstallAll(context.Background(), manifest, statuses, projectRoot, report)
-	return err
 }

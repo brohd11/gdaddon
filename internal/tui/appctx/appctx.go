@@ -13,12 +13,12 @@ import (
 
 	"gdaddon/internal/addon"
 	"gdaddon/internal/archive"
-	"gdaddon/internal/selfupdate"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repo"
 	"github.com/brohd11/gitstack/repoui"
+	"github.com/brohd11/goutil/selfupdate"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -241,24 +241,32 @@ func LockToggle(path, name string, cur bool) (newLock bool, verb string, err err
 	return newLock, verb, nil
 }
 
+// selfUpdateRepo is gdaddon's own GitHub repo slug, passed to the shared self-update library.
+const selfUpdateRepo = "brohd11/gdaddon"
+
 // SelfUpdateHooks builds the shared self-update flow's (bubblestack/components) hook
-// set for gdaddon: the app name, the running version, and the check/install mechanism
-// in internal/selfupdate (which wraps goutil's self-update library). The conversion
-// between goutil's selfupdate.Info and the flow's app-agnostic SelfUpdateInfo is a
-// direct one — the structs are field-identical by design. Built here so the startup
-// check below and the Actions ▸ Update gdaddon screen wire the same operations.
+// set for gdaddon: the app name, the running version, and goutil's self-update library
+// aimed at gdaddon's own repo and the running binary's directory. The conversion between
+// goutil's selfupdate.Info and the flow's app-agnostic SelfUpdateInfo is a direct one —
+// the structs are field-identical by design. Built here so the startup check below and
+// the Actions ▸ Update gdaddon screen wire the same operations.
+//
+// This mirrors the sibling apps (repoview/internal/app/update.go) exactly: the update
+// lands wherever the running binary lives, so install.sh owns binary placement and
+// gdaddon has no opinion about it.
 func SelfUpdateHooks(version string) components.SelfUpdateHooks {
 	return components.SelfUpdateHooks{
 		AppName: "gdaddon",
 		Check: func(ctx context.Context) (components.SelfUpdateInfo, error) {
-			info, err := selfupdate.Check(ctx, version)
+			info, err := selfupdate.Check(ctx, selfUpdateRepo, version)
 			return components.SelfUpdateInfo(info), err
 		},
 		Apply: func(ctx context.Context, info components.SelfUpdateInfo, report func(string, ...any)) error {
-			// The installed path goes unread: the flow's done handler reports the
-			// tag and relaunch hint, never the location.
-			_, err := selfupdate.Apply(ctx, selfupdate.Info(info), selfupdate.DefaultDest(), report)
-			return err
+			binDir, err := selfupdate.BinDir()
+			if err != nil {
+				return err
+			}
+			return selfupdate.Apply(ctx, selfUpdateRepo, selfupdate.Info(info), binDir, report)
 		},
 	}
 }

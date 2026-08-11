@@ -52,6 +52,17 @@ func IndexByRepo(entries []Addon) map[string]Addon {
 	return m
 }
 
+// IndexByName maps each entry's Name to the entry (later duplicates win). The by-name
+// companion to IndexByRepo, for the lookups that can't rely on repo identity alone —
+// see MissingDeps' upstream-rename fallback.
+func IndexByName(entries []Addon) map[string]Addon {
+	m := make(map[string]Addon, len(entries))
+	for _, e := range entries {
+		m[e.Name] = e
+	}
+	return m
+}
+
 // InGlobal reports whether this addon's repo is already present in a pre-loaded
 // global addon list (matched by source.RepoID so .git vs release-zip collapse).
 func (s Status) InGlobal(globals []Addon) bool {

@@ -12,20 +12,25 @@ gdaddon                # TUI; git root auto-detected, manifest found by walking 
 gdaddon /path/to/proj  # TUI with an explicit project root
 ```
 
-There are also non-interactive modes for scripting and CI (mutually exclusive):
+Everything else is a subcommand, each one non-interactive and safe for scripting and CI:
 
 ```bash
-gdaddon --list         # print the manifest's install status, then exit
-gdaddon --install      # install/update everything in the manifest, then exit
-gdaddon --update-packages  # update installed addons to their latest release, then exit
+gdaddon list                # print the manifest's install status, then exit
+gdaddon install --all       # install/update everything in the manifest, plus declared deps
+gdaddon install owner/repo  # install one addon, plus its declared deps
+gdaddon update-addons       # update installed addons to their latest release
+gdaddon update              # update the gdaddon binary itself
 ```
 
-`--list` also has a machine-parseable mode for tools (e.g. a Godot editor plugin)
+Note the split: `update` is about the gdaddon binary (as in every brohd11 app),
+`update-addons` is about the Godot addons in the project.
+
+`list` also has a machine-parseable mode for tools (e.g. a Godot editor plugin)
 that drive `gdaddon` and render their own UI from its output:
 
 ```bash
-gdaddon --list --json                  # print status as a JSON array, then exit
-gdaddon --list --json --check-updates   # also resolve each addon's update state (network)
+gdaddon list --json             # print status as a JSON array, then exit
+gdaddon list --json --updates   # also resolve each addon's update state (network)
 ```
 
 `--json` emits one object per manifest entry with stable, snake_case keys: `name`,
@@ -40,8 +45,8 @@ valid JSON — an empty manifest prints `[]`.
 
 Everything in `--json` is computed locally and instantly **except** `update`/
 `latest_tag`, which require a network round-trip per addon and so stay `"unknown"`
-unless you pass `--check-updates`. `--json`/`--check-updates` are modifiers on
-`--list` and are ignored without it.
+unless you pass `--updates`. `--updates` works with or without `--json` — the plain
+table grows an `update=` column.
 
 The TUI is organized into tabs, each one a domain: **Project**, **Global**,
 **Archive**, **Search**, and **Actions**. Everything below maps onto those tabs.
@@ -207,7 +212,7 @@ release version/tag).
 
 **Install/Update All** runs the whole manifest non-interactively: each entry is
 installed if missing, updated if its pin changed, and skipped if it's already at the
-target version. This is the same work as `gdaddon --install` from the command line — the
+target version. This is the same work as `gdaddon install --all` from the command line — the
 one-button "set up this project's addons" operation.
 
 ---
@@ -275,7 +280,7 @@ proceed.) Each updated entry is re-pinned in the manifest with the new url/path/
 tag. A single addon failing is reported and skipped so the rest still update.
 
 Update everything at once via **Actions → Install/Update All** (interactive, with a
-confirm listing the plan) or `gdaddon --update-packages` (non-interactive). Update checks run
+confirm listing the plan) or `gdaddon update-addons` (non-interactive). Update checks run
 concurrently across addons, so a slow host doesn't stall the whole scan.
 
 ---

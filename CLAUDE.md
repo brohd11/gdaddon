@@ -8,25 +8,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 browsing and installing Godot addons from a YAML manifest (`.zip` or `.git`, with
 version pinning via `plugin.cfg`).
 
-The root command is the addon installer itself (TUI by default, flags for
-non-interactive runs):
-- no args → launches the interactive TUI (browse, pick versions/branches/assets, install/update)
-- `--install` → runs the non-interactive install (inspect manifest + install/update all), then exits
-- `--list` → prints the manifest's install status without changing anything, then exits
-  (`--json` modifier emits a JSON array for tools to parse; `--check-updates` adds the
-  network-bound update state to that JSON — see Running)
-- `--update-packages` → updates installed addons to their latest release non-interactively, then exits
+The root command with no arguments launches the interactive TUI (browse, pick
+versions/branches/assets, install/update). Everything non-interactive is a subcommand —
+**one verb per job, no mode flags on root**:
 
-(`--install`/`--list`/`--update-packages` are mutually exclusive; `--json`/`--check-updates`
-are modifiers on `--list`, not modes.)
+| Command | File | Does |
+|---|---|---|
+| `install --all [--no-deps]` | `cmd/addoninstall.go` | install every manifest entry + declared deps |
+| `install <owner/repo>[@tag]` | `cmd/addoninstall.go` | install one addon + *its* dep closure |
+| `list [root] [--json] [--updates]` | `cmd/list.go` | print install status; JSON for tools |
+| `update-addons [root]` | `cmd/updateaddons.go` | update installed addons to their latest release |
+| `update [--check]` | `cmd/update.go` | update the **gdaddon binary** (goutil's shared command) |
+| `repos [flags] -- <cmd>` | `cmd/repos.go` | run a shell command in every nested git repo |
 
-The subcommands split into two unrelated jobs, distinguished by the `self-` prefix.
-**Godot addons:** `install <owner/repo>[@tag]` installs one addon plus the dependency
-closure it declares (`cmd/addoninstall.go` — see Installing one addon below).
-**The gdaddon binary itself:** `self-install`, `self-update` (alias `update`),
-`uninstall` (alias `self-uninstall`). Plus `repos`, a standalone CLI utility (no TUI)
-for running a shell command across every git checkout nested under a directory — handy
-for the submodule/addon repos a Godot project accumulates (see `cmd/repos.go`).
+The `update` / `update-addons` split is the one distinction worth knowing: `update` is
+the binary (identical in every brohd11 app), `update-addons` is the Godot addons.
+
+This surface replaced an earlier one where the modes were root flags (`--install`,
+`--list --json --check-updates`, `--update-packages`) *and* `install` meant an addon
+while `self-install`/`uninstall` meant the binary. **Do not reintroduce a root mode
+flag.** Two consequences of that cut are load-bearing:
+
+- **`gdaddon` no longer installs its own binary anywhere.** `self-install`/`uninstall`,
+  `internal/installer` and `internal/selfupdate` are all gone; `install.sh` (with
+  `BIN_DIR`) owns placement, exactly as in gote/gossh/golaunch/repoview. Self-update
+  writes next to the running binary via goutil's `BinDir()`.
+- **The Godot EditorPlugin's contract changed** and needs a matching release: it used to
+  call `gdaddon --list --json [--check-updates]` and parse `self-update --check --json`.
+  Those are now `gdaddon list --json --updates` (same 18-key shape) and `gdaddon update
+  --check` (three human lines — the shared command has no `--json`).
 
 
 ## Build commands
@@ -59,18 +69,24 @@ tagged module versions.
 ```bash
 gdaddon                # TUI; git root auto-detected, manifest found by walking from it
 gdaddon /godot/proj    # TUI with an explicit project root (manifest still discovered by the scan)
-gdaddon --install      # non-interactive install of everything in the discovered manifest
-gdaddon --list         # print the manifest's install status (state/local/pinned), then exit
-gdaddon --list --json  # same, as a JSON array for machine consumption (e.g. a Godot plugin UI)
-gdaddon --list --json --check-updates  # JSON + per-addon update state (network)
-gdaddon --update-packages     # non-interactive update of installed addons to their latest release
+gdaddon install --all         # non-interactive install of the discovered manifest + declared deps
+gdaddon install --all --no-deps  # the manifest's own entries only (what --install used to do)
 gdaddon install owner/repo    # install ONE addon (+ the deps it declares) into this project
-gdaddon update                # update gdaddon itself to the latest release (see below)
-gdaddon update --check --json # report {current,latest_tag,available} for the Godot plugin
-gdaddon self-install          # copy the gdaddon binary somewhere and wire up PATH
+gdaddon list                  # print the manifest's install status (state/local/pinned), then exit
+gdaddon list --json           # same, as a JSON array for machine consumption (e.g. a Godot plugin UI)
+gdaddon list --json --updates # JSON + per-addon update state (network)
+gdaddon list --updates        # the plain table + an update= column (same network check)
+gdaddon update-addons         # non-interactive update of installed addons to their latest release
+gdaddon update                # update the gdaddon BINARY to the latest release (see below)
+gdaddon update --check        # report without installing
 ```
 
-`--list --json` (`printListJSON` in `cmd/root.go`) emits one `listEntryJSON` object per
+Every project-scoped subcommand takes the project root as an optional positional
+argument, matching the root command; `install` takes it as `--root` because its
+positional slot holds the repo spec (`resolveRootArg` / `resolveRootQuiet` in
+`cmd/paths.go` — never the prompting `resolveRoot`, which is the TUI path's).
+
+`list --json` (`printListJSON` in `cmd/list.go`) emits one `listEntryJSON` object per
 manifest entry with stable snake_case keys: `name`, `state`
 (`missing`/`installed`/`mismatch`/`unversioned`/`branch_changed`/`invalid`), `kind`
 (`package`/`clone`/`submodule`), `path`, `full_path`, `local_version`, `pinned_version`,
@@ -84,20 +100,29 @@ manifest entry with stable snake_case keys: `name`, `state`
 `missing_deps`
 (array of `{repo_id, tag, url}`). Always valid JSON (`[]` when empty). Everything is
 local/instant except `update`/`latest_tag`, which stay `"unknown"`/`""` unless
-`--check-updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`;
-a locked entry reports `update: "locked"` with or without the check).
-`ahead`/`behind` are local too — they read the remote-tracking refs git already has — so
-they're only as current as that checkout's last `git fetch`; a `--list` never fetches.
+`--updates` is passed (then each entry calls the network-bound `addon.CheckUpdate`;
+a locked entry reports `update: "locked"` with or without the check). `--updates` is not
+a `--json` modifier — it works in both output modes, and `printListTable` grows an
+`update=` column from the same `resolveUpdateStates` call, so the flag is never silently
+ignored. `ahead`/`behind` are local too — they read the remote-tracking refs git already
+has — so they're only as current as that checkout's last `git fetch`; a `list` never fetches.
 `missing_deps` comes from `addon.MissingDeps` (local; deps absent from the manifest,
 excluding any the declaring entry's `suppress_deps` ignores). `is_dependency`/`orphan` are
 local too: `orphan` comes from `addon.OrphanDeps` (the union of every non-suppressed dep
 declared by a *present* plugin — an `is_dependency` entry outside that union is orphaned).
 
-### Installing one addon (`gdaddon install <owner/repo>[@tag]`)
+### `gdaddon install` — both forms
 
-The targeted counterpart to `--install`: record and install **one** addon plus the
-dependency closure *it* declares, touching nothing else in the manifest.
-`cmd/addoninstall.go` is thin wiring; the reusable flow is `addon.InstallOne` /
+`--all` is the whole manifest (`addon.InstallAllDeps`, or `InstallAll` with `--no-deps`);
+a repo spec is the targeted form: record and install **one** addon plus the
+dependency closure *it* declares, touching nothing else in the manifest. `checkInstallArgs`
+rejects the combinations cobra can't express — naming neither target, naming both, or
+pairing `--asset`/`--name`/`--clone` (single-addon options) with `--all`. Note the two
+forms differ on a missing manifest: the targeted form creates one (`findOrCreateManifest`),
+`--all` errors via `discoverManifest`, since bootstrapping an empty manifest to install
+nothing out of it is a confusing no-op.
+
+The targeted form's `cmd/addoninstall.go` is thin wiring; the reusable flow is `addon.InstallOne` /
 `addon.InstallDepsFor` in `internal/addon/install_one.go` (no cobra, no bubbletea — a
 per-addon TUI action can call them unchanged).
 
@@ -133,10 +158,17 @@ and a cycle terminates) and depth-bounded by `maxDepRounds`. Per dep, `ensureDep
 skips it (installed and satisfying, by the same rule as `MissingDeps`/`DepStatuses`:
 tagless → presence suffices, uncomparable tags → trusted), adds it via `AddDepEntry`
 (carrying `is_dependency: true`), or re-pins a verifiably-older entry via `UpsertEntry`.
-It then looks the entry up **by name, not by repo id** — a repo renamed upstream serves
-release assets under its new name, so the written url's `RepoID` no longer matches the
-declared spec's; the same reason `ensureDep` falls back to a name lookup when the
-by-repo lookup misses, and marks both identities as seen.
+It then looks the entry up **by name, not by repo id**, and marks both identities as seen.
+
+**The upstream-rename fallback** is a rule the whole dependency system shares, so keep the
+three sites in step: `ensureDep`, `MissingDeps` (via `IndexByName`) and `DepStatuses` (via
+`statusNamed`) all match a dep by `source.RepoID` *and then* by `DeriveName(d.RepoURL)`.
+The reason: a repo renamed upstream keeps serving release assets under its **new** name, so
+the manifest records an id the declared `deps` spec no longer parses to. Without the
+fallback such a dep reads as perpetually missing — the TUI nags forever, `list --json`
+reports it in `missing_deps`, and "Add all" / `install --all` fail on it with
+`already added from <new-id> (as "<name>")`. `brohd11/Godot-TreeSitter-Wrapper` →
+`godot-tree-sitter-gd` is a live instance of this in the wild.
 
 `addon.ErrNameTaken` is the sentinel `AddEntry` wraps on a key collision with a
 *different* repo's entry, so the CLI can suggest `--name` without matching message text.
@@ -244,11 +276,13 @@ in fetch.go); an unrecognized level is assumed to be the author's and kept.
 ```
 main.go              — calls cmd.Execute()
 cmd/
-  root.go            — the root `gdaddon` cobra command: TUI by default, --install for non-interactive
-  addoninstall.go    — the `install <owner/repo>[@tag]` subcommand: install ONE addon + its declared dep closure (thin wiring over addon.InstallOne)
-  selfinstall.go     — the `self-install` subcommand: copy the gdaddon binary somewhere (internal/installer). Named for the `self-` prefix that separates binary commands from addon ones
+  root.go            — the root `gdaddon` cobra command (TUI only; every mode is a subcommand now), plus the shared discoverManifest and the PersistentPreRunE `bootstrap` that ensures ~/.gdaddon for EVERY command
+  addoninstall.go    — the `install` subcommand, both forms: --all (whole manifest) and <owner/repo>[@tag] (one addon + its declared dep closure); thin wiring over addon.InstallAllDeps / addon.InstallOne
+  list.go            — the `list` subcommand: the status table, the listEntryJSON wire shape, and printListJSON
+  updateaddons.go    — the `update-addons` subcommand: ResolveUpdatePlans + UpdateAll over the manifest
+  update.go          — the `update` subcommand: one line registering goutil's shared NewUpdateCommand. Updates the BINARY, not addons
   repos.go           — the `repos` subcommand: run a shell command in every nested git repo (uses addon.FindGitRepos / addon.HasUncommittedChanges)
-  paths.go           — resolveRoot (project-root arg / git-root detection, may prompt on stdin — TUI path only) and resolveRootQuiet (never prompts or exits — the subcommand path). The manifest is discovered by the TUI context scan (appctx.Ctx.Scan) or by findOrCreateManifest in addoninstall.go
+  paths.go           — resolveRoot (project-root arg / git-root detection, may prompt on stdin — TUI path only), resolveRootQuiet (never prompts or exits — the subcommand path) and resolveRootArg (the optional positional [project_root] the subcommands share). The manifest is discovered by the TUI context scan (appctx.Ctx.Scan), discoverManifest, or findOrCreateManifest in addoninstall.go
 internal/
   addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/CurrentBranch/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, isGitCheckout, normalizeGitRemote) that classify a plugin folder's `.git`
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
@@ -258,8 +292,6 @@ internal/
   gitcred/           — git credential/token resolution backing restrule's authenticated HTTP GETs (host APIs, archive downloads); clones don't use it — they run with GIT_TERMINAL_PROMPT=0 against the user's own git credentials
   search/            — addon search (Godot Asset Store + configured sources); backs the Search tab
   store/             — Asset Store URL detection/backend used by search/install
-  installer/         — `gdaddon self-install`/`uninstall`: copy the running binary to system/user/home, PATH wiring (InstallFrom for an explicit source, CurrentDest for the running binary's location). The copy is a temp-file-plus-rename, so the destination may be the running binary — see Installing the binary
-  selfupdate/        — `gdaddon update`: resolve the latest release tag off the repo's /releases/latest redirect and install it by running the repo's own install.sh (BIN_DIR/VERSION env, --no-modify-path)
   quarantine/        — Actions ▸ Dequarantine Addons: `Clear` walks <root>/addons removing com.apple.quarantine (x/sys/unix.Lremovexattr) and returns counts. Hidden dirs are pruned — an addon's .git is thousands of mode-0444 objects that can't own the attribute and only answer EACCES. darwin-only; `quarantine_other.go` is the non-macOS stub
   tui/               — bubbletea front-end (see internal/tui/doc.go)
     tui.go           — thin wiring: Run builds Shared chrome + the tab set, hands them to the router
@@ -337,7 +369,7 @@ file) and passed to `tui.Run(projectRoot, version, firstRun)`. The popup rides
 `bubblestack.Config.Init` next to `appctx.SelfUpdateCheckCmd` — `docs.WelcomeCmd` returns
 a `core.Push` as a message, which the router applies. Enter `Replace`s the popup with the
 docs index (so esc from the index lands on the tab root, not back on the popup); esc
-dismisses. Non-interactive runs (`--install`/`--list`/`--update-packages`) return before `tui.Run`,
+dismisses. The subcommands never reach `tui.Run`,
 so their output is untouched.
 
 Key packages/functions:
@@ -399,61 +431,44 @@ Key packages/functions:
 (target tracks `build/`, so it follows rebuilds). Update `GO_DIR` inside the script if
 your repo path differs.
 
-**Release (general users):** the install logic lives in the binary itself —
-`gdaddon self-install` (`cmd/selfinstall.go` + `internal/installer/`). It copies the running
-binary (`os.Executable()`) to a destination chosen via a small bubbletea menu (reusing
-the bubblestack stack), or non-interactively with `--dest system|user|home`. The three
-destinations: **system** (`/usr/local/bin` / `%ProgramFiles%\gdaddon`, on PATH, needs a
-writable dir), **user** (`~/.local/bin` / `%LOCALAPPDATA%\Programs\gdaddon`, sets up PATH —
-registry on Windows, profile guidance on unix), or **gdaddon home** (`~/.gdaddon/bin`, no
-PATH change — the permission-free target a Godot plugin launches via
-`~/.gdaddon/bin/gdaddon` (`+.exe` on Windows) after probing PATH for a global `gdaddon`).
-The TUI only *selects*; the copy/PATH work runs after it exits (bubbletea owns the
-terminal). Per-OS bits are build-tagged in `internal/installer/path_unix.go` /
-`path_windows.go`.
+**Release (general users):** `install.sh` places the binary and nothing else does —
+`gdaddon` has no self-install command, matching gote/gossh/golaunch/repoview. It's the
+same script the README tells users to curl, and `BIN_DIR` picks the destination
+(default `~/.local/bin`). The `~/.gdaddon/bin` copy the Godot EditorPlugin launches via
+`~/.gdaddon/bin/gdaddon` (`+.exe` on Windows, after probing PATH for a global `gdaddon`)
+is just `BIN_DIR="$HOME/.gdaddon/bin"`, and `install.sh`'s post-install note says so.
 
-**gdaddon never elevates itself.** A system install into a root-owned `/usr/local/bin`
-reports the permission error with the fix (`sudo gdaddon self-install --dest system`, or
-`--dest user`) rather than shelling out to sudo behind the user's back.
-
-`copyExe` (`internal/installer/installer.go`) never writes *into* the destination: it
-writes a temp file beside it and renames over the target. That's what lets self-update
-replace the binary it is running from — linux returns ETXTBSY ("text file busy") for a
-write to an executing binary, while a rename merely swaps the directory entry and leaves
-the running process on its old inode. A symlinked destination (the dev install) is
-resolved first so the symlink survives, and when the rename itself is refused (windows
-locks a running `.exe`) the old binary is renamed aside to `gdaddon.exe.old` and cleaned
-up on the next install.
-
-`gdaddon uninstall` (alias `self-uninstall`; `installer.Uninstall`) removes the binary from all three locations
-wherever present — binaries only, leaving PATH entries and other `~/.gdaddon` files alone
-(the running binary is skipped on Windows; an unwritable system copy reports a permission
-error to re-run under sudo).
+This used to be a `self-install` command backed by `internal/installer` — a Dest enum,
+a temp-file-plus-rename copy, and per-OS PATH wiring (Windows registry, unix profile
+guidance). All of it is deleted. **Don't bring it back**: placing a binary is a shell
+script's job, and having gdaddon do it is what made `install` vs `self-install` a
+confusing pair in the first place.
 
 ### Self-update
 
-`gdaddon update` (alias `gdaddon self-update`; `cmd/update.go` + `internal/selfupdate/`,
-which delegates the mechanism to `github.com/brohd11/goutil/selfupdate`) checks gdaddon's own
-repo (github.com/brohd11/gdaddon) for a newer release than the running binary's injected
-`version` by resolving the latest tag off the `/releases/latest` redirect (no GitHub API,
-no rate limit) and comparing semvers locally — a `dev` build is never comparable, hence
-never offered an update. When a newer release exists it downloads the repo's own
-`install.sh` and runs it with `BIN_DIR` set to the destination's directory
-(`installer.Dest.Dir`) and `VERSION` pinned to the checked tag, `--no-modify-path` so PATH
-is never touched — install.sh stages in a temp dir and `mv -f`s into place, so overwriting
-the running binary is safe. The default destination is `selfupdate.DefaultDest()` — the
-managed location the running binary occupies (`installer.CurrentDest`), or `~/.gdaddon/bin`
-otherwise.
-`--check [--json]` only reports (`{current,latest_tag,available}` for the Godot plugin to
-parse, like `--list --json`); `--interactive` opens the same dest picker as `self-install`. The
-check also runs automatically on TUI startup (wired as `bubblestack.Config.Init` →
-`appctx.SelfUpdateCheckCmd`, a generic app-level startup hook in `bubblestack/core`'s Router)
-and writes an "update available" line to the status/log; Actions ▸ Update gdaddon runs the
-loading → confirm → task flow in-TUI. Both ends share the flow in
-`bubblestack/components/selfupdate.go` — `internal/tui/tabs/actions/selfupdate.go` and
-`appctx.SelfUpdateHooks` are just the gdaddon wiring (app name, version, the
-internal/selfupdate mechanism). A self-update doesn't change the already-running process
-— relaunch to use the new binary.
+`gdaddon update` is `selfupdate.NewUpdateCommand("brohd11/gdaddon", "gdaddon", version)`
+from `github.com/brohd11/goutil/selfupdate` — the identical one-liner every sibling app
+registers, so `cmd/update.go` holds no gdaddon-specific logic. It resolves the latest tag
+off the `/releases/latest` redirect (no GitHub API, no rate limit) and compares semvers
+locally — a `dev` build is never comparable, hence never offered an update. When a newer
+release exists it downloads the repo's own `install.sh` and runs it with `BIN_DIR` set to
+`goutil.BinDir()` (the running binary's own directory, **symlinks deliberately
+unresolved**) and `VERSION` pinned to the checked tag, `--no-modify-path` so PATH is never
+touched. install.sh stages in a temp dir and `mv -f`s into place, so overwriting the
+running binary is safe. `--check` reports without installing.
+
+The TUI side is `appctx.SelfUpdateHooks`, which calls the same goutil `Check`/`Apply`/
+`BinDir` directly — a copy of `repoview/internal/app/update.go`, which is the file to
+match if this ever needs changing. It feeds both the startup check (wired as
+`bubblestack.Config.Init` → `appctx.SelfUpdateCheckCmd`, a generic app-level hook in
+`bubblestack/core`'s Router), which writes an "update available" line to the status/log,
+and Actions ▸ Update gdaddon, which runs the loading → confirm → task flow in-TUI. Both
+ends share `bubblestack/components/selfupdate.go`; only the hooks are gdaddon's. A
+self-update doesn't change the already-running process — relaunch to use the new binary.
+
+Note for anyone updating the companion Godot plugin: the old `gdaddon self-update --check
+--json` contract is **gone** (the shared command has no `--json` and no `self-update`
+alias). `gdaddon update --check` prints three human lines.
 
 `make package` zips each platform build into `dist/` (`zip -j`, binary only). Caveat:
 macOS Gatekeeper warns on the unsigned binary first run (right-click → Open, or clear

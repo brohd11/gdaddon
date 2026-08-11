@@ -26,7 +26,7 @@ Run '$BINARY' in a Godot project to manage its addons.
 Later updates: '$BINARY update'.
 
 To also place a copy where the Godot EditorPlugin looks for it (~/.gdaddon/bin):
-  $BINARY install --dest home
+  BIN_DIR="\$HOME/.gdaddon/bin" curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh
 EOF
 }
 # ---- end config ----
