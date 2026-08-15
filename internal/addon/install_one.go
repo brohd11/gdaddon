@@ -195,13 +195,14 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, baseDir s
 		report("  -> Could not read the manifest for %s: %v", d.RepoID, err)
 		return Addon{}, nil, false
 	}
-	// entryName is what this dependency is (or would be) recorded as. It's the fallback
-	// identity because a repo renamed upstream records its *new* id — the release asset
-	// url's — which no longer matches the id the declared spec parses to.
+	// entryName is what this dependency is (or would be) recorded as — the same identity
+	// depIndex falls back to when the repo was renamed upstream.
 	entryName := DeriveName(d.RepoURL)
-	st, present := statusesByRepo(statuses)[d.RepoID]
-	if !present {
-		st, present = statusNamed(statuses, entryName)
+	var st Status
+	i := newDepIndex(addonsOf(statuses)).find(d)
+	present := i >= 0
+	if present {
+		st = statuses[i]
 	}
 
 	switch {
@@ -272,28 +273,6 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, baseDir s
 	}
 	entry.Path, entry.Version = res.Path, res.Version
 	return entry, &outcome, true
-}
-
-// depSatisfied reports whether an entry on installedTag meets the dependency, using
-// the same rule as MissingDeps/DepStatuses: a tagless dep is satisfied by presence,
-// and a tag pair that can't be compared (a date stamp, a branch entry with no tag) is
-// trusted rather than treated as a miss.
-func depSatisfied(d Dependency, installedTag string) bool {
-	if d.Tag == "" {
-		return true
-	}
-	sat, verified := d.SatisfiedByTag(installedTag)
-	return !verified || sat
-}
-
-// statusNamed returns the inspected status of the entry with the given name.
-func statusNamed(statuses []Status, name string) (Status, bool) {
-	for _, s := range statuses {
-		if s.Addon.Name == name {
-			return s, true
-		}
-	}
-	return Status{}, false
 }
 
 // entryNamed returns the manifest entry with the given name.

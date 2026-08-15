@@ -160,15 +160,24 @@ tagless → presence suffices, uncomparable tags → trusted), adds it via `AddD
 (carrying `is_dependency: true`), or re-pins a verifiably-older entry via `UpsertEntry`.
 It then looks the entry up **by name, not by repo id**, and marks both identities as seen.
 
-**The upstream-rename fallback** is a rule the whole dependency system shares, so keep the
-three sites in step: `ensureDep`, `MissingDeps` (via `IndexByName`) and `DepStatuses` (via
-`statusNamed`) all match a dep by `source.RepoID` *and then* by `DeriveName(d.RepoURL)`.
-The reason: a repo renamed upstream keeps serving release assets under its **new** name, so
-the manifest records an id the declared `deps` spec no longer parses to. Without the
-fallback such a dep reads as perpetually missing — the TUI nags forever, `list --json`
-reports it in `missing_deps`, and "Add all" / `install --all` fail on it with
+**The upstream-rename fallback** is a rule the whole dependency system shares, and it now
+lives in exactly one place: `depIndex` in `internal/addon/depmatch.go`, which matches a dep
+by `source.RepoID` *and then* by `DeriveName(d.RepoURL)`. Every reader — `MissingDeps`,
+`DepStatuses`, `ensureDep`, and `PlanDeps` (which backs the TUI's "Get deps") — looks a dep
+up through it, so the rule applies by construction rather than by each site remembering to
+write it. The reason it exists: a repo renamed upstream keeps serving release assets under
+its **new** name, so the manifest records an id the declared `deps` spec no longer parses
+to. Without the fallback such a dep reads as perpetually missing — the TUI nags forever,
+`list --json` reports it in `missing_deps`, and "Add all" / `install --all` fail on it with
 `already added from <new-id> (as "<name>")`. `brohd11/Godot-TreeSitter-Wrapper` →
-`godot-tree-sitter-gd` is a live instance of this in the wild.
+`godot-tree-sitter-gd` is a live instance of this in the wild. This used to be three
+hand-synced sites plus a fourth (the TUI's dep resolver) that was missing the fallback
+entirely, which is exactly the failure above; `TestPlanDepsRenamedUpstream` pins it.
+
+`addon.PlanDeps(a, projectRoot, manifest)` is the shared classification: each declared dep
+is `Add` (no entry), `Satisfied`, or `Stale` (entry present but verifiably behind), with
+suppressed deps omitted. It is local-only — resolving an addable dep to a release asset is
+a network call and stays with the caller (`ResolveDepAsset`).
 
 `addon.ErrNameTaken` is the sentinel `AddEntry` wraps on a key collision with a
 *different* repo's entry, so the CLI can suggest `--name` without matching message text.

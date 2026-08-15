@@ -2,7 +2,6 @@ package addon
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"gdaddon/internal/source"
@@ -125,22 +124,19 @@ func parseRepoShorthand(s string) (host, owner, repo, url string, ok bool) {
 // Note this is manifest-presence only (not on-disk state); DepStatuses is the
 // install-aware form used by the Dependencies screen and the missing-deps warning.
 //
-// Matching is by canonical repo identity, falling back to the name the dep would be
-// added under. The fallback exists because a repo renamed upstream serves its release
-// assets under the *new* name, so the recorded entry's url parses to an id the declared
-// spec no longer matches — without it such a dep reads as perpetually missing and
-// "Add all" fails on it with a duplicate-repo error.
+// It is the "needs recording" half of PlanDeps' classification — no entry at all, or an
+// entry verifiably behind — but it walks the deps itself rather than concatenating that
+// function's buckets, because the result is returned in *declaration* order and
+// `list --json` publishes it as an ordered array. Matching and the tag rule are still the
+// shared ones (depIndex, depSatisfied — see depmatch.go), which is what keeps this in step
+// with the other readers; only the grouping differs.
 func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, error) {
-	if a.Path == "" {
-		return nil, nil
-	}
-	deps, err := Dependencies(filepath.Join(projectRoot, a.Path))
+	deps, err := declaredDeps(a, projectRoot)
 	if err != nil || len(deps) == 0 {
 		return nil, err
 	}
 
-	byRepo := IndexByRepo(manifest)
-	byName := IndexByName(manifest)
+	ix := newDepIndex(manifest)
 	suppressed := stringSet(a.SuppressDeps)
 
 	var missing []Dependency
@@ -148,19 +144,8 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 		if suppressed[d.RepoID] {
 			continue
 		}
-		e, present := byRepo[d.RepoID]
-		if !present {
-			e, present = byName[DeriveName(d.RepoURL)]
-		}
-		switch {
-		case !present:
+		if i := ix.find(d); i < 0 || !depSatisfied(d, manifest[i].Tag) {
 			missing = append(missing, d)
-		case d.Tag == "":
-			// tagless: presence satisfies it.
-		default:
-			if sat, verified := d.SatisfiedByTag(e.Tag); verified && !sat {
-				missing = append(missing, d)
-			}
 		}
 	}
 	return missing, nil
@@ -234,60 +219,39 @@ type DepStatus struct {
 // unlike MissingDeps which is manifest-presence only). It backs the Dependencies screen
 // and — via the "needs attention" subset (unsuppressed && not DepInstalled) — the
 // missing-deps warning. Local-only. A not-installed addon declares nothing.
+// Matching is depIndex's (see depmatch.go) — the same lookup MissingDeps uses, so the
+// screen and the "Add all missing" set can never disagree about what is present — over the
+// statuses' own entries, so a hit indexes straight back into statuses for the on-disk half.
 func DepStatuses(a Addon, projectRoot string, statuses []Status) ([]DepStatus, error) {
-	if a.Path == "" {
-		return nil, nil
-	}
-	deps, err := Dependencies(filepath.Join(projectRoot, a.Path))
+	deps, err := declaredDeps(a, projectRoot)
 	if err != nil || len(deps) == 0 {
 		return nil, err
 	}
 
-	byRepo := statusesByRepo(statuses)
+	ix := newDepIndex(addonsOf(statuses))
 	suppressed := stringSet(a.SuppressDeps)
 
 	out := make([]DepStatus, 0, len(deps))
 	for _, d := range deps {
 		ds := DepStatus{Dep: d, Suppressed: suppressed[d.RepoID]}
-		st, present := byRepo[d.RepoID]
-		if !present {
-			// Same upstream-rename fallback as MissingDeps, so the screen and the
-			// "Add all missing" set never disagree about what's present.
-			st, present = statusNamed(statuses, DeriveName(d.RepoURL))
-		}
+		i := ix.find(d)
 		switch {
-		case !present:
+		case i < 0:
 			ds.State = DepMissing
-		case !st.Present():
-			ds.LocalTag = st.Addon.Tag
+		case !statuses[i].Present():
+			ds.LocalTag = statuses[i].Addon.Tag
 			ds.State = DepNotInstalled
 		default:
-			ds.LocalTag = st.Addon.Tag
-			if d.Tag == "" {
-				ds.State = DepInstalled // tagless: presence satisfies it
-			} else if sat, verified := d.SatisfiedByTag(st.Addon.Tag); verified && !sat {
-				ds.State = DepOutdated
+			ds.LocalTag = statuses[i].Addon.Tag
+			if depSatisfied(d, statuses[i].Addon.Tag) {
+				ds.State = DepInstalled // satisfied, tagless, or unverifiable tag → trusted
 			} else {
-				ds.State = DepInstalled // satisfied, or unverifiable tag → trusted
+				ds.State = DepOutdated
 			}
 		}
 		out = append(out, ds)
 	}
 	return out, nil
-}
-
-// statusesByRepo indexes inspected statuses by canonical repo identity (source.RepoID
-// of the entry url); entries with an unparseable url are skipped, later duplicates win.
-func statusesByRepo(statuses []Status) map[string]Status {
-	byRepo := make(map[string]Status, len(statuses))
-	for _, s := range statuses {
-		id, err := source.RepoID(s.Addon.URL)
-		if err != nil {
-			continue
-		}
-		byRepo[id] = s
-	}
-	return byRepo
 }
 
 // stringSet builds a lookup set from a slice.

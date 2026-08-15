@@ -265,7 +265,7 @@ func resolveOneDepCmd(manifestPath string, d addon.Dependency) func(context.Cont
 // Install All performs the actual install afterward.
 func newGetDepsLoading(st addon.Status, sh *core.Shared) *components.LoadingScreen {
 	c := appctx.Of(sh)
-	manifestPath, addonDir, name := c.ManifestPath, st.FullPath, st.Addon.Name
+	manifestPath, name := c.ManifestPath, st.Addon.Name
 
 	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
 		plan, ok := msg.(depPlan)
@@ -281,49 +281,57 @@ func newGetDepsLoading(st addon.Status, sh *core.Shared) *components.LoadingScre
 		}
 		return core.Replace(newGetDepsConfirm(name, manifestPath, plan))
 	}
-	return components.NewLoadingScreen(name, "resolving dependencies…", resolveDepsCmd(manifestPath, addonDir, name), onResult)
+	return components.NewLoadingScreen(name, "resolving dependencies…",
+		resolveDepsCmd(manifestPath, c.ProjectRoot, st.Addon), onResult)
 }
 
-func resolveDepsCmd(manifestPath, addonDir, name string) func(context.Context) tea.Cmd {
+// resolveDepsCmd turns a's declared dependencies into a depPlan, off the UI thread.
+//
+// The classification — which deps are satisfied, absent, or present-but-stale — is
+// addon.PlanDeps', so this flow matches deps the same way the missing-deps marker,
+// `list --json` and the recursive installer do. That shared lookup is what applies the
+// upstream-rename fallback; this function used to index by repo id alone, which meant a
+// dep whose repo had been renamed upstream was planned as an *add* even though it was
+// already recorded, and committing the plan then failed with "already added from …".
+//
+// What is left here is the part PlanDeps deliberately omits because it hits the network:
+// resolving each addable dep to a release asset url.
+func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(context.Context) tea.Cmd {
 	return func(parent context.Context) tea.Cmd {
 		return func() tea.Msg {
-			deps, err := addon.Dependencies(addonDir)
-			if err != nil {
-				return depPlan{err: err}
-			}
 			entries, err := addon.Parse(manifestPath)
 			if err != nil {
 				return depPlan{err: err}
 			}
-			byRepo := addon.IndexByRepo(entries)
-			suppressed := suppressSet(entries, name)
+			// Plan against the freshly parsed entry rather than the cached one the row
+			// carried in: it is where SuppressDeps lives, so a dep suppressed a moment ago
+			// is honored on this run instead of the next refresh. An entry that has since
+			// left the manifest falls back to what the caller gave us.
+			target := a
+			if fresh, ok := addon.IndexByName(entries)[a.Name]; ok {
+				target = fresh
+			}
+			classified, err := addon.PlanDeps(target, projectRoot, entries)
+			if err != nil {
+				return depPlan{err: err}
+			}
 
 			ctx, cancel := context.WithTimeout(parent, addon.DepsResolveTimeout)
 			defer cancel()
 
-			var plan depPlan
-			for _, d := range deps {
-				// A suppressed (optional) dependency is never planned for add.
-				if suppressed[d.RepoID] {
-					continue
-				}
-				// Tagless dependency: any present copy satisfies it; when absent, plan to
-				// add the repo version-less (Install All clones it; user can pin later).
+			plan := depPlan{satisfied: len(classified.Satisfied)}
+			for _, s := range classified.Stale {
+				plan.skipped = append(plan.skipped,
+					fmt.Sprintf("%s has %s, needs %s", s.Dep.RepoID, tagOrNone(s.Recorded), s.Dep.Tag))
+			}
+			for _, d := range classified.Add {
+				// Tagless: add the repo version-less (Install All clones it; the user can
+				// pin later), so there is no asset to look up.
 				if d.Tag == "" {
-					if _, ok := byRepo[d.RepoID]; ok {
-						plan.satisfied++
-						continue
-					}
-					plan.add = append(plan.add, plannedDep{name: addon.DeriveName(d.RepoURL), url: addon.NormalizeRepoURL(d.RepoURL)})
-					continue
-				}
-
-				if existing, ok := byRepo[d.RepoID]; ok {
-					if sat, _ := d.SatisfiedByTag(existing.Tag); sat {
-						plan.satisfied++
-					} else {
-						plan.skipped = append(plan.skipped, fmt.Sprintf("%s has %s, needs %s", d.RepoID, tagOrNone(existing.Tag), d.Tag))
-					}
+					plan.add = append(plan.add, plannedDep{
+						name: addon.DeriveName(d.RepoURL),
+						url:  addon.NormalizeRepoURL(d.RepoURL),
+					})
 					continue
 				}
 				asset, ok := addon.ResolveDepAsset(ctx, d)
@@ -331,7 +339,11 @@ func resolveDepsCmd(manifestPath, addonDir, name string) func(context.Context) t
 					plan.skipped = append(plan.skipped, d.RepoID+" (no asset for "+d.Tag+")")
 					continue
 				}
-				plan.add = append(plan.add, plannedDep{name: addon.DeriveName(d.RepoURL), url: asset.URL, tag: d.Tag})
+				plan.add = append(plan.add, plannedDep{
+					name: addon.DeriveName(d.RepoURL),
+					url:  asset.URL,
+					tag:  d.Tag,
+				})
 			}
 			return plan
 		}
@@ -344,21 +356,6 @@ func (p depPlan) nothingToAdd(name string) string {
 		return name + ": no dependencies declared"
 	}
 	return fmt.Sprintf("%s deps: nothing to add (%d satisfied, %d skipped)", name, p.satisfied, len(p.skipped))
-}
-
-// suppressSet builds the suppressed-RepoID lookup for the addon named name from parsed
-// manifest entries (read fresh so a just-suppressed dep is honored immediately).
-func suppressSet(entries []addon.Addon, name string) map[string]bool {
-	set := map[string]bool{}
-	for _, a := range entries {
-		if a.Name == name {
-			for _, id := range a.SuppressDeps {
-				set[id] = true
-			}
-			break
-		}
-	}
-	return set
 }
 
 // newGetDepsConfirm lists the dependencies that will be added (and notes how many
