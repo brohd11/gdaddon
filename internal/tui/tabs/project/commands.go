@@ -12,8 +12,10 @@ import (
 // pinInstall writes the freshly installed entry's url/path/version/tag (+clone
 // flag) into the manifest and returns a human status line. path is passed in
 // explicitly so the post-install location form can pin a corrected path; the
-// url/version/tag derivation is shared with the silent finish path.
-func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, path, instVersion string) string {
+// url/version/tag derivation is shared with the silent finish path. A manifest
+// write failure is an error — the install itself succeeded, but claiming the pin
+// landed when it didn't would desync the manifest from disk silently.
+func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, path, instVersion string) (string, error) {
 	name, url := selected.Name, pick.asset.URL
 	// Installing from the local archive must not pin the machine-specific archive
 	// path as the manifest url — keep the entry's canonical repo url instead.
@@ -48,25 +50,31 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 		url = "https://" + pick.repoID + ".git"
 	}
 
-	_ = addon.UpdateEntry(manifestPath, name, url, path, version, tag)
+	if err := addon.UpdateEntry(manifestPath, name, url, path, version, tag); err != nil {
+		return "", err
+	}
 	// Always write the kind so a package install over a former clone clears the
 	// stale kind line (SetKind removes it for KindPackage), not just clone installs.
 	kind := addon.KindPackage
 	if pick.clone {
 		kind = addon.KindClone
 	}
-	_ = addon.SetKind(manifestPath, name, kind)
+	if err := addon.SetKind(manifestPath, name, kind); err != nil {
+		return "", err
+	}
 	// Record the pinned HEAD commit (computed above), clearing any stale pin on every
 	// other install kind so a re-install off a release/branch drops it.
-	_ = addon.SetCommit(manifestPath, name, commit)
+	if err := addon.SetCommit(manifestPath, name, commit); err != nil {
+		return "", err
+	}
 
 	if pick.clone {
-		return "cloned " + name + " (" + pick.tag + ")"
+		return "cloned " + name + " (" + pick.tag + ")", nil
 	}
 	if commit != "" {
-		return "pinned " + name + " @ " + shortSHA(commit)
+		return "pinned " + name + " @ " + shortSHA(commit), nil
 	}
-	return "updated " + name + " → " + version
+	return "updated " + name + " → " + version, nil
 }
 
 // commitRemove removes the addon from the project according to the chosen mode:

@@ -61,7 +61,10 @@ func InstallAll(ctx context.Context, manifestPath string, statuses []Status, bas
 			continue
 		}
 		if res.Path != "" {
-			_ = UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version, "")
+			if err := UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version, ""); err != nil {
+				report("[%s] Error pinning manifest: %v", a.Name, err)
+				continue
+			}
 			outcomes = append(outcomes, InstallOutcome{
 				Name: a.Name, URL: a.URL, PriorPath: a.Path, Path: res.Path, Version: res.Version,
 			})

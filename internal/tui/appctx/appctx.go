@@ -8,6 +8,8 @@ package appctx
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -83,6 +85,11 @@ type Ctx struct {
 	// includes it, and the all-repos menu offers it behind an include-root toggle. Nil
 	// when the project root isn't a checkout.
 	RootRepo *repo.Repo
+
+	// loadErrs collects real load failures from the last load pass (a malformed
+	// manifest, an unreadable global list) so the UI can surface them — a missing
+	// file is a legitimate empty state, not an error, and is never recorded.
+	loadErrs []string
 }
 
 // New builds the context for a project root and performs the initial path scan.
@@ -101,7 +108,9 @@ func (c *Ctx) loadGlobal() {
 		c.GlobalAddons = nil
 		return
 	}
-	c.GlobalAddons, _ = addon.Parse(p)
+	addons, err := addon.Parse(p)
+	c.noteLoadErr("global list", err)
+	c.GlobalAddons = addons
 }
 
 func (c *Ctx) loadArchive() {
@@ -130,10 +139,17 @@ func (c *Ctx) loadProject() {
 		c.GitSync = nil
 		return
 	}
-	c.ProjectAddons, _ = addon.Parse(c.ManifestPath)
+	addons, err := addon.Parse(c.ManifestPath)
+	c.noteLoadErr("manifest", err)
+	c.ProjectAddons = addons
 	// Inspect once and share the statuses: both dep-status (which deps are on disk) and
 	// the git-dirty check need the resolved install state, so they don't inspect twice.
-	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
+	// Skipped when the parse failed (Inspect re-parses and would just fail again).
+	var statuses []addon.Status
+	if err == nil {
+		statuses, err = addon.Inspect(c.ManifestPath, c.ProjectRoot)
+		c.noteLoadErr("manifest", err)
+	}
 	c.refreshDepChecks(statuses)
 	c.OrphanDeps = addon.OrphanDeps(statuses)
 	c.refreshGitChecks(statuses)
@@ -196,6 +212,26 @@ func (c *Ctx) RefreshArchive() { c.loadArchive() }
 // RefreshProject reloads the cached project addon list from disk.
 func (c *Ctx) RefreshProject() { c.loadProject() }
 
+// noteLoadErr records a load failure for the UI to surface (see DrainLoadErrs). A
+// missing file is a legitimate empty state (no manifest yet, no global list), not an
+// error, so it stays silent — anything else (a malformed YAML manifest, an
+// unreadable dir) must not pass for an empty project unnoticed.
+func (c *Ctx) noteLoadErr(what string, err error) {
+	if err == nil || errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	c.loadErrs = append(c.loadErrs, what+": "+err.Error())
+}
+
+// DrainLoadErrs returns the load failures recorded since the last drain (and clears
+// them). Receive surfaces them on the status/log after every broadcast; the startup
+// hook drains the initial load (New runs before the router exists).
+func (c *Ctx) DrainLoadErrs() []string {
+	errs := c.loadErrs
+	c.loadErrs = nil
+	return errs
+}
+
 // SetUpdateChecks caches the latest per-addon update-check results for the
 // Project list to render.
 func (c *Ctx) SetUpdateChecks(m map[string]addon.UpdateInfo) { c.UpdateChecks = m }
@@ -206,7 +242,9 @@ func (c *Ctx) SetUpdateChecks(m map[string]addon.UpdateInfo) { c.UpdateChecks = 
 // RefreshPaths — after the manifest is created or otherwise changes. A missing manifest
 // leaves ManifestPath/ManifestRel empty (the header shows a bootstrap hint).
 func (c *Ctx) Scan() {
-	c.ManifestPath, _ = addon.FindManifest(c.ProjectRoot)
+	path, err := addon.FindManifest(c.ProjectRoot)
+	c.noteLoadErr("manifest search", err)
+	c.ManifestPath = path
 	switch {
 	case c.ManifestPath == "":
 		c.ManifestRel = ""
@@ -285,9 +323,15 @@ func SelfUpdateCheckCmd(sh *core.Shared) tea.Cmd {
 // A theme change rebuilds the cached tab roots so each re-bakes its delegate/list styles
 // with the new palette (core.OnThemeChange) — gdaddon is fine reinstancing roots (they
 // reflect on-disk state, see RefreshProject/RefreshGlobal/RefreshArchive). Other payloads
-// (the Dirty markers) are handled by the individual tab roots, so App ignores them.
+// (the Dirty markers) are handled by the individual tab roots, so App ignores them. Any
+// load failures the reloads just recorded are drained onto the status/log here — App is
+// notified last, after the roots have reloaded.
 func (c *Ctx) Receive(sh *core.Shared, payload any) core.Action {
-	return core.OnThemeChange(payload)
+	acts := []core.Action{core.OnThemeChange(payload)}
+	for _, e := range c.DrainLoadErrs() {
+		acts = append(acts, core.SetStatusAndLog(e))
+	}
+	return core.Seq(acts...)
 }
 
 // Tab titles, shared between the TabEntry wiring (in Run) and the ShowTab callers,

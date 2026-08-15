@@ -17,7 +17,7 @@ func newImportConfirm(setName string) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Import",
 		Text:  fmt.Sprintf("Import all plugins from set %q into the project?", setName),
-		OnYesLamda: func(sh *core.Shared) core.Action {
+		OnYesLambda: func(sh *core.Shared) core.Action {
 			return importSetToProject(sh, setName)
 		},
 	})

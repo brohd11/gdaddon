@@ -344,7 +344,10 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 			if version == "" {
 				version = strings.TrimPrefix(p.NewTag, "v")
 			}
-			_ = UpdateEntry(manifestPath, a.Name, p.Asset.URL, res.Path, version, p.NewTag)
+			if err := UpdateEntry(manifestPath, a.Name, p.Asset.URL, res.Path, version, p.NewTag); err != nil {
+				report("[%s] Error pinning manifest: %v", a.Name, err)
+				continue
+			}
 			outcomes = append(outcomes, InstallOutcome{
 				Name: a.Name, URL: a.URL, PriorPath: a.Path, Path: res.Path, Version: version,
 			})

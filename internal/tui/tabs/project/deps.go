@@ -361,13 +361,13 @@ func suppressSet(entries []addon.Addon, name string) map[string]bool {
 }
 
 // newGetDepsConfirm lists the dependencies that will be added (and notes how many
-// are already satisfied / skipped), committing them only on confirm (OnYesLamda defers
+// are already satisfied / skipped), committing them only on confirm (OnYesLambda defers
 // the manifest writes to the Yes press).
 func newGetDepsConfirm(name, manifestPath string, plan depPlan) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
-		Crumb:      "Add Dependencies",
-		Text:       depsConfirmBody(name, plan),
-		OnYesLamda: func(sh *core.Shared) core.Action { return commitDeps(sh, name, manifestPath, plan) },
+		Crumb:       "Add Dependencies",
+		Text:        depsConfirmBody(name, plan),
+		OnYesLambda: func(sh *core.Shared) core.Action { return commitDeps(sh, name, manifestPath, plan) },
 	})
 }
 

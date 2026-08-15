@@ -20,7 +20,7 @@ func newInstallUpdatePicker(sh *core.Shared) core.Screen {
 		components.Item{
 			Name: "↧ Install All",
 			Desc: "download and install everything per the manifest",
-			Pick: func(sh *core.Shared) core.Action { return core.Push(newInstallAllConfirm(sh)) },
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newInstallAllConfirm()) },
 		},
 		components.Item{
 			Name: "↧ Install All + Deps",

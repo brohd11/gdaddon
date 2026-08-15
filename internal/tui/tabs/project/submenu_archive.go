@@ -59,7 +59,6 @@ func archiveCurrentVersion(sh *core.Shared, st addon.Status) core.Action {
 	cs, status, ok := buildArchiveConfirm(st.Addon, st.LocalVersion, sel)
 	if !ok {
 		return core.SetStatusAndLog(status)
-		// return core.Action{}
 	}
 	return core.Seq(
 		core.SetStatusAndLog(status),

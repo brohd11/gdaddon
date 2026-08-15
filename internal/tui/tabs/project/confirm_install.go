@@ -186,15 +186,6 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 			Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
 			OnYes:  core.Replace(newInstallTask(selected, local, pick)),
 		})
-		// return &components.DialogScreen{
-		// 	Title:  pickSection(pick),
-		// 	Crumb:  "Install",
-		// 	Render: func(sh *core.Shared) string { return sh.Box(confirmInstallBody(sh, selected, pick)) },
-		// 	OnYes: func(sh *core.Shared) core.Action {
-		// 		return core.Replace(newInstallTask(selected, local, pick))
-		// 	},
-		// 	Help: confirmHelp,
-		// }
 	}
 	// Archived copy exists ⇒ offer a Download/Archive source toggle (default Download).
 	return widgets.NewToggleConfirm(widgets.ToggleConfirm{

@@ -225,7 +225,7 @@ func TestParseArchiveTag(t *testing.T) {
 		{"main@0123456789abcdef0123456789abcdef01234567", "main", "0123456789abcdef0123456789abcdef01234567"},
 		{"feat@old@abc1234", "feat@old", "abc1234"}, // split on the last @
 		{"main@notasha", "main@notasha", ""},        // suffix isn't hex
-		{"main@ABCDEF0", "main@ABCDEF0", ""},         // uppercase isn't matched
+		{"main@ABCDEF0", "main@ABCDEF0", ""},        // uppercase isn't matched
 	}
 	for _, c := range cases {
 		tag, commit := parseArchiveTag(c.dir)

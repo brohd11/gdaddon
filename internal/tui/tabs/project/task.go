@@ -22,12 +22,12 @@ type installResult struct{ Path, Version string }
 
 // newInstallTaskScreen is the shared install task behind newInstallTask and
 // newStoreInstallTask: run installs target and onDone pins the resolved result via
-// pin (which returns the completion status line), then hands off to the shared
-// location form when the resolved path differs from the entry's prior manifest path
-// (a path-less or relocated entry) so the user can confirm/correct it and optionally
-// record it globally; a package shipping several addons (res.Path == "") can't be
-// tracked to one folder, so it finishes silently.
-func newInstallTaskScreen(selected addon.Addon, target addon.Addon, pin func(sh *core.Shared, res installResult) string) *components.TaskScreen {
+// pin (which returns the completion status line, or the pin's manifest-write error),
+// then hands off to the shared location form when the resolved path differs from the
+// entry's prior manifest path (a path-less or relocated entry) so the user can
+// confirm/correct it and optionally record it globally; a package shipping several
+// addons (res.Path == "") can't be tracked to one folder, so it finishes silently.
+func newInstallTaskScreen(selected addon.Addon, target addon.Addon, pin func(sh *core.Shared, res installResult) (string, error)) *components.TaskScreen {
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
 		done <- core.TaskEvent{Done: true, Err: err, Payload: installResult{Path: res.Path, Version: res.Version}}
@@ -42,7 +42,12 @@ func newInstallTaskScreen(selected addon.Addon, target addon.Addon, pin func(sh 
 		}
 		sh.Log(fmt.Sprintf("[%s] installed", selected.Name))
 		res, _ := ev.Payload.(installResult)
-		status := pin(sh, res)
+		status, err := pin(sh, res)
+		if err != nil {
+			// Installed on disk but the manifest pin failed: surface it (the success
+			// line would lie) and skip the location form — it re-pins the same way.
+			return core.SeqErr(err, core.PropagateAll(appctx.ProjectDirty{}), core.ShowTab(appctx.TitleProject))
+		}
 		if res.Path != "" && res.Path != selected.Path {
 			t := postinstall.Target{Name: selected.Name, URL: selected.URL, Path: res.Path, Version: res.Version}
 			return core.Replace(postinstall.New(sh, []postinstall.Target{t}))
@@ -70,7 +75,7 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 		target.Tag = pick.tag
 		target.Kind = addon.KindClone
 	}
-	return newInstallTaskScreen(selected, target, func(sh *core.Shared, res installResult) string {
+	return newInstallTaskScreen(selected, target, func(sh *core.Shared, res installResult) (string, error) {
 		// Pin the resolved path immediately (matches the batch flows).
 		return pinInstall(appctx.Of(sh).ManifestPath, selected, pick, res.Path, res.Version)
 	})
@@ -85,10 +90,12 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 func newStoreInstallTask(selected addon.Addon, local, version string) *components.TaskScreen {
 	target := selected
 	target.Tag = version
-	return newInstallTaskScreen(selected, target, func(sh *core.Shared, res installResult) string {
+	return newInstallTaskScreen(selected, target, func(sh *core.Shared, res installResult) (string, error) {
 		// Pin the installed plugin.cfg version + the store release identity (tag) +
 		// resolved path; leave url empty so the canonical store url is untouched.
-		_ = addon.UpdateEntry(appctx.Of(sh).ManifestPath, selected.Name, "", res.Path, res.Version, version)
-		return "installed " + selected.Name
+		if err := addon.UpdateEntry(appctx.Of(sh).ManifestPath, selected.Name, "", res.Path, res.Version, version); err != nil {
+			return "", err
+		}
+		return "installed " + selected.Name, nil
 	})
 }

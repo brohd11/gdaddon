@@ -24,6 +24,12 @@ import (
 // ArchivedSuffix marks an asset name as coming from the local archive.
 const ArchivedSuffix = " (archived)"
 
+// Logf, when set, receives non-fatal archive problems (a failed index.yml refresh —
+// the index is a human-readable cache, not load-bearing, so it must not fail the
+// store/remove it rode along with, but it shouldn't vanish silently either). The TUI
+// wires it to its log pane; nil in non-TUI use.
+var Logf func(format string, args ...any)
+
 // Dir resolves the archive root: ~/.gdaddon/config/config.yml's archive_dir if set,
 // otherwise ~/.gdaddon/archive. A leading "~" in archive_dir is expanded.
 func Dir() (string, error) {
@@ -63,7 +69,7 @@ func Store(repoID, tag, assetName string, r io.Reader) (string, error) {
 	if err := f.Close(); err != nil {
 		return "", err
 	}
-	_ = writeIndex(root)
+	refreshIndex(root)
 	return dest, nil
 }
 
@@ -125,7 +131,7 @@ func RemoveRepo(repoID string) error {
 	if err := os.RemoveAll(filepath.Join(root, repoDir(repoID))); err != nil {
 		return err
 	}
-	_ = writeIndex(root)
+	refreshIndex(root)
 	return nil
 }
 
@@ -246,8 +252,17 @@ func Remove(path string) error {
 			break
 		}
 	}
-	_ = writeIndex(root)
+	refreshIndex(root)
 	return nil
+}
+
+// refreshIndex regenerates index.yml after a store/remove, reporting a failure
+// through Logf rather than failing the (already successful) operation — the index
+// is a human-readable cache, not load-bearing (List reads the directory tree).
+func refreshIndex(root string) {
+	if err := writeIndex(root); err != nil && Logf != nil {
+		Logf("archive: index refresh failed: %v", err)
+	}
 }
 
 // Merge folds archived releases into a GitHub listing: archived assets are

@@ -151,14 +151,14 @@ func toggleSetLock(setName, setPath string, e addon.Addon) core.Action {
 func newRemovePluginConf(setName, setPath string, e addon.Addon) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Text: fmt.Sprintf("Remove %s from %s?", e.Name, setName),
-		OnYesLamda: func(sh *core.Shared) core.Action {
+		OnYesLambda: func(sh *core.Shared) core.Action {
 			if err := addon.RemoveEntry(setPath, e.Name); err != nil {
 				return core.StatusErr(err)
 			}
 			return core.Seq(
 				core.SetStatus("removed "+e.Name+" from "+setName),
 				core.PropagateAll(appctx.SetsDirty{}), // the plugins list self-refreshes
-				core.Pop(2),                            // drop this confirm + the member submenu
+				core.Pop(2),                           // drop this confirm + the member submenu
 			)
 		},
 	})

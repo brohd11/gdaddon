@@ -124,7 +124,11 @@ func commit(sh *core.Shared, t Target, rest []Target, f *components.FormScreen, 
 		if err := addon.Relocate(c.ProjectRoot, t.Path, finalPath); err != nil {
 			return core.SeqErr(err, core.Async(f.Focus("path")))
 		}
-		_ = addon.UpdateEntry(c.ManifestPath, t.Name, "", finalPath, "", "")
+		// The files moved; a failed re-pin would desync the manifest from disk, so
+		// surface it and keep the form open rather than advancing as if it landed.
+		if err := addon.UpdateEntry(c.ManifestPath, t.Name, "", finalPath, "", ""); err != nil {
+			return core.SeqErr(err, core.Async(f.Focus("path")))
+		}
 	}
 
 	// Log only what changed: a move and/or a global write each get a log line; a quiet

@@ -152,7 +152,6 @@ func TestRootGitKeyNotACheckout(t *testing.T) {
 	}
 }
 
-
 // TestHeaderClickOpensRootGit: a click on the header fires the OnClick tui.Run wires —
 // the same root-git action as ctrl+v — opening the project repo's own Git page.
 func TestHeaderClickOpensRootGit(t *testing.T) {

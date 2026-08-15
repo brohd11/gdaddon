@@ -33,7 +33,7 @@ var _ core.Receiver = (*ProjectScreen)(nil)
 var _ core.Crumber = (*ProjectScreen)(nil)
 
 // CrumbLabel anchors the breadcrumb at the Project root.
-func (s *ProjectScreen) CrumbLabel(bool) string { return "Tab" } // s.list.Title }
+func (s *ProjectScreen) CrumbLabel(bool) string { return "Tab" }
 
 func NewProjectScreen(sh *core.Shared) *ProjectScreen {
 	l := list.New(projectListItems(sh, appctx.SortAlpha), core.NewDelegate(), 0, 0)

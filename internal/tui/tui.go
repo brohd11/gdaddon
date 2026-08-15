@@ -2,6 +2,9 @@
 package tui
 
 import (
+	"fmt"
+
+	arch "gdaddon/internal/archive"
 	"gdaddon/internal/tui/appctx"
 	"gdaddon/internal/tui/flows/docs"
 	"gdaddon/internal/tui/sysopen"
@@ -31,9 +34,16 @@ func Run(projectRoot, version string, firstRun bool) error {
 		// A header click opens the project repo's own Git page, same as ctrl+v.
 		HeaderClick: func(sh *bubblestack.Shared, _, _ int) bubblestack.Action { return project.RootGitAction(sh) },
 		Output:      components.NewLogPane(),
-		Status: components.NewStatusLine(),
+		Status:      components.NewStatusLine(),
 		// Theme is left unset so bubblestack.Run loads the shared ~/.bubblestack theme.
 		Init: func(sh *bubblestack.Shared) tea.Cmd {
+			// Non-fatal domain problems reach the log pane: load failures recorded
+			// during appctx.New (which ran before the router existed), and archive
+			// index-refresh failures (see arch.Logf).
+			for _, e := range appctx.Of(sh).DrainLoadErrs() {
+				sh.Log(e)
+			}
+			arch.Logf = func(format string, args ...any) { sh.Log(fmt.Sprintf(format, args...)) }
 			cmds := []tea.Cmd{appctx.SelfUpdateCheckCmd(sh)}
 			if firstRun {
 				cmds = append(cmds, docs.WelcomeCmd())
