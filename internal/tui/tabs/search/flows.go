@@ -35,19 +35,25 @@ type detailMsg struct {
 // ---------- query screen ----------
 
 // newQueryScreen builds the search entry form (a generic components.FormScreen): a
-// Source row whose Enter opens the source sub-picker (a PickField/Activator), the
+// Source row whose Enter drops a menu open under it (a PickField/Activator), the
 // query text field, and a muted note showing the Godot version filter. The chosen
-// source is held in a captured variable that the sub-picker mutates and the
+// source is held in a captured variable that the menu mutates and the
 // PickField/OnSubmit read back.
+//
+// The form is declared before it's built because the Source row's handler needs it —
+// sourceMenu anchors to the form's own rendered geometry — and the field has to exist
+// first to be handed to NewForm. The closure only runs on a keystroke, long after the
+// assignment below.
 func newQueryScreen(src searchpkg.Source, godotVer, lastQuery string) *components.FormScreen {
 	cur := src
+	var form *components.FormScreen
 	source := components.NewPickField("source", "Source:  ",
 		func() string { return cur.Name() },
-		func(sh *core.Shared) (core.Action, bool) { return core.Push(newSourcePicker(&cur)), true })
+		func(sh *core.Shared) (core.Action, bool) { return core.Push(sourceMenu(sh, form, &cur)), true })
 	query := components.NewTextField("query", "Query:   ", "search terms (e.g. dialogue)")
 	query.SetValue(lastQuery)
 
-	return components.NewForm(components.FormOpts{
+	form = components.NewForm(components.FormOpts{
 		Crumb: "Search",
 		Fields: []components.FormField{
 			components.NewHeading("Search assets"),
@@ -73,24 +79,43 @@ func newQueryScreen(src searchpkg.Source, godotVer, lastQuery string) *component
 			return core.Push(newSearchLoading(cur, q, godotVer, 0))
 		},
 	})
+	return form
 }
 
-// ---------- source picker ----------
+// ---------- source menu ----------
 
-// newSourcePicker lists the registered asset sources; selecting one writes it back
-// through dst and pops to the query form. With a single source today it's a one-row
-// list, but the threading is already source-agnostic.
-func newSourcePicker(dst *searchpkg.Source) *components.PickerScreen {
+// sourceMenu drops the registered asset sources open as a floating menu under the
+// form's Source row, rather than pushing a full-screen picker over the very form the
+// choice is about. Selection writes back through dst — the same captured-variable
+// threading the picker used, which the PickField re-reads on the next render — and
+// pops the menu itself, the menu's callback-owns-the-dismissal convention.
+func sourceMenu(sh *core.Shared, form *components.FormScreen, dst *searchpkg.Source) *components.MenuScreen {
 	srcs := searchpkg.Sources()
-	items := make([]list.Item, 0, len(srcs))
-	for _, src := range srcs {
+	items := make([]components.MenuItem, 0, len(srcs))
+	cursor := 0
+	for i, src := range srcs {
 		src := src
-		items = append(items, components.Item{
-			Name: src.Name(),
-			Pick: func(sh *core.Shared) core.Action { *dst = src; return core.Pop() },
+		hint := ""
+		if src.Name() == (*dst).Name() {
+			hint, cursor = "✓", i
+		}
+		items = append(items, components.MenuItem{
+			Label: src.Name(),
+			Hint:  hint,
+			Pick:  func(sh *core.Shared) core.Action { *dst = src; return core.Pop() },
 		})
 	}
-	return components.NewPicker(items, components.PickerOpts{Crumb: "Source"})
+	// The key is the literal newQueryScreen registers, so the miss is unreachable; the
+	// fallback opens at the body's top-left rather than at cell (0,0) under the header.
+	anchor, ok := form.FieldAnchor(sh, "source")
+	if !ok {
+		anchor = components.AnchorBelow(0, sh.BodyY())
+	}
+	// No Crumb: a dropdown isn't a navigation step, so it leaves the trail reading
+	// "Tab › Search" rather than flickering a segment in and out on every open.
+	m := components.NewMenu(components.MenuOpts{Items: items, Anchor: anchor})
+	m.Select(cursor)
+	return m
 }
 
 // ---------- search loading + results ----------
