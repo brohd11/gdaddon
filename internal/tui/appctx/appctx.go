@@ -7,7 +7,6 @@
 package appctx
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -18,9 +17,9 @@ import (
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
+	bsupdate "github.com/brohd11/bubblestack/selfupdate"
 	"github.com/brohd11/gitstack/repo"
 	"github.com/brohd11/gitstack/repoui"
-	"github.com/brohd11/goutil/selfupdate"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -282,31 +281,17 @@ func LockToggle(path, name string, cur bool) (newLock bool, verb string, err err
 // selfUpdateRepo is gdaddon's own GitHub repo slug, passed to the shared self-update library.
 const selfUpdateRepo = "brohd11/gdaddon"
 
-// SelfUpdateHooks builds the shared self-update flow's (bubblestack/components) hook
-// set for gdaddon: the app name, the running version, and goutil's self-update library
-// aimed at gdaddon's own repo and the running binary's directory. The conversion between
-// goutil's selfupdate.Info and the flow's app-agnostic SelfUpdateInfo is a direct one —
-// the structs are field-identical by design. Built here so the startup check below and
-// the Actions ▸ Update gdaddon screen wire the same operations.
+// SelfUpdateHooks builds the shared self-update flow's (bubblestack/components) hook set
+// for gdaddon: the app name, the running version, and goutil's self-update library aimed
+// at gdaddon's own repo and the running binary's directory. Built here so the startup
+// check below and the Actions ▸ Update gdaddon screen wire the same operations.
 //
-// This mirrors the sibling apps (repoview/internal/app/update.go) exactly: the update
-// lands wherever the running binary lives, so install.sh owns binary placement and
-// gdaddon has no opinion about it.
+// The goutil wiring itself lives in bubblestack/selfupdate, which owns the (field-identical
+// by design) conversion between goutil's selfupdate.Info and the flow's app-agnostic
+// SelfUpdateInfo. The update lands wherever the running binary lives, so install.sh owns
+// binary placement and gdaddon has no opinion about it.
 func SelfUpdateHooks(version string) components.SelfUpdateHooks {
-	return components.SelfUpdateHooks{
-		AppName: "gdaddon",
-		Check: func(ctx context.Context) (components.SelfUpdateInfo, error) {
-			info, err := selfupdate.Check(ctx, selfUpdateRepo, version)
-			return components.SelfUpdateInfo(info), err
-		},
-		Apply: func(ctx context.Context, info components.SelfUpdateInfo, report func(string, ...any)) error {
-			binDir, err := selfupdate.BinDir()
-			if err != nil {
-				return err
-			}
-			return selfupdate.Apply(ctx, selfUpdateRepo, selfupdate.Info(info), binDir, report)
-		},
-	}
+	return bsupdate.Hooks("gdaddon", selfUpdateRepo, version)
 }
 
 // SelfUpdateCheckCmd is the app-level startup command (wired onto bubblestack

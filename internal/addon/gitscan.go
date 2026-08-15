@@ -2,9 +2,10 @@ package addon
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/brohd11/gitstack/repo"
 )
 
 // This file holds the manifest/scan-domain git probes: classifying a plugin folder by its
@@ -40,10 +41,8 @@ func gitProbe(dir string) (kind gitKind, remote, branch string) {
 		kind = gitSubmodule
 	}
 
-	remote = normalizeGitRemote(gitOutput(dir, "remote", "get-url", "origin"))
-	if b := gitOutput(dir, "rev-parse", "--abbrev-ref", "HEAD"); b != "" && b != "HEAD" {
-		branch = b
-	}
+	remote = normalizeGitRemote(repo.GitOutput(dir, "remote", "get-url", "origin"))
+	branch = repo.CurrentBranch(dir) // "" on a detached HEAD, which is what this reports too
 	return kind, remote, branch
 }
 
@@ -53,16 +52,6 @@ func gitProbe(dir string) (kind gitKind, remote, branch string) {
 func isGitCheckout(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".git"))
 	return err == nil
-}
-
-// gitOutput runs a read-only `git -C dir <args...>` and returns its trimmed stdout,
-// or "" on any error (a folder may be a repo with no origin, etc.).
-func gitOutput(dir string, args ...string) string {
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // normalizeGitRemote converts a git origin url into an https tracking url: an scp-form

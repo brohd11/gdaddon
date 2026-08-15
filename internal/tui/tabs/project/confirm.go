@@ -33,12 +33,6 @@ const (
 	removeProjectLocal        // also delete the installed files
 )
 
-var removeConfirmHelp = []key.Binding{
-	core.Hint("option", core.Keys.Up, core.Keys.Down),
-	core.Hint("remove", core.Keys.Select),
-	core.Hint("cancel", core.Keys.Back),
-}
-
 // newRemoveConfirm builds the project Remove confirm: a vertical selector between
 // removing just the manifest entry or that plus the installed files. ↑/↓ move the
 // selection (via the confirm's OnKey), enter commits the chosen mode. A submodule's
@@ -64,16 +58,12 @@ func newRemoveConfirm(st addon.Status) *components.DialogScreen {
 		Start:  removeLocal,
 		Render: func(sh *core.Shared, mode int) string { return sh.Box(removeConfirmBody(sh, st, mode)) },
 		OnPick: func(sh *core.Shared, mode int) core.Action { return commitRemove(sh, st, mode) },
-		Help:   removeConfirmHelp,
+		Help:   widgets.RemoveConfirmHelp,
 	})
 }
 
 func removeConfirmBody(sh *core.Shared, st addon.Status, mode int) string {
-	path := st.Addon.Path
-	if path == "" {
-		path = "(none)"
-	}
-	return fmt.Sprintf("Remove %s\n\n  path:  %s\n\n%s", st.Addon.Name, path, removeOptions(mode))
+	return widgets.RemoveConfirmBody(st.Addon.Name, "path", st.Addon.Path, removeOptions(mode))
 }
 
 // removeOptions renders the two removal modes stacked vertically, the active one

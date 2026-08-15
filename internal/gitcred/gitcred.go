@@ -77,6 +77,12 @@ func credentialHost(host string) string {
 // gitCredentialFill asks git's configured credential helpers for host's https
 // password. GIT_TERMINAL_PROMPT=0 keeps it from blocking on an interactive prompt
 // when no helper can answer; any error yields "".
+//
+// This is deliberately spelled out rather than taken from gitstack's repo.GitEnv, which
+// is what the repo-operating call sites use: this package's stdlib-only rule (see the
+// package comment) is worth more than deduplicating one variable, and the intent differs
+// anyway — that helper also sets GIT_EDITOR for commands that can open an editor, which
+// a credential probe never does.
 func gitCredentialFill(ctx context.Context, host string) string {
 	cmd := exec.CommandContext(ctx, "git", "credential", "fill")
 	cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")

@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/brohd11/goutil/configdir"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -39,13 +41,10 @@ type sourcesFile struct {
 // source of truth for the dir name shared by EnsureGitignore and the installers.
 const BinSubdir = "bin"
 
-// Dir is ~/.gdaddon, the home for the config dir, bin/, and the default archive.
+// Dir is ~/.gdaddon, the home for the config dir, bin/, and the default archive. The
+// ~/.<app> convention itself is goutil/configdir's; this pins gdaddon's own name.
 func Dir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".gdaddon"), nil
+	return configdir.Dir("gdaddon")
 }
 
 // ConfigDir is ~/.gdaddon/config, the home for config.yml and sources.yml.
@@ -134,15 +133,8 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "config.yml"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &Config{}, nil
-		}
-		return nil, err
-	}
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := configdir.Load(filepath.Join(dir, "config.yml"), &cfg); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
@@ -156,18 +148,11 @@ func LoadSources() ([]SourceConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "sources.yml"))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
 	var f sourcesFile
-	if err := yaml.Unmarshal(data, &f); err != nil {
+	if err := configdir.Load(filepath.Join(dir, "sources.yml"), &f); err != nil {
 		return nil, err
 	}
-	return f.Sources, nil
+	return f.Sources, nil // nil when the file is absent — callers fall back to DefaultSources
 }
 
 // Sources is the effective provider list: the user's sources.yml when present and

@@ -396,7 +396,7 @@ Key packages/functions:
   a `components.NewStayTask` per op, streaming git's output to the log via `Reporter`, then
   broadcasting `repoui.RefreshMsg` so the row markers settle; `tabs/project/git.go` is a thin
   adapter mapping `Status`→`repo.Repo`). `GitStream` is the
-  primitive: it runs git with `gitEnv()` (`GIT_TERMINAL_PROMPT=0` + `GIT_EDITOR=true`, so git
+  primitive: it runs git with `repo.GitEnv()` (`GIT_TERMINAL_PROMPT=0` + `GIT_EDITOR=true`, so git
   can never sit waiting for input a TUI can't give) and relays stdout+stderr through a
   `lineWriter` that breaks on `\r` as well as `\n` (git's progress output is CR-delimited).
   **This is not a git client**: `GitPull` is `--ff-only`, so a diverged branch aborts having
@@ -457,9 +457,12 @@ unresolved**) and `VERSION` pinned to the checked tag, `--no-modify-path` so PAT
 touched. install.sh stages in a temp dir and `mv -f`s into place, so overwriting the
 running binary is safe. `--check` reports without installing.
 
-The TUI side is `appctx.SelfUpdateHooks`, which calls the same goutil `Check`/`Apply`/
-`BinDir` directly — a copy of `repoview/internal/app/update.go`, which is the file to
-match if this ever needs changing. It feeds both the startup check (wired as
+The TUI side is `appctx.SelfUpdateHooks`, a one-liner over
+`bubblestack/selfupdate.Hooks(appName, repo, version)` — the shared bridge that owns the
+goutil `Check`/`Apply`/`BinDir` wiring and the `selfupdate.Info` ↔
+`components.SelfUpdateInfo` conversion for every app. It used to be a copy of
+`repoview/internal/app/update.go`; both now call the bridge, so there is nothing left to
+keep in sync by hand. It feeds both the startup check (wired as
 `bubblestack.Config.Init` → `appctx.SelfUpdateCheckCmd`, a generic app-level hook in
 `bubblestack/core`'s Router), which writes an "update available" line to the status/log,
 and Actions ▸ Update gdaddon, which runs the loading → confirm → task flow in-TUI. Both

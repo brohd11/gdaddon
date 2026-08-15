@@ -129,8 +129,7 @@ func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
-		appctx.Of(sh).RefreshProject()
-		s.list.SetItems(projectListItems(sh, s.sort))
+		s.reload(sh)
 		// Re-run the update check against the refreshed manifest; the markers
 		// fill back in when its results broadcast.
 		return core.Async(checkUpdatesCmd(sh))
@@ -141,22 +140,28 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 		// A git operation (pull/push/commit/single-repo fetch) changed a checkout: recompute
 		// the local git state so the dirty / ahead / behind markers settle. Local-only, so
 		// unlike ProjectDirty it doesn't re-fire the network update check.
-		appctx.Of(sh).RefreshProject()
-		s.list.SetItems(projectListItems(sh, s.sort))
+		s.reload(sh)
 	case repoui.FetchDoneMsg:
 		// The refs are now current, so re-inspecting recomputes each checkout's ahead/behind
 		// (RefreshProject → refreshGitChecks) and the markers appear. RefreshRoots then
 		// rebuilds every tab root from the refreshed state; repoui.LogFetchResults writes the
 		// per-repo lines and returns the summary (log forced open only on a failure).
 		s.fetching = false
-		appctx.Of(sh).RefreshProject()
-		s.list.SetItems(projectListItems(sh, s.sort))
+		s.reload(sh)
 		return core.Seq(
 			core.RefreshRoots(),
 			repoui.LogFetchResults(sh, p.Results, "git checkout(s)", "no git checkouts to fetch"),
 		)
 	}
 	return core.Action{}
+}
+
+// reload re-inspects the manifest and redraws the rows from it. Three of Receive's
+// branches need exactly this pair and the order is load-bearing — the rows are built from
+// the context RefreshProject just repopulated — so it is one call, not two lines each time.
+func (s *ProjectScreen) reload(sh *core.Shared) {
+	appctx.Of(sh).RefreshProject()
+	s.list.SetItems(projectListItems(sh, s.sort))
 }
 
 // inspect reads the manifest's current state from the context paths, so the root

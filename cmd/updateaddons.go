@@ -53,7 +53,6 @@ func runUpdateAddons(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	}
-	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
-	_, err = addon.UpdateAll(context.Background(), manifest, plans, projectRoot, report)
+	_, err = addon.UpdateAll(context.Background(), manifest, plans, projectRoot, stdoutReport)
 	return err
 }

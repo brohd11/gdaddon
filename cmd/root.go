@@ -93,6 +93,11 @@ func isFirstRun() bool {
 // error when there isn't one. Shared by the read-only and whole-manifest paths, which
 // have nothing to do without one — unlike a targeted `install <owner/repo>`, which
 // bootstraps a manifest instead (findOrCreateManifest in addoninstall.go).
+// stdoutReport is the addon.Reporter the non-interactive subcommands pass into the install
+// and update flows: the same progress lines the TUI streams into its log pane, printed to
+// stdout one per line. The flows format their own messages, so this only adds the newline.
+func stdoutReport(format string, a ...any) { fmt.Printf(format+"\n", a...) }
+
 func discoverManifest(projectRoot string) (string, error) {
 	manifest, err := addon.FindManifest(projectRoot)
 	if err != nil {

@@ -100,13 +100,12 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
 	res, err := addon.InstallOne(ctx, addon.InstallOneOpts{
 		ManifestPath: manifestPath,
 		ProjectRoot:  projectRoot,
 		Entry:        entry,
 		Deps:         !addonInstallNoDeps,
-		Report:       report,
+		Report:       stdoutReport,
 	})
 	if err != nil {
 		return installHint(err, entry.Name)
@@ -177,12 +176,11 @@ func runInstallAll() error {
 	}
 
 	ctx := context.Background()
-	report := func(format string, a ...any) { fmt.Printf(format+"\n", a...) }
 	if addonInstallNoDeps {
-		_, err = addon.InstallAll(ctx, manifest, statuses, projectRoot, report)
+		_, err = addon.InstallAll(ctx, manifest, statuses, projectRoot, stdoutReport)
 		return err
 	}
-	_, err = addon.InstallAllDeps(ctx, manifest, projectRoot, report)
+	_, err = addon.InstallAllDeps(ctx, manifest, projectRoot, stdoutReport)
 	return err
 }
 

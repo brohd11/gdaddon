@@ -7,6 +7,8 @@ import (
 
 	"gdaddon/internal/archive"
 	"gdaddon/internal/source"
+
+	"github.com/brohd11/goutil/strutil"
 )
 
 // DepsResolveTimeout caps a batch of release-listing fetches so a slow or unreachable
@@ -40,7 +42,7 @@ func InstallAllDeps(ctx context.Context, manifestPath, baseDir string, report Re
 		if added == 0 {
 			return outcomes, nil
 		}
-		report("Added %d dependenc%s to the manifest; installing…", added, plural(added))
+		report("Added %d dependenc%s to the manifest; installing…", added, strutil.Plural(added, "y", "ies"))
 	}
 	report("Dependency resolution stopped after %d rounds.", maxDepRounds)
 	return outcomes, nil
@@ -177,11 +179,4 @@ func TagEqual(a, b string) bool { return tagEqual(a, b) }
 // either side (e.g. "1.2.0" matches "v1.2.0").
 func tagEqual(a, b string) bool {
 	return a == b || strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return "y"
-	}
-	return "ies"
 }

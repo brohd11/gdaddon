@@ -10,6 +10,7 @@ import (
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/goutil/strutil"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -373,7 +374,7 @@ func newGetDepsConfirm(name, manifestPath string, plan depPlan) *components.Dial
 
 func depsConfirmBody(name string, plan depPlan) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Add %d dependenc%s for %s\n", len(plan.add), plural(len(plan.add), "y", "ies"), name)
+	fmt.Fprintf(&b, "Add %d dependenc%s for %s\n", len(plan.add), strutil.Plural(len(plan.add), "y", "ies"), name)
 	for _, p := range plan.add {
 		tag := p.tag
 		if tag == "" {
@@ -410,7 +411,7 @@ func commitDeps(sh *core.Shared, name, manifestPath string, plan depPlan) core.A
 		added++
 	}
 	appctx.Of(sh).RefreshProject()
-	status := fmt.Sprintf("%s: added %d dependenc%s", name, added, plural(added, "y", "ies"))
+	status := fmt.Sprintf("%s: added %d dependenc%s", name, added, strutil.Plural(added, "y", "ies"))
 	if failed > 0 {
 		status += fmt.Sprintf(" (%d failed)", failed)
 	}
@@ -426,11 +427,4 @@ func tagOrNone(tag string) string {
 		return "no tag"
 	}
 	return tag
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }

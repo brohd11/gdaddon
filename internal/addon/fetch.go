@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"gdaddon/internal/restrule"
+
+	"github.com/brohd11/gitstack/repo"
 )
 
 // fetchToStaging downloads (.zip) or clones (.git) the addon into a temporary
@@ -147,7 +149,7 @@ func fetchGit(ctx context.Context, url, addonName string, report Reporter) (stri
 	cleanup := func() { os.RemoveAll(tempDir) }
 
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", url, tempDir)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = repo.GitEnv() // never prompt for credentials behind the TUI
 	if out, err := cmd.CombinedOutput(); err != nil {
 		report("  -> Failed to clone %s:\n%s", addonName, string(out))
 		cleanup()
@@ -181,7 +183,7 @@ func gitCloneBranch(ctx context.Context, url, branch, dest, addonName string, re
 	}
 
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = repo.GitEnv() // never prompt for credentials behind the TUI
 	if out, err := cmd.CombinedOutput(); err != nil {
 		report("  -> Failed to clone %s:\n%s", addonName, string(out))
 		os.RemoveAll(dest)
