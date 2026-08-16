@@ -111,8 +111,6 @@ func sourceMenu(sh *core.Shared, form *components.FormScreen, dst *searchpkg.Sou
 	if !ok {
 		anchor = components.AnchorBelow(0, sh.BodyY())
 	}
-	// No Crumb: a dropdown isn't a navigation step, so it leaves the trail reading
-	// "Tab › Search" rather than flickering a segment in and out on every open.
 	m := components.NewMenu(components.MenuOpts{Items: items, Anchor: anchor})
 	m.Select(cursor)
 	return m
