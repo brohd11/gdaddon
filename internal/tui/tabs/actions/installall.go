@@ -52,7 +52,10 @@ func newInstallAllDepsTask() *components.TaskScreen {
 		c := appctx.Of(sh)
 		// InstallAllDeps can fail outright (a manifest re-Inspect between rounds);
 		// without this the user would see "install complete" on an aborted run.
-		outcomes, err := addon.InstallAllDeps(ctx, c.ManifestPath, c.ProjectRoot, report)
+		// nil confirmer: this screen's up-front confirm already covers the whole run,
+		// and a per-dependency prompt would have to block this task goroutine on a
+		// dialog. The CLI is where dependencies are vetted one at a time.
+		outcomes, err := addon.InstallAllDeps(ctx, c.ManifestPath, c.ProjectRoot, nil, report)
 		if err != nil {
 			report("error: %v", err)
 		}

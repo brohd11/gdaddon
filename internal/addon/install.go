@@ -161,11 +161,14 @@ func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report 
 	return res, nil
 }
 
-// writePlacement replaces the folder at p.destRel (under baseDir) with p.src.
+// writePlacement replaces the folder at p.destRel (under baseDir) with p.src. It is the
+// choke point every install path passes through, so it is where the project-root
+// containment check lives — the destination is removed before it is written, and part
+// of it can come from the downloaded package's own config (see resolveUnder).
 func writePlacement(p placement, baseDir string, report Reporter) error {
-	dest, err := filepath.Abs(filepath.Join(baseDir, p.destRel))
+	dest, err := resolveUnder(baseDir, p.destRel)
 	if err != nil {
-		return fmt.Errorf("could not resolve path: %w", err)
+		return err
 	}
 	os.RemoveAll(dest)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -242,11 +245,11 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 // honor a corrected path without re-downloading; a plain os.Rename moves a normal
 // install or a clone (.git and all) alike.
 func Relocate(root, fromRel, toRel string) error {
-	from, err := filepath.Abs(filepath.Join(root, fromRel))
+	from, err := resolveUnder(root, fromRel)
 	if err != nil {
 		return err
 	}
-	to, err := filepath.Abs(filepath.Join(root, toRel))
+	to, err := resolveUnder(root, toRel)
 	if err != nil {
 		return err
 	}
@@ -271,9 +274,9 @@ func Uninstall(a Addon, baseDir string) error {
 	if a.Path == "" {
 		return nil
 	}
-	fullPath, err := filepath.Abs(filepath.Join(baseDir, a.Path))
+	fullPath, err := resolveUnder(baseDir, a.Path)
 	if err != nil {
-		return fmt.Errorf("could not resolve path: %w", err)
+		return err
 	}
 	return os.RemoveAll(fullPath)
 }

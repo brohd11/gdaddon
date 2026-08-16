@@ -91,10 +91,23 @@ func readPluginCfgKey(dir, key string) string {
 
 // installDir reads the installer-specific `dir` key an addon may declare in its
 // plugin.cfg/version.cfg under addonDir — a project-root-relative install path the
-// author can pin (like the custom `deps` key). Returns "" when there's no config or
-// no dir key. Used by resolveInstall when the manifest pins no explicit path.
+// author can pin (like the custom `deps` key). Returns "" when there's no config, no
+// dir key, or the value is not a project-root-relative path.
+//
+// That last case is the security-relevant one: this value comes from the *downloaded
+// package*, and its destination is os.RemoveAll'd before being written. An absolute
+// path or one climbing out with ".." is ignored here so the install falls back to the
+// normal addons/<name> derivation rather than failing; writePlacement's resolveUnder
+// is the hard backstop for anything that reaches it by another route.
 func installDir(addonDir string) string {
-	return readPluginCfgKey(addonDir, "dir")
+	dir := readPluginCfgKey(addonDir, "dir")
+	if dir == "" {
+		return ""
+	}
+	if !filepath.IsLocal(filepath.FromSlash(dir)) {
+		return ""
+	}
+	return dir
 }
 
 // SourceURL reads the installer-specific `source` key an addon may declare in its

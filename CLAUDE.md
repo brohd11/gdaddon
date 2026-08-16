@@ -14,8 +14,8 @@ versions/branches/assets, install/update). Everything non-interactive is a subco
 
 | Command | File | Does |
 |---|---|---|
-| `install --all [--no-deps]` | `cmd/addoninstall.go` | install every manifest entry + declared deps |
-| `install <owner/repo>[@tag]` | `cmd/addoninstall.go` | install one addon + *its* dep closure |
+| `install --all [--no-deps]` | `cmd/addoninstall.go` | install every manifest entry + declared deps (each dep confirmed) |
+| `install <owner/repo>[@tag]` | `cmd/addoninstall.go` | install one addon + *its* dep closure (each dep confirmed) |
 | `list [root] [--json] [--updates]` | `cmd/list.go` | print install status; JSON for tools |
 | `update-addons [root]` | `cmd/updateaddons.go` | update installed addons to their latest release |
 | `update [--check]` | `cmd/update.go` | update the **gdaddon binary** (goutil's shared command) |
@@ -69,8 +69,9 @@ tagged module versions.
 ```bash
 gdaddon                # TUI; git root auto-detected, manifest found by walking from it
 gdaddon /godot/proj    # TUI with an explicit project root (manifest still discovered by the scan)
-gdaddon install --all         # non-interactive install of the discovered manifest + declared deps
+gdaddon install --all         # install the discovered manifest + declared deps (deps confirmed one by one)
 gdaddon install --all --no-deps  # the manifest's own entries only (what --install used to do)
+gdaddon install --all --trust-deps # ... and accept every declared dep without asking
 gdaddon install owner/repo    # install ONE addon (+ the deps it declares) into this project
 gdaddon list                  # print the manifest's install status (state/local/pinned), then exit
 gdaddon list --json           # same, as a JSON array for machine consumption (e.g. a Godot plugin UI)
@@ -138,7 +139,7 @@ condition is a picker).
 
 Flags: `--root` (project root; default the git toplevel via the non-prompting
 `resolveRootQuiet` in `cmd/paths.go`, *not* `resolveRoot`, which prompts and can
-`os.Exit`), `--asset`, `--name`, `--clone`, `--no-deps`. The manifest is found by
+`os.Exit`), `--asset`, `--name`, `--clone`, `--no-deps`, `--trust-deps`. The manifest is found by
 `addon.FindManifest` and **created** at the root when absent (`findOrCreateManifest`) —
 deliberately unlike `discoverManifest`, which errors on a miss for the read-only paths.
 
@@ -159,6 +160,33 @@ skips it (installed and satisfying, by the same rule as `MissingDeps`/`DepStatus
 tagless → presence suffices, uncomparable tags → trusted), adds it via `AddDepEntry`
 (carrying `is_dependency: true`), or re-pins a verifiably-older entry via `UpsertEntry`.
 It then looks the entry up **by name, not by repo id**, and marks both identities as seen.
+
+**`addon.DepConfirmer`** (`internal/addon/depconfirm.go`) is the second front-end-agnostic
+hook after `Reporter`: `func(DepRequest) (bool, error)`, consulted once per dependency. A
+nil confirmer installs everything, so it is opt-in and the TUI passes nil. It exists
+because the dep graph is *author-declared and transitively followed* — installing one
+plugin can reach repos the user never named, and a Godot addon is editor code.
+
+The ordering rule is load-bearing and shapes `ensureDep`, which runs **classify → confirm
+→ commit**: the classification resolves the dep (the network call needed to show a real
+download url) but writes nothing, so declining strands no manifest entry ahead of an
+install that never happens. The old shape wrote in every branch *before* calling `Install`
+and could not offer this. A declined dep returns `ok=false`, so `InstallDepsFor` drops it
+from the queue and never visits what *it* declares — refusing a package refuses its
+subtree. A confirmer error (`addon.ErrDepAborted`) unwinds the whole walk.
+`InstallAllDeps` additionally owns a `declined` set across rounds, since `importDeps`
+recomputes the missing set from scratch each round and would otherwise re-offer the same
+dep every round; it also builds that set as an ordered slice rather than a map, because
+with a confirmer attached the offer order is user-visible. `AddDepEntry` is split into
+`ResolveDepAsset` + the unexported `writeDepEntry` so the confirmed resolution is the one
+committed, not a second lookup.
+
+The CLI side is `cmd/depconfirm.go` (`depPrompter`): y/n/a/q, with `--trust-deps` passing
+nil for the old unattended behavior and `--no-deps` skipping the closure entirely (the two
+are rejected together). **Off a TTY it declines everything and reports it** — an
+unattended run never pulls unreviewed code. Deliberately CLI-only: a per-dep prompt in the
+TUI would have to block a `TaskScreen` goroutine on a dialog, which bubblestack has no
+pattern for, so Actions ▸ Install All Deps keeps its single up-front confirm.
 
 **The upstream-rename fallback** is a rule the whole dependency system shares, and it now
 lives in exactly one place: `depIndex` in `internal/addon/depmatch.go`, which matches a dep
@@ -269,6 +297,17 @@ truth: an explicit manifest `path` always wins, but when `path` is empty and the
 install dir is being *derived*, a `dir=` key overrides the default `addons/<name>`
 derivation (see `installDir` in cfg.go, applied by `resolveInstall` in resolve.go).
 The derived path is then recorded back into the manifest on install.
+
+**`dir=` is attacker-controlled input and is validated as such.** It is read from the
+*downloaded* package, and its destination is `os.RemoveAll`'d before being written
+(`writePlacement`) — so an unchecked `dir="../../.."` is an arbitrary recursive delete
+outside the project. `filepath.Join` absorbs a leading `/` but not `..`. Two layers:
+`installDir` rejects a non-`filepath.IsLocal` value so the install *falls back* to the
+normal derivation instead of failing, and `resolveUnder` (`internal/addon/fsutil.go`) is
+the hard backstop wrapping every path that deletes or writes — `writePlacement`,
+`Uninstall`, `Relocate`. It is the same guarantee `unzip` already enforced on archive
+members. Note the backstop also covers an explicit manifest `path`: one escaping the
+project root is now refused rather than acted on.
 
 Derivation preserves the package's own directory levels: a plugin folder's path
 *relative to the addons anchor* is its path under the project's `addons/`, so
@@ -427,7 +466,7 @@ Key packages/functions:
   `appctx.GitRefresh`) so the Project list's local markers settle without re-firing the network
   update check. Keys: `v` (row-level, an addon's own Git page) and `V` (the all-repos page) —
   deliberately not `g`/`G`, which bubbles binds to jump-to-top/bottom on every list.
-- `addon.InstallOne` / `addon.InstallDepsFor` (`internal/addon/install_one.go`) — install one addon and pin it, and walk the dependency closure rooted at one installed addon. The targeted counterpart to `InstallAll`/`InstallAllDeps`; front-end agnostic, so the CLI's `gdaddon install` and (later) a per-addon TUI action share them. See "Installing one addon" above for the semantics that differ from the manifest-wide flow.
+- `addon.InstallOne` / `addon.InstallDepsFor` (`internal/addon/install_one.go`) — install one addon and pin it, and walk the dependency closure rooted at one installed addon. The targeted counterpart to `InstallAll`/`InstallAllDeps`; front-end agnostic, so the CLI's `gdaddon install` and (later) a per-addon TUI action share them. Both take an `addon.DepConfirmer` (`InstallOneOpts.ConfirmDep` / the parameter before `report`), nil meaning "install the closure unattended". See "Installing one addon" above for the semantics that differ from the manifest-wide flow.
 - `addon.ParseRepoSpec` / `addon.SelectRelease` / `addon.SelectAsset` — parse an `owner/repo[@tag]` spec (the exported `parseDependency`, shared with `deps=` items), pick the release for a tag (or the latest non-prerelease), and pick its install asset (`*AmbiguousAssetError` when a release ships several uploads).
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version/tag in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` / `addon.SetIsDependency` write single scalar lines the same way (empty/false value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha, `SetIsDependency` records/clears a dep's auto-added provenance. `addon.OrphanDeps` reports which `is_dependency` entries nothing installed still needs (the "unused dependency" marker).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.

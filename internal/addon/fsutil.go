@@ -9,6 +9,38 @@ import (
 	"strings"
 )
 
+// resolveUnder joins rel onto baseDir and refuses a result that escapes baseDir.
+//
+// Install destinations are not all user-supplied: an addon can name its own location
+// with a `dir=` key in the plugin.cfg/version.cfg it ships (see installDir), so the
+// downloaded package chooses where it lands. filepath.Join absorbs a leading "/" but
+// not "..", and the destination is os.RemoveAll'd before it is written — so an
+// unchecked value is an arbitrary recursive delete outside the project. This is the
+// same guarantee unzip enforces on archive members, applied to install paths.
+func resolveUnder(baseDir, rel string) (string, error) {
+	base, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("could not resolve path: %w", err)
+	}
+	full, err := filepath.Abs(filepath.Join(base, rel))
+	if err != nil {
+		return "", fmt.Errorf("could not resolve path: %w", err)
+	}
+	if !underDir(base, full) {
+		return "", fmt.Errorf("refusing to use %q: it resolves outside the project root", rel)
+	}
+	return full, nil
+}
+
+// underDir reports whether path is base itself or a descendant of it.
+func underDir(base, path string) bool {
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
 func unzip(src, dest string) error {
 	r, err := zip.OpenReader(src)
 	if err != nil {

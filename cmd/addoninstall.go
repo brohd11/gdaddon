@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"gdaddon/internal/addon"
@@ -13,12 +14,13 @@ import (
 )
 
 var (
-	addonInstallAll    bool
-	addonInstallRoot   string
-	addonInstallAsset  string
-	addonInstallName   string
-	addonInstallClone  bool
-	addonInstallNoDeps bool
+	addonInstallAll       bool
+	addonInstallRoot      string
+	addonInstallAsset     string
+	addonInstallName      string
+	addonInstallClone     bool
+	addonInstallNoDeps    bool
+	addonInstallTrustDeps bool
 )
 
 // manifestFileName is the manifest created when a project doesn't have one yet. It is
@@ -48,8 +50,18 @@ The project root is the git toplevel unless --root says otherwise (this command
 takes it as a flag because its argument is the repo). Naming one addon creates
 a manifest if the project has none; --all requires one to already exist.
 
+Dependencies are declared by the addon's own author and followed transitively, so
+an install can reach repos you never named. Each one is therefore confirmed before
+it is recorded or downloaded; answer 'a' to accept the rest of the run, or pass
+--trust-deps to accept them all up front. Off a terminal there is nobody to ask,
+so dependencies are skipped and listed instead of installed — an unattended run
+needs --trust-deps to resolve them. The addon you name is never confirmed, and
+neither are manifest entries that already exist: --all confirms only what it newly
+discovers.
+
   gdaddon install --all                            # the whole manifest, plus deps
   gdaddon install --all --no-deps                  # the manifest's own entries only
+  gdaddon install --all --trust-deps               # ... and don't ask about deps
   gdaddon install brohd11/my-addon
   gdaddon install brohd11/my-addon@v1.2.0
   gdaddon install codeberg.org/someone/their-addon
@@ -69,6 +81,7 @@ func init() {
 	f.StringVar(&addonInstallName, "name", "", "manifest entry name (default: derived from the repo)")
 	f.BoolVar(&addonInstallClone, "clone", false, "install as a git checkout of a branch (@ref names the branch) instead of a release")
 	f.BoolVar(&addonInstallNoDeps, "no-deps", false, "don't install declared dependencies")
+	f.BoolVar(&addonInstallTrustDeps, "trust-deps", false, "install declared dependencies without confirming each one")
 	rootCmd.AddCommand(addonInstallCmd)
 }
 
@@ -100,14 +113,19 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	prompter, confirm := depConfirmer()
 	res, err := addon.InstallOne(ctx, addon.InstallOneOpts{
 		ManifestPath: manifestPath,
 		ProjectRoot:  projectRoot,
 		Entry:        entry,
 		Deps:         !addonInstallNoDeps,
+		ConfirmDep:   confirm,
 		Report:       stdoutReport,
 	})
-	if err != nil {
+	// A quit at a dependency prompt is a clean stop, not a failure: the addon the user
+	// named is installed and pinned by then, and only the closure walk ended early.
+	aborted := errors.Is(err, addon.ErrDepAborted)
+	if err != nil && !aborted {
 		return installHint(err, entry.Name)
 	}
 
@@ -122,6 +140,10 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 	for _, d := range res.Deps {
 		fmt.Printf("  dependency %s → %s\n", d.Name, d.Path)
 	}
+	if aborted {
+		fmt.Println("\nstopped at your request; remaining dependencies were not installed")
+	}
+	prompter.reportSkipped(os.Stdout)
 	return nil
 }
 
@@ -135,10 +157,14 @@ func checkInstallArgs(args []string) error {
 		return fmt.Errorf("--all installs the whole manifest; drop %q (or drop --all to install just it)", args[0])
 	case !addonInstallAll && len(args) == 0:
 		return fmt.Errorf("name a repo to install (owner/repo[@tag]), or pass --all for the whole manifest")
+	case addonInstallNoDeps && addonInstallTrustDeps:
+		return fmt.Errorf("--no-deps skips dependencies and --trust-deps installs them all; pick one")
 	}
 	if !addonInstallAll {
 		return nil
 	}
+	// --trust-deps is deliberately absent below: unlike --asset/--name/--clone it
+	// describes the dependency policy, not the one addon being installed.
 	for flag, set := range map[string]bool{
 		"--asset": addonInstallAsset != "",
 		"--name":  addonInstallName != "",
@@ -180,7 +206,14 @@ func runInstallAll() error {
 		_, err = addon.InstallAll(ctx, manifest, statuses, projectRoot, stdoutReport)
 		return err
 	}
-	_, err = addon.InstallAllDeps(ctx, manifest, projectRoot, stdoutReport)
+
+	prompter, confirm := depConfirmer()
+	_, err = addon.InstallAllDeps(ctx, manifest, projectRoot, confirm, stdoutReport)
+	if errors.Is(err, addon.ErrDepAborted) {
+		fmt.Println("\nstopped at your request; remaining dependencies were not installed")
+		err = nil
+	}
+	prompter.reportSkipped(os.Stdout)
 	return err
 }
 

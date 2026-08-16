@@ -46,7 +46,9 @@ func (ds *depServer) publish(t *testing.T, repo, version string, deps ...string)
 	t.Helper()
 	cfg := fmt.Sprintf("[plugin]\nname=%q\nversion=%q\n", repo, version)
 	if len(deps) > 0 {
-		cfg += fmt.Sprintf("deps=[%q]\n", strings.Join(deps, `","`))
+		// Built by hand rather than with %q: the verb would escape the separating
+		// quotes of a multi-dep list into one malformed item.
+		cfg += `deps=["` + strings.Join(deps, `","`) + "\"]\n"
 	}
 	path := "/o/" + repo + "/releases/download/v" + version + "/" + repo + ".zip"
 	ds.zips[path] = buildZip(t, map[string]string{
@@ -92,7 +94,7 @@ func TestInstallDepsForChain(t *testing.T) {
 	}
 	a.Path = res.Path
 
-	outcomes, err := InstallDepsFor(context.Background(), manifest, a, project, func(string, ...any) {})
+	outcomes, err := InstallDepsFor(context.Background(), manifest, a, project, nil, func(string, ...any) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +141,7 @@ func TestInstallDepsForCycle(t *testing.T) {
 	}
 	a.Path = res.Path
 
-	outcomes, err := InstallDepsFor(context.Background(), manifest, a, project, func(string, ...any) {})
+	outcomes, err := InstallDepsFor(context.Background(), manifest, a, project, nil, func(string, ...any) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +169,7 @@ func TestInstallDepsForSuppressed(t *testing.T) {
 	a.Path = res.Path
 	a.SuppressDeps = []string{strings.ToLower(ds.spec("b"))}
 
-	outcomes, err := InstallDepsFor(context.Background(), manifest, a, project, func(string, ...any) {})
+	outcomes, err := InstallDepsFor(context.Background(), manifest, a, project, nil, func(string, ...any) {})
 	if err != nil {
 		t.Fatal(err)
 	}
