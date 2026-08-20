@@ -89,7 +89,7 @@ func (s *SetsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Act
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *SetsScreen) View(*core.Shared) string { return s.list.View() }
+func (s *SetsScreen) View(*core.Shared) string { return core.RenderList(s.list) }
 func (s *SetsScreen) HelpView(*core.Shared) string {
 	return core.ShortHelp(s.list, core.HelpTabbed)
 }

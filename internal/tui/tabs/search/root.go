@@ -68,7 +68,7 @@ func (s *SearchScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.A
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *SearchScreen) View(*core.Shared) string     { return s.list.View() }
+func (s *SearchScreen) View(*core.Shared) string     { return core.RenderList(s.list) }
 func (s *SearchScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 func (s *SearchScreen) SetSize(sh *core.Shared, width, bodyHeight int) {

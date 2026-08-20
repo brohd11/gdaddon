@@ -112,7 +112,7 @@ func RootGitAction(sh *core.Shared) core.Action {
 
 // View renders just the addon list; the status line and output box are drawn by
 // the router as shared chrome below every screen.
-func (s *ProjectScreen) View(*core.Shared) string { return s.list.View() }
+func (s *ProjectScreen) View(*core.Shared) string { return core.RenderList(s.list) }
 
 // HelpView renders the decluttered tab-root help (nav · select · tabs · quit ·
 // more); filter, output, and clear-log live only in the full (?) help.

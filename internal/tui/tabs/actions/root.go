@@ -46,7 +46,7 @@ func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *ActionsScreen) View(*core.Shared) string     { return s.list.View() }
+func (s *ActionsScreen) View(*core.Shared) string     { return core.RenderList(s.list) }
 func (s *ActionsScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 func (s *ActionsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {

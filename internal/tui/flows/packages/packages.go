@@ -190,7 +190,7 @@ func (s *ReposScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Ac
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *ReposScreen) View(*core.Shared) string { return s.list.View() }
+func (s *ReposScreen) View(*core.Shared) string { return core.RenderList(s.list) }
 func (s *ReposScreen) HelpView(*core.Shared) string {
 	return core.ShortHelp(s.list, core.HelpTabbed)
 }

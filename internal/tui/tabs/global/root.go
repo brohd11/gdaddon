@@ -82,7 +82,7 @@ func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.A
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *GlobalScreen) View(*core.Shared) string     { return s.list.View() }
+func (s *GlobalScreen) View(*core.Shared) string     { return core.RenderList(s.list) }
 func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 // Receive rebuilds the global list from disk on a GlobalDirty broadcast (after an

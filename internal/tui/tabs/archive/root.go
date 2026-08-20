@@ -65,7 +65,7 @@ func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *ArchiveScreen) View(*core.Shared) string     { return s.list.View() }
+func (s *ArchiveScreen) View(*core.Shared) string     { return core.RenderList(s.list) }
 func (s *ArchiveScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
 
 // Receive rebuilds the list from disk on an ArchiveDirty broadcast (after a package

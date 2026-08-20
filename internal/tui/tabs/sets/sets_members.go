@@ -83,7 +83,7 @@ func (s *setPluginsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, co
 	return s, components.RootUpdate(sh, &s.list, msg)
 }
 
-func (s *setPluginsScreen) View(*core.Shared) string { return s.list.View() }
+func (s *setPluginsScreen) View(*core.Shared) string { return core.RenderList(s.list) }
 func (s *setPluginsScreen) HelpView(*core.Shared) string {
 	return core.ShortHelp(s.list, core.HelpMinimal)
 }
