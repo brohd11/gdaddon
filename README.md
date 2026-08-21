@@ -15,63 +15,37 @@
 ### Examples
 Installing 25 addons: [here](https://youtu.be/1EIBzfUs50g)
 
+#### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-EditorPlugin)
+This is the Godot EditorPlugin companion to gdaddon. Currently, it runs a check for updates on installed addons
+and alerts if any are available.
+
 ## Quick Start
 
 ### Install
 
 #### Quick install
 
+Unix:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh
 ```
 
-Installs into `~/.local/bin`, and offers to add that to your `PATH` if it isn't already.
-Prefer to read before you pipe to a shell? Same thing in two steps:
-
-```bash
-curl -fsSL -o install.sh https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh
-less install.sh && sh install.sh
+Windows:
+```powershell
+irm https://raw.githubusercontent.com/brohd11/gdaddon/main/install.ps1 | iex
 ```
 
-Overrides: `BIN_DIR=/usr/local/bin` to install elsewhere, `VERSION=v0.3.0` to pin a release,
-`--modify-path` to update your shell rc file without prompting (for unattended setup scripts), or
-`--no-modify-path` to leave rc files alone. Covers macOS (arm64/amd64) and Linux
-(amd64/arm64); on **Windows** grab the `.zip` from
-[Releases](https://github.com/brohd11/gdaddon/releases).
-
-This path needs no quarantine handling — that attribute is set by browsers, not by `curl`.
-Afterwards, `gdaddon update` (alias `gdaddon self-update`) keeps it current; the
-mechanism lives in [goutil/selfupdate](https://github.com/brohd11/goutil).
-
-#### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-EditorPlugin)
-This is the Godot EditorPlugin companion to gdaddon. You can actually download and install the binary from here if you want. It should remove the need for quarantine management on macOS.
-
-Open the gdaddon dialog and it will prompt you to update/install the binary.
-
-#### To install from this repo:
-
-There are binaries under releases, you can also build with Go and Make: `make` builds for your own
-platform, `make all` for every supported one.
-
-On macOS, binaries downloaded **in a browser** may have quarantine status that needs to be cleared before you can execute: `xattr -dr com.apple.quarantine path/to/gdaddon`
-
-Alternatively, build with Go and this is not a problem.
-
-Put the binary wherever you want it on PATH, or let `install.sh` do it — `BIN_DIR`
-picks the destination:
-
-```bash
-BIN_DIR=/usr/local/bin   curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh  # needs permissions
-BIN_DIR="$HOME/.gdaddon/bin" curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh  # where the EditorPlugin looks
+To update:
+```
+gdaddon update
 ```
 
-The default is `~/.local/bin`. `~/.gdaddon/bin` isn't on PATH, but it's the location the
-companion EditorPlugin launches, and it needs no permissions.
+More install details (location, flags, etc): [shared install reference](https://github.com/brohd11/goutil/blob/main/docs/install.md).
 
-After install you can delete the download folder. `gdaddon update` keeps the binary
-current from then on, installing in place over wherever it lives.
+<sub>macOS note: a binary downloaded **in a browser** gets quarantined by Gatekeeper — clear it
+with `xattr -dr com.apple.quarantine path/to/binary`. This doesn't apply to the installer
+above; the attribute is set by browsers, not by `curl`.</sub>
 
----
 
 ### Manifest
 Each addon has an entry in the manifest. This editable via the TUI, or by hand.
@@ -104,15 +78,15 @@ There is also an "Install All + Deps" command that will  install, check for depe
 ### Installing one addon from the command line
 
 `gdaddon install` adds a single addon to the current project without opening the TUI,
-along with the dependencies that addon declares (and theirs, and so on) — unlike
+along with the dependencies that addon declares (and theirs, and so on). Unlike
 "Install All + Deps", nothing else in the manifest is touched.
 
 ```bash
-gdaddon install brohd11/Godot-Script-Tabs          # latest release
-gdaddon install brohd11/Godot-Script-Tabs@v0.1.4   # a specific release
+gdaddon install user/repo-name                     # latest release
+gdaddon install user/repo-name                     # a specific release
 gdaddon install codeberg.org/someone/their-addon   # a host other than github.com
-gdaddon install brohd11/Godot-Script-Tabs --clone  # live git checkout, default branch
-gdaddon install brohd11/Godot-Script-Tabs@dev --clone
+gdaddon install user/repo-name  --clone            # live git checkout, default branch
+gdaddon install user/repo-name dev --clone
 ```
 
 The project root is the git toplevel (or `--root`), and a manifest is created if there
