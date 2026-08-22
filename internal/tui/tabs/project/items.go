@@ -96,8 +96,8 @@ func addonItem(r rowData) components.Item {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
 	// A present row carries its own shortcuts (the framework dispatches Item.Keys for the
-	// highlighted row, see RootUpdate): "t" opens a terminal at the install path for any
-	// package or checkout; "v" opens the Git page and "d" that checkout's diff list, but both
+	// highlighted row, see RootUpdate): "t" opens a terminal at the install path (in this
+	// process; "T" for a window) for any package or checkout; "v" opens the Git page and "d" that checkout's diff list, but both
 	// only for a git checkout — on a package they aren't handled, so the key falls through (as
 	// "t" does on an absent row).
 	var keys func(*core.Shared, string) (core.Action, bool)
@@ -105,6 +105,8 @@ func addonItem(r rowData) components.Item {
 		keys = func(sh *core.Shared, k string) (core.Action, bool) {
 			switch {
 			case core.MatchKey(k, appctx.AppKeys.Terminal):
+				return sysopen.TerminalInline(s.FullPath), true
+			case core.MatchKey(k, appctx.AppKeys.TerminalWindow):
 				return sysopen.Terminal(s.FullPath), true
 			case core.MatchKey(k, appctx.AppKeys.OpenDir):
 				return sysopen.Path(s.FullPath, false), true

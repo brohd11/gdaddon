@@ -1,5 +1,5 @@
 // Package sysopen is gdaddon's thin domain adapter over bubblestack/sysopen (the shared
-// OS-open helpers: file manager, browser, terminal). Path and Terminal delegate
+// OS-open helpers: file manager, browser, terminal). Path, Terminal and TerminalInline delegate
 // directly; URL adds gdaddon's domain normalization (an addon URL with a file extension
 // is reduced to its repo host via source.RepoURL) before handing off. It names no other
 // domain type, so any tab can reuse it without a cross-tab import.
@@ -19,9 +19,15 @@ func Path(p string, reveal bool) core.Action {
 	return bsysopen.Path(p, reveal)
 }
 
-// Terminal opens an OS terminal at dir (a directory).
+// Terminal opens a detached OS terminal window at dir (a directory).
 func Terminal(dir string) core.Action {
 	return bsysopen.Terminal(dir)
+}
+
+// TerminalInline hands gdaddon's own terminal to a shell at dir: the TUI suspends and is
+// restored when the shell exits, so no window is left behind.
+func TerminalInline(dir string) core.Action {
+	return bsysopen.TerminalInline(dir)
 }
 
 // URL opens target in the default web browser. An addon url that points at a file (a

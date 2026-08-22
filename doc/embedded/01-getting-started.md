@@ -52,7 +52,9 @@ path. It never touches a git clone or submodule you already have; those are your
 An addon installed as a clone or submodule is a live git checkout — you edit it in place,
 maybe from two projects at once. The Project tab keeps an eye on those:
 
-- `t` opens a terminal at the highlighted addon's folder, for the git work gdaddon doesn't do
+- `t` opens a terminal at the highlighted addon's folder, for the git work gdaddon doesn't
+  do — in this window, so gdaddon comes back when you `exit` (`T` for a new window,
+  `ctrl+t` for the file manager)
 - `f` runs `git fetch` in every checkout in the manifest, then refreshes
 
 Rows then mark what needs attention: `uncommitted changes`, `ahead 2` (committed but not
