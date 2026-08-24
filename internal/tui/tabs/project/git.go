@@ -1,7 +1,7 @@
 package project
 
 import (
-	"gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/addon"
 
 	"github.com/brohd11/gitstack/repo"
 )

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/brohd11/goutil/strutil"
 )
 
 // MaxManifestDepth limits how deep FindManifest descends from the start dir, and
@@ -29,7 +31,7 @@ func FindManifest(start string) (string, error) {
 			if path != start && d.Name() == ".godot" {
 				return filepath.SkipDir
 			}
-			if pathDepth(start, path) > MaxManifestDepth {
+			if strutil.Depth(start, path) > MaxManifestDepth {
 				return filepath.SkipDir
 			}
 			return nil
@@ -55,5 +57,5 @@ func WithinManifestDepth(root, dir string) bool {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
-	return pathDepth(root, dir) <= MaxManifestDepth
+	return strutil.Depth(root, dir) <= MaxManifestDepth
 }

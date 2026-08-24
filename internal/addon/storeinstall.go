@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"gdaddon/internal/store"
+	"github.com/brohd11/gdaddon/internal/store"
 )
 
 // storeInstall installs an Asset Store entry: resolve the store-hosted release zip

@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"strconv"
 
-	"gdaddon/internal/restrule"
-	"gdaddon/internal/store"
+	"github.com/brohd11/gdaddon/internal/restrule"
+	"github.com/brohd11/gdaddon/internal/store"
 )
 
 // assetStoreBase is the root of the new Godot Asset Store

@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"gdaddon/internal/restrule"
+	"github.com/brohd11/gdaddon/internal/restrule"
 )
 
 // renderSearchURL substitutes a search rule's template placeholders. {query} and

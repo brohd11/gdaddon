@@ -6,7 +6,7 @@
 package sysopen
 
 import (
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 	"path"
 
 	"github.com/brohd11/bubblestack/core"

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 // UpdateState describes whether a newer release than the installed one is

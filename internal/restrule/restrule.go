@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"gdaddon/internal/gitcred"
+	"github.com/brohd11/gdaddon/internal/gitcred"
 )
 
 // GetJSON performs a GET and decodes the JSON body into out, with a shared

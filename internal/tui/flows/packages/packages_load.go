@@ -3,9 +3,9 @@ package packages
 import (
 	"context"
 
-	arch "gdaddon/internal/archive"
-	"gdaddon/internal/source"
-	"gdaddon/internal/store"
+	arch "github.com/brohd11/gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/store"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

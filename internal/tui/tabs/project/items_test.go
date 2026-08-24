@@ -3,7 +3,7 @@ package project
 import (
 	"testing"
 
-	"gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/addon"
 )
 
 // TestRowMarker covers the warning suffix a row's name carries, including the case that

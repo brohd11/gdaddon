@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 func TestLockedSkipsUpdateCheck(t *testing.T) {

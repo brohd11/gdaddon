@@ -1,4 +1,4 @@
-module gdaddon
+module github.com/brohd11/gdaddon
 
 go 1.26.4
 

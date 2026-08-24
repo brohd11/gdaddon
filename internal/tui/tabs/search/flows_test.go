@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

@@ -1,6 +1,6 @@
 package main
 
-import "gdaddon/cmd"
+import "github.com/brohd11/gdaddon/cmd"
 
 func main() {
 	cmd.Execute()

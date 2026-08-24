@@ -78,10 +78,15 @@ func unzip(src, dest string) error {
 			return err
 		}
 		_, err = io.Copy(out, rc)
-		out.Close()
+		// Close is checked on the success path too: a write buffered by Copy can still
+		// fail at close, which would otherwise land as a silently truncated file.
+		cerr := out.Close()
 		rc.Close()
 		if err != nil {
 			return err
+		}
+		if cerr != nil {
+			return cerr
 		}
 	}
 	return nil

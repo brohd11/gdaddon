@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/config"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

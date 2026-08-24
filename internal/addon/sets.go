@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/config"
 )
 
 // SetsDir is the directory holding saved "sets": manifest-shaped YAML files the

@@ -4,9 +4,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"gdaddon/internal/archive"
-	"gdaddon/internal/tui/appctx"
-	"gdaddon/internal/tui/sysopen"
+	"github.com/brohd11/gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/sysopen"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

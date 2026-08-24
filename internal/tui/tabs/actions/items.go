@@ -3,10 +3,10 @@ package actions
 import (
 	"runtime"
 
-	"gdaddon/internal/tui/appctx"
-	"gdaddon/internal/tui/flows/docs"
-	gitflow "gdaddon/internal/tui/flows/git"
-	"gdaddon/internal/tui/flows/newplugin"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/flows/docs"
+	gitflow "github.com/brohd11/gdaddon/internal/tui/flows/git"
+	"github.com/brohd11/gdaddon/internal/tui/flows/newplugin"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

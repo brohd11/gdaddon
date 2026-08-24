@@ -14,9 +14,9 @@ import (
 	"sort"
 	"strings"
 
-	"gdaddon/internal/config"
-	"gdaddon/internal/restrule"
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/restrule"
+	"github.com/brohd11/gdaddon/internal/source"
 
 	"gopkg.in/yaml.v3"
 )

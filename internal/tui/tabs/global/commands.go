@@ -1,10 +1,10 @@
 package global
 
 import (
-	"gdaddon/internal/addon"
-	"gdaddon/internal/archive"
-	"gdaddon/internal/source"
-	"gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/core"
 )

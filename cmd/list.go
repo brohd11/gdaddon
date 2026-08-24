@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/addon"
 
 	"github.com/spf13/cobra"
 )

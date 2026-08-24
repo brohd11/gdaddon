@@ -3,10 +3,10 @@ package archive
 import (
 	"fmt"
 
-	arch "gdaddon/internal/archive"
-	"gdaddon/internal/source"
-	"gdaddon/internal/tui/appctx"
-	pck "gdaddon/internal/tui/flows/packages"
+	arch "github.com/brohd11/gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	pck "github.com/brohd11/gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

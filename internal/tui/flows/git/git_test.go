@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/addon"
 )
 
 // The confirm/batch rendering is tested in the shared repoui package; what's gdaddon's own

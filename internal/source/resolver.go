@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	"gdaddon/internal/config"
-	"gdaddon/internal/restrule"
+	"github.com/brohd11/gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/restrule"
 )
 
 // Asset is one downloadable file (a .zip archive, or a .git clone URL fallback).

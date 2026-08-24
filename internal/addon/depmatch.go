@@ -3,7 +3,7 @@ package addon
 import (
 	"path/filepath"
 
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 // This file holds the one rule the whole dependency system turns on: given a dependency

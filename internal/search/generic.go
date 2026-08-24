@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"gdaddon/internal/config"
-	"gdaddon/internal/restrule"
+	"github.com/brohd11/gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/restrule"
 )
 
 // configSource is a search.Source driven entirely by a declarative

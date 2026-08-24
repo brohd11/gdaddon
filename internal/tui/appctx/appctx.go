@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gdaddon/internal/addon"
-	"gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/archive"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -388,8 +388,7 @@ func Header(sh *core.Shared) string {
 			name = "(unnamed project)"
 		}
 	}
-	inner := core.HeaderInnerWidth(sh.Width())
-	valWidth := inner - 10 // minus the "Manifest: " label
+	valWidth := core.HeaderValueWidth(sh.Width(), "Manifest: ")
 	line := func(label, value string) string {
 		return core.Label(label) + core.Value(core.TruncLeft(value, valWidth))
 	}

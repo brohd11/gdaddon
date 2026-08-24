@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"gdaddon/internal/store"
+	"github.com/brohd11/gdaddon/internal/store"
 )
 
 // InstallOutcome records one addon that was actually installed in a batch run, so a

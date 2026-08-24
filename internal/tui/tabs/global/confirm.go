@@ -4,7 +4,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"gdaddon/internal/tui/widgets"
+	"github.com/brohd11/gdaddon/internal/tui/widgets"
 )
 
 // remove modes (also the vertical option order).

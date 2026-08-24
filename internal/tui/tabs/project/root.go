@@ -1,9 +1,9 @@
 package project
 
 import (
-	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/appctx"
-	gitflow "gdaddon/internal/tui/flows/git"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	gitflow "github.com/brohd11/gdaddon/internal/tui/flows/git"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

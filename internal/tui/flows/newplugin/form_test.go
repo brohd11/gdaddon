@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"gdaddon/internal/tui/appctx"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

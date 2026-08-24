@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/addon"
 )
 
 // scriptedPrompter is a depPrompter reading canned answers instead of a terminal, with

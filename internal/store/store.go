@@ -15,8 +15,8 @@ import (
 	"net/url"
 	"strings"
 
-	"gdaddon/internal/restrule"
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/restrule"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 // Host is the Asset Store host. base is the API/page root.

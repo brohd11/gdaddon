@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 func TestRepoDir(t *testing.T) {

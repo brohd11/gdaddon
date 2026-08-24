@@ -1,12 +1,12 @@
 package project
 
 import (
-	"gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	"strings"
 
 	"github.com/brohd11/bubblestack/core"
 
-	"gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/addon"
 )
 
 // pinInstall writes the freshly installed entry's url/path/version/tag (+clone

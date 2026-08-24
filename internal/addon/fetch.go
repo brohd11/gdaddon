@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"gdaddon/internal/restrule"
+	"github.com/brohd11/gdaddon/internal/restrule"
 
 	"github.com/brohd11/gitstack/repo"
 )

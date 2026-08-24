@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"gdaddon/internal/quarantine"
-	"gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/quarantine"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

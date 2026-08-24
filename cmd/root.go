@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"gdaddon/internal/addon"
-	"gdaddon/internal/config"
-	"gdaddon/internal/tui"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/tui"
 
 	"github.com/spf13/cobra"
 )

@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/addon"
 
 	"github.com/brohd11/goutil/strutil"
 	"github.com/mattn/go-isatty"

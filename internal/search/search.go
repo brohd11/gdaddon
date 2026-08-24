@@ -8,7 +8,7 @@ package search
 import (
 	"context"
 
-	"gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/config"
 )
 
 // Summary is one search-result row. The list endpoint returns no repo/download

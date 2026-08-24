@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gdaddon/internal/config"
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 // GlobalListPath is the user's cross-project plugin library: a manifest-shaped

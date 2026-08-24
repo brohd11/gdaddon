@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/brohd11/goutil/configdir"
+	"github.com/brohd11/goutil/strutil"
 
 	"gopkg.in/yaml.v3"
 )
@@ -170,67 +171,20 @@ func Sources() []SourceConfig {
 // key's value is set (or the key appended) — so the user's other keys and comments
 // survive untouched. A missing file is seeded from DefaultConfig (so the other
 // defaults are still written), then the key is set, matching Ensure's first-run shape.
+//
+// The node-tree surgery is goutil/configdir.SaveKey; this file used to carry a verbatim
+// copy of it, and the DefaultConfig seed was the only thing that differed.
 func saveConfigKey(key, value string) error {
 	dir, err := ConfigDir()
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(dir, "config.yml")
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return err
-		}
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		if data, err = yaml.Marshal(DefaultConfig()); err != nil {
-			return err
-		}
-	}
-
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return err
-	}
-	setMappingScalar(&doc, key, value)
-	out, err := yaml.Marshal(&doc)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, out, 0o644)
+	return configdir.SaveKey(filepath.Join(dir, "config.yml"), key, value, DefaultConfig())
 }
 
 // SaveLastSource persists name as last_search_source in ~/.gdaddon/config/config.yml
 // (surgical edit — see saveConfigKey).
 func SaveLastSource(name string) error { return saveConfigKey("last_search_source", name) }
-
-// setMappingScalar sets key=value on the top-level mapping of a parsed YAML
-// document, overwriting an existing key's value or appending the pair when absent.
-// An empty document is initialized to a mapping first.
-func setMappingScalar(doc *yaml.Node, key, value string) {
-	if len(doc.Content) == 0 {
-		doc.Kind = yaml.DocumentNode
-		doc.Content = []*yaml.Node{{Kind: yaml.MappingNode}}
-	}
-	m := doc.Content[0]
-	if m.Kind != yaml.MappingNode {
-		return
-	}
-	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
-			m.Content[i+1].Kind = yaml.ScalarNode
-			m.Content[i+1].Tag = "!!str"
-			m.Content[i+1].Value = value
-			return
-		}
-	}
-	m.Content = append(m.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value},
-	)
-}
 
 // ResolvedArchiveDir returns archive_dir (with a leading "~" expanded) if set,
 // otherwise ~/.gdaddon/archive.
@@ -240,19 +194,7 @@ func (c *Config) ResolvedArchiveDir() (string, error) {
 		return "", err
 	}
 	if dir := strings.TrimSpace(c.ArchiveDir); dir != "" {
-		return ExpandHome(dir)
+		return strutil.ExpandHome(dir)
 	}
 	return filepath.Join(base, "archive"), nil
-}
-
-// ExpandHome expands a leading "~" or "~/" to the user's home directory.
-func ExpandHome(path string) (string, error) {
-	if path == "~" || strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, strings.TrimPrefix(strings.TrimPrefix(path, "~"), "/")), nil
-	}
-	return path, nil
 }

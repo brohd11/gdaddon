@@ -3,8 +3,8 @@ package project
 import (
 	"testing"
 
-	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 )
 
 func row(name string, state addon.State) rowData {

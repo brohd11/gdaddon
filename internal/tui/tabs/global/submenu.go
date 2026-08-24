@@ -1,11 +1,11 @@
 package global
 
 import (
-	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/appctx"
-	"gdaddon/internal/tui/flows/editmanifest"
-	pck "gdaddon/internal/tui/flows/packages"
-	"gdaddon/internal/tui/sysopen"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/flows/editmanifest"
+	pck "github.com/brohd11/gdaddon/internal/tui/flows/packages"
+	"github.com/brohd11/gdaddon/internal/tui/sysopen"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

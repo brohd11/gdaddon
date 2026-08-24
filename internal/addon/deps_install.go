@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"gdaddon/internal/archive"
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/source"
 
 	"github.com/brohd11/goutil/strutil"
 )

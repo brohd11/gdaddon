@@ -4,8 +4,8 @@
 package archive
 
 import (
-	"gdaddon/internal/tui/appctx"
-	pck "gdaddon/internal/tui/flows/packages"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	pck "github.com/brohd11/gdaddon/internal/tui/flows/packages"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 // InstallOneOpts describes a single targeted install: one addon, recorded in the

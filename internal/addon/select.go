@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 )
 
 // AmbiguousAssetError reports a release whose uploaded assets can't be picked without

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/source"
 
 	"gopkg.in/ini.v1"
 )

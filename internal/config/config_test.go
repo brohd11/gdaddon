@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -46,6 +47,20 @@ func TestResolvedArchiveDir(t *testing.T) {
 	}
 	if want := filepath.Join(home, "pkgs"); got != want {
 		t.Fatalf("override archive dir = %q, want %q", got, want)
+	}
+}
+
+// archive_dir now goes through goutil/strutil.ExpandHome, which refuses "~user" forms
+// rather than passing them through as a literal relative path. The old local copy
+// silently resolved "~bob/pkgs" against the current directory, so a typo'd config
+// quietly archived to the wrong place instead of saying so.
+func TestResolvedArchiveDirRejectsOtherUserTilde(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	cfg := &Config{ArchiveDir: "~bob/pkgs"}
+	got, err := cfg.ResolvedArchiveDir()
+	if err == nil {
+		t.Fatalf("~bob/pkgs should be refused, got %q with nil error", got)
 	}
 }
 
@@ -172,5 +187,65 @@ sources:
 	}
 	if s.Detail.URL != "https://ex.com/repo/{id}" || s.Detail.BrowseURLPath != "clone_url" {
 		t.Fatalf("detail rule mismatch: %+v", s.Detail)
+	}
+}
+
+// gdaddon's config edits go through goutil/configdir.SaveKey, which does node-tree
+// surgery precisely so a user's comments and unrelated keys survive a setting change.
+// bubblestack pins the same property from its side; before the shared helper existed
+// gdaddon carried its own verbatim copy of the surgery with nothing pinning it here.
+func TestSaveLastSourcePreservesCommentsAndOtherKeys(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	dir := filepath.Join(home, ".gdaddon", "config")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.yml")
+	const original = `# why this archive dir
+archive_dir: ~/keep
+last_search_source: old
+`
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := SaveLastSource("new"); err != nil {
+		t.Fatalf("SaveLastSource: %v", err)
+	}
+
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(out)
+	for _, want := range []string{"# why this archive dir", "archive_dir: ~/keep", "last_search_source: new"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("SaveLastSource dropped %q:\n%s", want, got)
+		}
+	}
+}
+
+// The other half of the seed contract: with no config file at all, the defaults are
+// written alongside the key being set rather than the file holding only that one key.
+func TestSaveLastSourceSeedsDefaultsWhenFileMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	if err := SaveLastSource("chosen"); err != nil {
+		t.Fatalf("SaveLastSource: %v", err)
+	}
+
+	dir, err := ConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := os.ReadFile(filepath.Join(dir, "config.yml"))
+	if err != nil {
+		t.Fatalf("config file not created: %v", err)
+	}
+	if got := string(out); !strings.Contains(got, "last_search_source: chosen") {
+		t.Errorf("seeded file missing the set key:\n%s", got)
 	}
 }

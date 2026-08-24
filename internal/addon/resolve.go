@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/brohd11/goutil/strutil"
 )
 
 // placement is one source folder in the staging tree and the project-root-relative
@@ -154,22 +156,13 @@ func findAddonsDir(root string) string {
 		if filepath.Base(path) != "addons" {
 			return nil
 		}
-		depth := pathDepth(root, path)
+		depth := strutil.Depth(root, path)
 		if best == "" || depth < bestDepth {
 			best, bestDepth = path, depth
 		}
 		return filepath.SkipDir
 	})
 	return best
-}
-
-// pathDepth is the number of path segments from base to path (0 when equal).
-func pathDepth(base, path string) int {
-	rel, err := filepath.Rel(base, path)
-	if err != nil || rel == "." {
-		return 0
-	}
-	return strings.Count(rel, string(os.PathSeparator)) + 1
 }
 
 // childDirs returns the immediate subdirectories of dir (absolute paths), or nil.

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"gdaddon/internal/config"
+	"github.com/brohd11/gdaddon/internal/config"
 )
 
 func TestConfigSourceSearchAndDetail(t *testing.T) {

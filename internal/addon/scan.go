@@ -4,6 +4,8 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+
+	"github.com/brohd11/goutil/strutil"
 )
 
 // scanMaxDepth caps how deep ScanInstalled descends from the project root looking
@@ -45,11 +47,13 @@ func ScanInstalled(root string) ([]Installed, error) {
 		if strings.HasPrefix(base, ".") {
 			return filepath.SkipDir
 		}
+		// rel is needed below for the reported Path; the depth arithmetic that used to
+		// be spelled out here is strutil.Depth.
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
 			return filepath.SkipDir
 		}
-		if strings.Count(rel, string(filepath.Separator))+1 > scanMaxDepth {
+		if strutil.Depth(root, path) > scanMaxDepth {
 			return filepath.SkipDir
 		}
 		if !hasPluginCfg(path) {

@@ -3,8 +3,8 @@ package packages
 import (
 	"fmt"
 
-	arch "gdaddon/internal/archive"
-	"gdaddon/internal/source"
+	arch "github.com/brohd11/gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/source"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

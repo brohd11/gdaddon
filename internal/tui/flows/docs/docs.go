@@ -9,7 +9,7 @@
 package docs
 
 import (
-	"gdaddon/doc"
+	"github.com/brohd11/gdaddon/doc"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

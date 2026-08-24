@@ -7,8 +7,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"gdaddon/internal/addon"
-	"gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/source"
 
 	"github.com/spf13/cobra"
 )

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"gdaddon/internal/config"
-	searchpkg "gdaddon/internal/search"
-	"gdaddon/internal/tui/appctx"
-	"gdaddon/internal/tui/flows/newplugin"
+	"github.com/brohd11/gdaddon/internal/config"
+	searchpkg "github.com/brohd11/gdaddon/internal/search"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/flows/newplugin"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"

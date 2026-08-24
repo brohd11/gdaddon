@@ -3,8 +3,8 @@ package sets
 import (
 	"fmt"
 
-	"gdaddon/internal/addon"
-	"gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
