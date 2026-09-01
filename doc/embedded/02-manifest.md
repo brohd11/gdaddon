@@ -33,8 +33,12 @@ comments and formatting alone.
   Dependencies page)
 
 `path` may be omitted. gdaddon then derives one — `addons/<name>`, unless the package's
-`plugin.cfg` declares its own `dir=`, which wins — and writes the result back into the
-manifest on install.
+`plugin.cfg` declares its own `dir=` (or `path=`), which wins — and writes the result back
+into the manifest on install.
+
+A package that nests its plugin under a namespace folder
+(`addons/addon_lib/tree_sitter_gd/`) derives the full path, namespace and all. The addon
+is the folder holding the config file, never the level above it.
 
 ## Zip or git
 

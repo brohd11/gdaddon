@@ -67,9 +67,10 @@ func isUnder(path, base string) bool {
 // Derivation order:
 //  1. submodule-style (plugin.cfg at the staging root) — the whole tree is the addon.
 //  2. an addons/ folder anywhere in the tree — the canonical Godot layout: mirror its
-//     immediate child folders into the project's addons/. This handles packages with
-//     loose files beside the plugin folder(s) and packages with no plugin.cfg at all
-//     (icon packs, asset libraries), which the config search alone would mis-derive.
+//     child folders into the project's addons/, descending into a child that is only a
+//     namespace level (see addonsTargets). This handles packages with loose files beside
+//     the plugin folder(s) and packages with no plugin.cfg at all (icon packs, asset
+//     libraries), which the config search alone would mis-derive.
 //  3. otherwise locate plugin folders by their plugin.cfg/version.cfg and derive.
 func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement {
 	// rootName is the install dir basename when the package is installed whole (no
@@ -92,7 +93,7 @@ func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement 
 	// folders are the plugins. Derive from those, ignoring sibling junk (docs/,
 	// .github/, README) and the GitHub wrapper name.
 	if addonsDir := findAddonsDir(stagingRoot); addonsDir != "" {
-		if ps := placementsForDirs(addonsDir, childDirs(addonsDir), definedPath); len(ps) > 0 {
+		if ps := placementsForDirs(addonsDir, addonsTargets(addonsDir), definedPath); len(ps) > 0 {
 			return ps
 		}
 	}
@@ -178,6 +179,32 @@ func childDirs(dir string) []string {
 		}
 	}
 	return dirs
+}
+
+// addonsTargets returns the install targets under an addons/ anchor: each immediate
+// child, descended into when it is a *namespace* level — a folder carrying no config of
+// its own that holds config-bearing plugin folders (addons/addon_lib/tree_sitter_gd,
+// whose addon is tree_sitter_gd, not addon_lib). Taking the immediate children whole
+// used to pin the namespace folder as the addon, which made an uninstall delete every
+// addon sharing that namespace and hid the real plugin from ScanInstalled.
+//
+// It can't simply be pluginDirs(addonsDir): a child with no config anywhere beneath it
+// is an asset pack's folder (at_icons) and must be kept whole, which is the case the
+// addons/ anchor exists to handle in the first place.
+func addonsTargets(addonsDir string) []string {
+	var out []string
+	for _, child := range childDirs(addonsDir) {
+		if hasPluginCfg(child) {
+			out = append(out, child)
+			continue
+		}
+		if nested := pluginDirs(child); len(nested) > 0 {
+			out = append(out, nested...)
+			continue
+		}
+		out = append(out, child)
+	}
+	return out
 }
 
 // pathOr returns p when set, else the fallback — used to express the "explicit

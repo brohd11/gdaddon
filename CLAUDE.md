@@ -292,14 +292,17 @@ The per-addon **Keep (not a dependency)** action clears the flag (`SetIsDependen
 adopting the entry so it stops flagging; removal is the existing per-addon **Remove**.
 
 An addon may also declare an installer-specific `dir="addons/x"` key in its
-`plugin.cfg`/`version.cfg` (project-root-relative). The manifest stays the source of
-truth: an explicit manifest `path` always wins, but when `path` is empty and the
-install dir is being *derived*, a `dir=` key overrides the default `addons/<name>`
+`plugin.cfg`/`version.cfg` (project-root-relative; `path=` is accepted as an alias for
+authors who reach for the manifest's word, with `dir=` winning when both are present).
+The manifest stays the source of truth: an explicit manifest `path` always wins, but when
+`path` is empty and the
+install dir is being *derived*, that key overrides the default `addons/<name>`
 derivation (see `installDir` in cfg.go, applied by `resolveInstall` in resolve.go).
 The derived path is then recorded back into the manifest on install.
 
-**`dir=` is attacker-controlled input and is validated as such.** It is read from the
-*downloaded* package, and its destination is `os.RemoveAll`'d before being written
+**`dir=`/`path=` is attacker-controlled input and is validated as such.** Both go
+through the same check in `installDir`. It is read from the *downloaded* package, and
+its destination is `os.RemoveAll`'d before being written
 (`writePlacement`) — so an unchecked `dir="../../.."` is an arbitrary recursive delete
 outside the project. `filepath.Join` absorbs a leading `/` but not `..`. Two layers:
 `installDir` rejects a non-`filepath.IsLocal` value so the install *falls back* to the
@@ -313,7 +316,14 @@ Derivation preserves the package's own directory levels: a plugin folder's path
 *relative to the addons anchor* is its path under the project's `addons/`, so
 `addon_lib/my_addon/version.cfg` installs to `addons/addon_lib/my_addon`, namespace
 folder and all. The anchor is the package's `addons/` folder when it ships one, else
-the package root (a package with no `addons/` folder is assumed to *be* one). A zip's
+the package root (a package with no `addons/` folder is assumed to *be* one). A child of
+that anchor holding no config of its own but containing plugin folders is a *namespace*
+level and is descended into (`addonsTargets` in resolve.go), so the two layouts derive
+identically — `addons/addon_lib/tree_sitter_gd` pins the leaf, not `addons/addon_lib`.
+Descending matters beyond tidiness: the recorded path is what an uninstall/update
+`RemoveAll`s, and `ScanInstalled` stops at the first config-bearing folder. A child with
+no config anywhere beneath it is an asset pack and is still kept whole, which is also why
+`stampVersion` refuses to stamp a folder that contains plugin folders. A zip's
 single top-level folder is stripped only when it's a wrapper rather than a level of
 that layout — a host-generated `repo-tag/` (by url), the addon folder itself, an asset
 pack's root, or a release asset's version-stamped `MyPlugin-1.2.3/` (see `isWrapperDir`

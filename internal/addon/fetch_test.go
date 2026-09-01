@@ -172,19 +172,44 @@ func TestResolveInstall(t *testing.T) {
 		}
 	})
 
-	t.Run("namespace folder under addons/ anchors on addons/", func(t *testing.T) {
-		// The same layout shipped with its own addons/ folder: addons/ is the anchor,
-		// so the namespace is not doubled up (addons/addons/addon_lib/…). The child is
-		// mirrored whole — my_addon rides along inside src and still lands at
-		// addons/addon_lib/my_addon on disk; addon_lib is what gets pinned.
+	t.Run("namespace folder under addons/ keeps its level", func(t *testing.T) {
+		// The same layout shipped with its own addons/ folder: addons/ is the anchor, so
+		// the namespace is not doubled up (addons/addons/addon_lib/…) — but addon_lib is
+		// still only a level, so the addon is my_addon and that is what gets pinned. This
+		// used to resolve to addons/addon_lib, which made an uninstall delete the whole
+		// namespace and hid my_addon from ScanInstalled.
 		root := t.TempDir()
 		mkCfg(t, root, "addons/addon_lib/my_addon", "version.cfg")
 		ps := resolveInstall(root, "Whatever", "", "")
-		if len(ps) != 1 || ps[0].destRel != "addons/addon_lib" {
+		if len(ps) != 1 || ps[0].destRel != "addons/addon_lib/my_addon" {
 			t.Fatalf("got %+v", ps)
 		}
-		if filepath.Base(ps[0].src) != "addon_lib" {
-			t.Errorf("src should be the addons/ child folder, got %s", ps[0].src)
+		if filepath.Base(ps[0].src) != "my_addon" {
+			t.Errorf("src should be the plugin folder, got %s", ps[0].src)
+		}
+	})
+
+	t.Run("namespace bundle under addons/", func(t *testing.T) {
+		// Several plugins sharing a namespace level: each derives its own destination,
+		// so installing one never overwrites the namespace its siblings live in.
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/addon_lib/a")
+		mkPlugin(t, root, "addons/addon_lib/b")
+		ps := resolveInstall(root, "Whatever", "", "")
+		got := destSet(ps)
+		if len(got) != 2 || got[0] != "addons/addon_lib/a" || got[1] != "addons/addon_lib/b" {
+			t.Fatalf("got %v", got)
+		}
+	})
+
+	t.Run("addons/ mixing a plain plugin and a namespace", func(t *testing.T) {
+		root := t.TempDir()
+		mkPlugin(t, root, "addons/plain")
+		mkCfg(t, root, "addons/addon_lib/nested", "version.cfg")
+		ps := resolveInstall(root, "Whatever", "", "")
+		got := destSet(ps)
+		if len(got) != 2 || got[0] != "addons/addon_lib/nested" || got[1] != "addons/plain" {
+			t.Fatalf("got %v", got)
 		}
 	})
 
@@ -218,6 +243,35 @@ func TestResolveInstall(t *testing.T) {
 		ps := resolveInstall(root, "Whatever", "", "")
 		if len(ps) != 1 || ps[0].destRel != "addons/custom_lib" {
 			t.Fatalf("dir= in version.cfg not honored; got %+v", ps)
+		}
+	})
+
+	t.Run("path= in config is honored as an alias for dir=", func(t *testing.T) {
+		// Authors reach for the manifest's word; godot-tree-sitter-gd's version.cfg
+		// declares path=, not dir=.
+		root := t.TempDir()
+		mkCfgWith(t, root, "addons/my_lib", "version.cfg", `path="addons/custom_lib"`)
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/custom_lib" {
+			t.Fatalf("path= alias not honored; got %+v", ps)
+		}
+	})
+
+	t.Run("dir= wins over path= when both are declared", func(t *testing.T) {
+		root := t.TempDir()
+		mkCfgWith(t, root, "addons/my_lib", "version.cfg", "dir=\"addons/from_dir\"\npath=\"addons/from_path\"")
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/from_dir" {
+			t.Fatalf("dir= should win; got %+v", ps)
+		}
+	})
+
+	t.Run("non-local path= is ignored", func(t *testing.T) {
+		root := t.TempDir()
+		mkCfgWith(t, root, "addons/my_lib", "version.cfg", `path="../../escape"`)
+		ps := resolveInstall(root, "Whatever", "", "")
+		if len(ps) != 1 || ps[0].destRel != "addons/my_lib" {
+			t.Fatalf("escaping path= should fall back to derivation; got %+v", ps)
 		}
 	})
 

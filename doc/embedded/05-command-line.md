@@ -47,9 +47,11 @@ brand-new project. `--all` needs one to already exist.
 The install location is worked out from the downloaded package, exactly as it is in the
 TUI: a repo whose root holds a `plugin.cfg` is installed whole, a repo shipping an
 `addons/` folder has its plugin folders mirrored under the project's `addons/`, and
-anything else is located by its config files. An addon can override this by declaring
-`dir="addons/whatever"` in its own `plugin.cfg` — the opt-in that makes a
-submodule-shaped repo land somewhere other than `addons/<repo-name>`.
+anything else is located by its config files. A namespace folder under `addons/`
+(`addons/addon_lib/tree_sitter_gd/`) is kept, so the addon is the folder holding the
+config file, not the level above it. An addon can override all of this by declaring
+`dir="addons/whatever"` — or `path="addons/whatever"` — in its own `plugin.cfg`, the
+opt-in that makes a submodule-shaped repo land somewhere other than `addons/<repo-name>`.
 
 ### Branches
 

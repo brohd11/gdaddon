@@ -47,13 +47,20 @@ func intendedVersion(a Addon) string {
 // can match it — config-less packages like icon packs otherwise read as a perpetual
 // "installed unknown" mismatch) and srcURL (the upstream repo it was installed from,
 // read back by the Scan action via SourceURL). It is a no-op when dir already carries
-// a plugin.cfg/version.cfg (an authored config always wins — never clobber it) or
-// when there's nothing to record (both ver and srcURL empty, e.g. a branch-HEAD
-// install of a store package). Only the keys with a value are emitted. The version
+// a plugin.cfg/version.cfg (an authored config always wins — never clobber it), when
+// dir is a namespace folder holding other plugin folders (it is a level of the layout,
+// not an addon), or when there's nothing to record (both ver and srcURL empty, e.g.
+// a branch-HEAD install of a store package). Only the keys with a value are emitted. The version
 // normalization matches pinInstall's, so the stamped value equals what the manifest
 // records. Best-effort: a write error is ignored (this tracking is a convenience).
 func stampVersion(dir, ver, srcURL string) {
 	if pluginCfgPath(dir) != "" {
+		return
+	}
+	// The mirror case: a folder with no config of its own that *contains* plugin folders
+	// is a namespace level (addons/addon_lib), not an addon. Stamping it would make
+	// ScanInstalled stop there and never see the real plugin beneath it.
+	if len(pluginDirs(dir)) > 0 {
 		return
 	}
 	ver = strings.TrimPrefix(strings.TrimSpace(ver), "v")
@@ -89,18 +96,25 @@ func readPluginCfgKey(dir, key string) string {
 	return strings.Trim(strings.TrimSpace(raw), `'"`)
 }
 
-// installDir reads the installer-specific `dir` key an addon may declare in its
+// installDir reads the installer-specific install-path key an addon may declare in its
 // plugin.cfg/version.cfg under addonDir — a project-root-relative install path the
-// author can pin (like the custom `deps` key). Returns "" when there's no config, no
-// dir key, or the value is not a project-root-relative path.
+// author can pin (like the custom `deps` key). Either `dir` or `path` names it, `dir`
+// winning when both are present; `path` is accepted because authors reach for the same
+// word the manifest uses (godot-tree-sitter-gd's version.cfg declares
+// path="addons/addon_lib/tree_sitter_gd"). Returns "" when there's no config, neither
+// key, or the value is not a project-root-relative path.
 //
 // That last case is the security-relevant one: this value comes from the *downloaded
 // package*, and its destination is os.RemoveAll'd before being written. An absolute
-// path or one climbing out with ".." is ignored here so the install falls back to the
-// normal addons/<name> derivation rather than failing; writePlacement's resolveUnder
-// is the hard backstop for anything that reaches it by another route.
+// path or one climbing out with ".." is ignored here — for either key — so the install
+// falls back to the normal addons/<name> derivation rather than failing;
+// writePlacement's resolveUnder is the hard backstop for anything that reaches it by
+// another route.
 func installDir(addonDir string) string {
 	dir := readPluginCfgKey(addonDir, "dir")
+	if dir == "" {
+		dir = readPluginCfgKey(addonDir, "path")
+	}
 	if dir == "" {
 		return ""
 	}

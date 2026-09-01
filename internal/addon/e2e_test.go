@@ -73,6 +73,8 @@ func TestInstallZipTopLevelFolder(t *testing.T) {
 		name     string
 		files    map[string]string
 		wantPath string
+		// absent is checked to not exist after the install (a stray stamped config).
+		absent string
 	}{
 		{
 			// The namespace folder is the zip's root: it is not a wrapper, so
@@ -94,6 +96,16 @@ func TestInstallZipTopLevelFolder(t *testing.T) {
 			files:    map[string]string{"MyPlugin-1.2.3/my_addon/plugin.cfg": cfg},
 			wantPath: "addons/my_addon",
 		},
+		{
+			// The godot-tree-sitter-gd release layout: the zip's top level IS addons/, so
+			// nothing is unwrapped and the namespace level sits under the anchor. The addon
+			// is the config-bearing leaf, not the namespace — and the namespace must not be
+			// stamped with a synthetic version.cfg that would hide the leaf from the scan.
+			name:     "namespace under a top-level addons/",
+			files:    map[string]string{"addons/addon_lib/tree_sitter_gd/version.cfg": cfg},
+			wantPath: "addons/addon_lib/tree_sitter_gd",
+			absent:   "addons/addon_lib/version.cfg",
+		},
 	}
 
 	for _, tc := range cases {
@@ -113,6 +125,11 @@ func TestInstallZipTopLevelFolder(t *testing.T) {
 			}
 			if _, err := os.Stat(filepath.Join(project, tc.wantPath)); err != nil {
 				t.Errorf("addon not installed at %s: %v", tc.wantPath, err)
+			}
+			if tc.absent != "" {
+				if _, err := os.Stat(filepath.Join(project, tc.absent)); err == nil {
+					t.Errorf("%s should not have been written", tc.absent)
+				}
 			}
 		})
 	}
