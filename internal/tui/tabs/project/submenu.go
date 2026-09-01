@@ -12,7 +12,7 @@ import (
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repoui"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 // newSubmenuScreen builds the per-addon command submenu (the screen reached by

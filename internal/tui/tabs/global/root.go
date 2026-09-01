@@ -10,8 +10,8 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 // globalItem is one entry from the global plugin list, carried into the per-plugin
@@ -74,7 +74,7 @@ func (s *GlobalScreen) Init(*core.Shared) tea.Cmd { return nil }
 func (s *GlobalScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
+	if k, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
 		appctx.CycleSort(&s.list, &s.sort, globalSortModes, globalTitle,
 			func(m appctx.SortMode) []list.Item { return globalItems(sh, m) })
 		return s, core.Action{}

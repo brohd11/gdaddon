@@ -6,7 +6,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/key"
+	"charm.land/bubbles/v2/key"
 )
 
 // RemoveConfirmHelp is the hint row every Remove toggle-confirm shows: the options are

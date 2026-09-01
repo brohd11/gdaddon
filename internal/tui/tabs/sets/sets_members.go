@@ -10,8 +10,8 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 // setPluginsScreen lists a set's current members (name + pinned version); selecting one
@@ -70,7 +70,7 @@ func (s *setPluginsScreen) Filtering() bool { return s.list.FilterState() == lis
 // Update cycles the sort order, pops on Back (a pushed screen), and otherwise forwards
 // to the shared root key-handling.
 func (s *setPluginsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	if km, ok := msg.(tea.KeyMsg); ok && !s.Filtering() {
+	if km, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() {
 		switch {
 		case core.MatchKey(km.String(), appctx.AppKeys.Sort):
 			appctx.CycleSort(&s.list, &s.sort, setsSortModes, s.setName,

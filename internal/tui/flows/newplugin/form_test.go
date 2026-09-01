@@ -1,6 +1,7 @@
 package newplugin
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // stubRoot is a minimal tab root so the test can build a router to push the form
@@ -58,17 +59,17 @@ func TestNewPluginFormToConfirm(t *testing.T) {
 		t.Fatalf("want *components.FormScreen, got %T", tm.(core.Router).Top())
 	}
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("enter"))
 	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("empty URL should keep the form, got %T", tm.(core.Router).Top())
 	}
 
 	form.SetValue("url", "https://github.com/owner/repo")
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("enter"))
 	if _, ok := tm.(core.Router).Top().(*components.DialogScreen); !ok {
 		t.Fatalf("filled URL should push confirm, got %T", tm.(core.Router).Top())
 	}
-	if !strings.Contains(tm.View(), "owner/repo") {
+	if !strings.Contains(view(tm), "owner/repo") {
 		t.Fatal("confirm view should show the entered url")
 	}
 }
@@ -83,3 +84,10 @@ func TestNewWithURL(t *testing.T) {
 		t.Fatalf("focus should jump to Name field, got %q", f.FocusedKey())
 	}
 }
+
+// view renders the model to the plain text the assertions match against. v2's View
+// returns a tea.View — the frame's content plus the terminal modes it asks for — so this
+// reaches through to the content, and strips it: lipgloss v2 renders styles verbatim
+// where v1's TTY-less Ascii profile dropped them, so a substring like "Docs › Getting
+// started" now has escape sequences between its words.
+func view(tm tea.Model) string { return ansi.Strip(tm.View().Content) }

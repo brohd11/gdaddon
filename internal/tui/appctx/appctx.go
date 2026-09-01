@@ -15,12 +15,12 @@ import (
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/archive"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	bsupdate "github.com/brohd11/bubblestack/selfupdate"
 	"github.com/brohd11/gitstack/repo"
 	"github.com/brohd11/gitstack/repoui"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Ctx is the consumer context stored on core.Shared.App. Tabs recover it with Of.

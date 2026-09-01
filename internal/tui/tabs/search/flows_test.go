@@ -10,7 +10,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -51,12 +51,12 @@ func openSourceMenu(t *testing.T) (tea.Model, *components.MenuScreen) {
 	t.Setenv("HOME", t.TempDir())
 
 	tm, _ := newTestRouter().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter}) // "⌕ New search" → the query form
+	tm = pump(tm, keyMsg("enter")) // "⌕ New search" → the query form
 	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("enter on the search row should open the query form, got %T", tm.(core.Router).Top())
 	}
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyUp}) // query → source
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("up")) // query → source
+	tm = pump(tm, keyMsg("enter"))
 
 	menu, ok := tm.(core.Router).Top().(*components.MenuScreen)
 	if !ok {
@@ -75,7 +75,7 @@ func TestSourceMenuOpensUnderTheSourceRow(t *testing.T) {
 		t.Fatal("the source menu should be an overlay, leaving the form drawn behind it")
 	}
 
-	lines := strings.Split(tm.View(), "\n")
+	lines := strings.Split(view(tm), "\n")
 
 	// The dropdown contributes no breadcrumb segment (MenuOpts.Crumb unset): it isn't a
 	// place the user navigated to, and a bar that grows a segment on every open flickers.
@@ -99,7 +99,7 @@ func TestSourceMenuOpensUnderTheSourceRow(t *testing.T) {
 		}
 	}
 	if srcRow < 0 {
-		t.Fatalf("no Source row in the rendered frame:\n%s", tm.View())
+		t.Fatalf("no Source row in the rendered frame:\n%s", view(tm))
 	}
 
 	x, y := menu.OverlayPos(0, 0)
@@ -128,25 +128,32 @@ func TestSourceMenuSelects(t *testing.T) {
 		t.Errorf("the cursor should start on the current source, got row %d", got)
 	}
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyDown})
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("down"))
+	tm = pump(tm, keyMsg("enter"))
 	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("picking a row should pop back to the form, got %T", tm.(core.Router).Top())
 	}
 	// Read the row back off the router's own frame: the form renders through the Shared
 	// the router sized, where a fresh one would fold the value at the 24-column floor.
-	if view := ansi.Strip(tm.View()); !strings.Contains(view, "Source:  Asset Library") {
+	if view := ansi.Strip(view(tm)); !strings.Contains(view, "Source:  Asset Library") {
 		t.Errorf("the Source row should show the picked source:\n%s", view)
 	}
 
 	// Esc closes the menu without changing the row.
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter}) // reopen
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyDown})
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	tm = pump(tm, keyMsg("enter")) // reopen
+	tm = pump(tm, keyMsg("down"))
+	tm = pump(tm, keyMsg("esc"))
 	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("esc should pop the menu back to the form, got %T", tm.(core.Router).Top())
 	}
-	if view := ansi.Strip(tm.View()); !strings.Contains(view, "Source:  Asset Library") {
+	if view := ansi.Strip(view(tm)); !strings.Contains(view, "Source:  Asset Library") {
 		t.Errorf("esc should leave the source unchanged:\n%s", view)
 	}
 }
+
+// view renders the model to the plain text the assertions match against. v2's View
+// returns a tea.View — the frame's content plus the terminal modes it asks for — so this
+// reaches through to the content, and strips it: lipgloss v2 renders styles verbatim
+// where v1's TTY-less Ascii profile dropped them, so a substring like "Docs › Getting
+// started" now has escape sequences between its words.
+func view(tm tea.Model) string { return ansi.Strip(tm.View().Content) }

@@ -13,7 +13,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // gitProject builds a Godot project root with one clone-kind addon that is a real git
@@ -82,7 +82,7 @@ func TestGitSubmenuWiring(t *testing.T) {
 	}
 
 	// "v" opens the per-repo Git submenu.
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+	tm = pump(tm, keyMsg("v"))
 	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
 		t.Fatalf("v on a git checkout should open the Git submenu (PickerScreen), got %T", tm.(core.Router).Top())
 	}
@@ -90,21 +90,21 @@ func TestGitSubmenuWiring(t *testing.T) {
 	// its git-command rows. Only the first few rows fit at this window size — the list
 	// paginates the rest — so assert on ones above the fold rather than on a row whose
 	// position shifts whenever the menu gains an entry.
-	if out := tm.View(); !strings.Contains(out, "myrepo") || !strings.Contains(out, "Git") ||
+	if out := view(tm); !strings.Contains(out, "myrepo") || !strings.Contains(out, "Git") ||
 		!strings.Contains(out, "Status") || !strings.Contains(out, "Diff") {
 		t.Errorf("submenu should be the repo's Git menu with git commands:\n%s", out)
 	}
 
 	// esc back to the root, then "V" opens the all-repos menu.
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	tm = pump(tm, keyMsg("esc"))
 	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
 		t.Fatalf("esc should return to the Project root, got %T", tm.(core.Router).Top())
 	}
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'V'}})
+	tm = pump(tm, keyMsg("V"))
 	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
 		t.Fatalf("V should open the all-repos Git menu (PickerScreen), got %T", tm.(core.Router).Top())
 	}
-	if out := tm.View(); !strings.Contains(out, "all repos") {
+	if out := view(tm); !strings.Contains(out, "all repos") {
 		t.Errorf("the all-repos menu title should say so:\n%s", out)
 	}
 }
@@ -121,17 +121,17 @@ func TestRootGitKeyWiring(t *testing.T) {
 	}
 
 	tm := sized(routerAt(root))
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyCtrlV})
+	tm = pump(tm, keyMsg("ctrl+v"))
 	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
 		t.Fatalf("ctrl+v should open the project repo's Git page (PickerScreen), got %T", tm.(core.Router).Top())
 	}
-	if out := tm.View(); !strings.Contains(out, "Git") ||
+	if out := view(tm); !strings.Contains(out, "Git") ||
 		!strings.Contains(out, "Status") || !strings.Contains(out, "Diff") {
 		t.Errorf("ctrl+v should open the root's Git menu with git commands:\n%s", out)
 	}
 
 	// esc back to the Project root.
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	tm = pump(tm, keyMsg("esc"))
 	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
 		t.Fatalf("esc should return to the Project root, got %T", tm.(core.Router).Top())
 	}
@@ -142,12 +142,12 @@ func TestRootGitKeyWiring(t *testing.T) {
 // auto-clear rides the returned cmd's timer, which a pump would run synchronously.)
 func TestRootGitKeyNotACheckout(t *testing.T) {
 	tm := sized(routerAt(gitProject(t))) // project root is not a checkout
-	tm, _ = tm.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
+	tm, _ = tm.Update(keyMsg("ctrl+v"))
 
 	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
 		t.Fatalf("ctrl+v on a non-checkout root should not navigate, got %T", tm.(core.Router).Top())
 	}
-	if out := tm.View(); !strings.Contains(out, "not a git checkout") {
+	if out := view(tm); !strings.Contains(out, "not a git checkout") {
 		t.Errorf("the status line should explain why nothing opened:\n%s", out)
 	}
 }
@@ -163,11 +163,11 @@ func TestHeaderClickOpensRootGit(t *testing.T) {
 	}
 
 	tm := sized(routerAt(root))
-	tm = pump(tm, tea.MouseMsg{X: 5, Y: 0, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	tm = pump(tm, tea.MouseClickMsg{X: 5, Y: 0, Button: tea.MouseLeft})
 	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
 		t.Fatalf("a header click should open the project repo's Git page (PickerScreen), got %T", tm.(core.Router).Top())
 	}
-	if out := tm.View(); !strings.Contains(out, "Git") ||
+	if out := view(tm); !strings.Contains(out, "Git") ||
 		!strings.Contains(out, "Status") || !strings.Contains(out, "Diff") {
 		t.Errorf("a header click should open the root's Git menu with git commands:\n%s", out)
 	}

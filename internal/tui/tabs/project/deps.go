@@ -12,9 +12,9 @@ import (
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/goutil/strutil"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 // plannedDep is one dependency the plan will add to the manifest: a resolved

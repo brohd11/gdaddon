@@ -7,8 +7,6 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gdaddon/internal/addon"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // TestNewStoreForm prefills the canonical store url and focuses the Name field.
@@ -28,11 +26,11 @@ func TestStoreFormToConfirm(t *testing.T) {
 	tm := sized(newTestRouter())
 	tm, _ = tm.Update(core.Push(NewStoreForm("https://store.godotengine.org/publisher/slug", "2.1.0")))
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("enter"))
 	if _, ok := tm.(core.Router).Top().(*components.DialogScreen); !ok {
 		t.Fatalf("filled URL should push confirm, got %T", tm.(core.Router).Top())
 	}
-	view := tm.View()
+	view := view(tm)
 	if !strings.Contains(view, "https://store.godotengine.org/publisher/slug") {
 		t.Fatal("confirm should show the store url as typed")
 	}
@@ -70,11 +68,11 @@ func TestTrackFormToConfirm(t *testing.T) {
 	tm := sized(newTestRouter())
 	tm, _ = tm.Update(core.Push(NewFromInstall("addons/foo", "foo", "1.2.3", "https://github.com/owner/foo", addon.KindSubmodule, "main")))
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("enter"))
 	if _, ok := tm.(core.Router).Top().(*components.DialogScreen); !ok {
 		t.Fatalf("filled URL should push confirm, got %T", tm.(core.Router).Top())
 	}
-	view := tm.View()
+	view := view(tm)
 	for _, want := range []string{"Track plugin", "https://github.com/owner/foo.git", "v1.2.3", "submodule", "(branch main)"} {
 		if !strings.Contains(view, want) {
 			t.Fatalf("confirm should show %q", want)

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/brohd11/gdaddon/internal/tui/tabs/actions"
 	"github.com/brohd11/gdaddon/internal/tui/tabs/project"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // newTestRouter builds a router with the Browse + Actions tabs and no real project
@@ -52,7 +53,7 @@ func pump(tm tea.Model, msg tea.Msg) tea.Model {
 // help) without panicking and includes the persistent header.
 func TestRouterRenders(t *testing.T) {
 	tm := sized(newTestRouter())
-	out := tm.View()
+	out := view(tm)
 	if out == "" {
 		t.Fatal("empty view")
 	}
@@ -65,12 +66,12 @@ func TestRouterRenders(t *testing.T) {
 // switching through the router's global keys.
 func TestTabSwitch(t *testing.T) {
 	tm := sized(newTestRouter())
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	tm = pump(tm, keyMsg("]"))
 	if _, ok := tm.(core.Router).Top().(*actions.ActionsScreen); !ok {
 		t.Fatalf("after ] want *actions.ActionsScreen, got %T", tm.(core.Router).Top())
 	}
-	_ = tm.View()
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'['}})
+	_ = view(tm)
+	tm = pump(tm, keyMsg("["))
 	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
 		t.Fatalf("after [ want *project.ProjectScreen, got %T", tm.(core.Router).Top())
 	}
@@ -81,7 +82,7 @@ func TestTabSwitch(t *testing.T) {
 func TestTabSwitchGatedAtDepth(t *testing.T) {
 	tm := sized(newTestRouter())
 	tm, _ = tm.Update(core.Push(newplugin.NewNewPluginForm())) // depth 2 on the Browse tab
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{']'}})
+	tm = pump(tm, keyMsg("]"))
 	if _, ok := tm.(core.Router).Top().(*components.FormScreen); !ok {
 		t.Fatalf("] at depth 2 should be ignored, got %T", tm.(core.Router).Top())
 	}
@@ -100,26 +101,33 @@ func TestFirstRunDocsFlow(t *testing.T) {
 		t.Fatalf("want the welcome popup on top, got %T", tm.(core.Router).Top())
 	}
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("enter"))
 	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
 		t.Fatalf("enter on the popup should open the docs index, got %T", tm.(core.Router).Top())
 	}
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEnter})
+	tm = pump(tm, keyMsg("enter"))
 	if _, ok := tm.(core.Router).Top().(*components.DocScreen); !ok {
 		t.Fatalf("enter on a docs row should open the page, got %T", tm.(core.Router).Top())
 	}
-	if out := tm.View(); !strings.Contains(out, "Docs › Getting started") {
+	if out := view(tm); !strings.Contains(out, "Docs › Getting started") {
 		t.Errorf("breadcrumb should name the open page:\n%s", out)
 	}
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	tm = pump(tm, keyMsg("esc"))
 	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
 		t.Fatalf("esc on a page should return to the index, got %T", tm.(core.Router).Top())
 	}
 
-	tm = pump(tm, tea.KeyMsg{Type: tea.KeyEsc})
+	tm = pump(tm, keyMsg("esc"))
 	if tm.(core.Router).Top() != root {
 		t.Fatalf("esc on the index should return to the tab root, got %T", tm.(core.Router).Top())
 	}
 }
+
+// view renders the model to the plain text the assertions match against. v2's View
+// returns a tea.View — the frame's content plus the terminal modes it asks for — so this
+// reaches through to the content, and strips it: lipgloss v2 renders styles verbatim
+// where v1's TTY-less Ascii profile dropped them, so a substring like "Docs › Getting
+// started" now has escape sequences between its words.
+func view(tm tea.Model) string { return ansi.Strip(tm.View().Content) }

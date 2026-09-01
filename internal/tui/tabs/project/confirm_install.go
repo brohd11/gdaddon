@@ -14,10 +14,10 @@ import (
 	"github.com/brohd11/gdaddon/internal/tui/flows/packages"
 	"github.com/brohd11/gdaddon/internal/tui/widgets"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // installEndpoint adapts the install confirm into a packages.Endpoint: it captures the

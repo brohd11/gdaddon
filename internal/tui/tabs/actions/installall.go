@@ -9,7 +9,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 // newInstallUpdatePicker is the Actions ▸ Install/Update All submenu: plain install,

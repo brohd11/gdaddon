@@ -11,7 +11,7 @@ import (
 	"github.com/brohd11/gdaddon/internal/tui/flows/packages"
 	"github.com/brohd11/gdaddon/internal/tui/widgets"
 
-	"github.com/charmbracelet/bubbles/key"
+	"charm.land/bubbles/v2/key"
 )
 
 // The confirm box mechanism lives in components.DialogScreen; the builders below

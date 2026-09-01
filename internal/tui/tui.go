@@ -18,7 +18,7 @@ import (
 	"github.com/brohd11/bubblestack"
 	"github.com/brohd11/bubblestack/components"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Run wires the tabs and blocks until the user quits. Tab roots are built lazily by

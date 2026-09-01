@@ -8,7 +8,7 @@ import (
 	"github.com/brohd11/gitstack/repo"
 	"github.com/brohd11/gitstack/repoui"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // fetchAllCmd runs `git fetch` in every present git checkout the manifest tracks — plus the

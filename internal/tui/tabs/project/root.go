@@ -9,9 +9,9 @@ import (
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repoui"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 // projectTitle is the browse list's base Title; the active sort mode is appended.
@@ -70,7 +70,7 @@ func (s *ProjectScreen) Filtering() bool { return s.list.FilterState() == list.F
 
 func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
 	// The tab's own keys, gated behind the filter guard so they don't hijack filter typing.
-	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() {
+	if k, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() {
 		switch {
 		// "s" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
 		case core.MatchKey(k.String(), appctx.AppKeys.Sort):

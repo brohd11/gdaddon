@@ -9,7 +9,7 @@ import (
 
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ToggleOpt is one row of a vertical option selector: a short label and a one-line

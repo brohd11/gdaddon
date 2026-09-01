@@ -13,9 +13,9 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 // setsTitle is the set list's base Title; the active sort mode is appended.
@@ -81,7 +81,7 @@ func (s *SetsScreen) Init(*core.Shared) tea.Cmd { return nil }
 func (s *SetsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *SetsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
+	if k, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
 		appctx.CycleSort(&s.list, &s.sort, setsSortModes, setsTitle,
 			func(m appctx.SortMode) []list.Item { return setListItems(m) })
 		return s, core.Action{}

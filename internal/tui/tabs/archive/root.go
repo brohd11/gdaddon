@@ -10,8 +10,8 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/list"
+	tea "charm.land/bubbletea/v2"
 )
 
 // archiveTitle is the list's base Title; the active sort mode is appended.
@@ -57,7 +57,7 @@ func (s *ArchiveScreen) Init(*core.Shared) tea.Cmd { return nil }
 func (s *ArchiveScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
 
 func (s *ArchiveScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	if k, ok := msg.(tea.KeyMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
+	if k, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
 		appctx.CycleSort(&s.list, &s.sort, archiveSortModes, archiveTitle,
 			func(m appctx.SortMode) []list.Item { return archiveItems(m) })
 		return s, core.Action{}

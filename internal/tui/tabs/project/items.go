@@ -14,7 +14,7 @@ import (
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repoui"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 // ---------- browse rows ----------

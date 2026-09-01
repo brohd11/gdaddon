@@ -1,6 +1,6 @@
 package appctx
 
-import "github.com/charmbracelet/bubbles/key"
+import "charm.land/bubbles/v2/key"
 
 // appKeyMap collects gdaddon-specific key bindings that aren't part of
 // bubblestack's framework keymap (core.Keys in bubblestack/core/keybinds.go).

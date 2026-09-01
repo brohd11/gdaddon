@@ -11,7 +11,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"github.com/charmbracelet/bubbles/list"
+	"charm.land/bubbles/v2/list"
 )
 
 // newPathsPicker is a quick navigation helper (Actions ▸ Paths): each row reveals a
