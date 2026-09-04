@@ -1,6 +1,7 @@
 package search
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -49,6 +50,7 @@ func pump(tm tea.Model, msg tea.Msg) tea.Model {
 func openSourceMenu(t *testing.T) (tea.Model, *components.MenuScreen) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	tm, _ := newTestRouter().Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	tm = pump(tm, keyMsg("enter")) // "⌕ New search" → the query form

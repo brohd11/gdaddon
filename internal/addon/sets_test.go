@@ -14,6 +14,7 @@ import (
 func TestCreateSetEmpty(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	path, err := CreateSet("foo")
 	if err != nil {
@@ -51,6 +52,7 @@ func TestCreateSetEmpty(t *testing.T) {
 func TestCreateSetFromSeedPreservesEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	projPath := filepath.Join(home, "proj", "addon_manifest.yml")
 	if err := os.MkdirAll(filepath.Dir(projPath), 0o755); err != nil {
@@ -102,6 +104,7 @@ Beta:
 func TestCreateSetRefusesOverwrite(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	projPath := filepath.Join(home, "addon_manifest.yml")
 	if err := os.WriteFile(projPath, []byte("Alpha:\n    url: https://github.com/u/Alpha.git\n"), 0o644); err != nil {
@@ -130,6 +133,7 @@ func TestCreateSetRefusesOverwrite(t *testing.T) {
 func TestListSetsAndDelete(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	// A missing sets dir reads as an empty list.
 	names, err := ListSets()

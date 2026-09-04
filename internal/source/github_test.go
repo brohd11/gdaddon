@@ -137,6 +137,7 @@ func TestResolveBranches(t *testing.T) {
 
 func TestCloneFallbackForUnknownHost(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // no user config → built-in defaults only
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	l, err := AvailableVersions(context.Background(), "https://git.example.com/alice/widget.git")
 	if err != nil {
 		t.Fatal(err)

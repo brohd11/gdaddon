@@ -22,6 +22,7 @@ func TestDirDefaultAndConfig(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", os.Getenv("HOME"))
 		got, err := Dir()
 		if err != nil {
 			t.Fatal(err)
@@ -34,6 +35,7 @@ func TestDirDefaultAndConfig(t *testing.T) {
 	t.Run("config override with ~ expansion", func(t *testing.T) {
 		home := t.TempDir()
 		t.Setenv("HOME", home)
+		t.Setenv("USERPROFILE", os.Getenv("HOME"))
 		cfgDir := filepath.Join(home, ".gdaddon", "config")
 		if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 			t.Fatal(err)
@@ -52,6 +54,7 @@ func TestDirDefaultAndConfig(t *testing.T) {
 func TestStoreAndList(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	const repoID = "github.com/owner/repo"
 
 	if _, err := Store(repoID, "v1.0.0", "pkg.zip", strings.NewReader("zipdata")); err != nil {
@@ -95,6 +98,7 @@ func TestStoreAndList(t *testing.T) {
 func TestRemoveRepo(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	const repoID = "github.com/owner/repo"
 
 	if _, err := Store(repoID, "v1.0.0", "pkg.zip", strings.NewReader("zipdata")); err != nil {
@@ -116,6 +120,7 @@ func TestRemoveRepo(t *testing.T) {
 func TestRepos(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	if _, err := Store("github.com/owner/repoB", "v1.0.0", "pkg.zip", strings.NewReader("z")); err != nil {
 		t.Fatal(err)
@@ -144,6 +149,7 @@ func TestRepos(t *testing.T) {
 
 	// Empty archive -> nil.
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	if got, err := Repos(); err != nil || got != nil {
 		t.Errorf("empty archive should be (nil,nil), got (%v,%v)", got, err)
 	}
@@ -152,6 +158,7 @@ func TestRepos(t *testing.T) {
 func TestRemove(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	const repoID = "github.com/owner/repo"
 
 	pathA, err := Store(repoID, "v1.0.0", "a.zip", strings.NewReader("z"))
@@ -238,6 +245,7 @@ func TestParseArchiveTag(t *testing.T) {
 func TestArchiveCommitPinRoundTrip(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("PK-" + r.URL.Path))
@@ -290,6 +298,7 @@ func TestArchiveCommitPinRoundTrip(t *testing.T) {
 func TestArchiveDownloads(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("PK-fake-zip"))

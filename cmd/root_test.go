@@ -103,6 +103,7 @@ func TestDiscoverManifestMissing(t *testing.T) {
 func TestIsFirstRun(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	if !isFirstRun() {
 		t.Error("no ~/.gdaddon should read as a first run")
@@ -121,6 +122,7 @@ func TestIsFirstRun(t *testing.T) {
 func TestBootstrapRunsForSubcommands(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	if rootCmd.PersistentPreRunE == nil {
 		t.Fatal("rootCmd needs a PersistentPreRunE so subcommands bootstrap ~/.gdaddon")

@@ -4,7 +4,11 @@ on: [push, pull_request]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -13,11 +17,13 @@ jobs:
           go-version-file: go.mod
 
       - name: Check go.mod/go.sum are tidy
+        if: matrix.os == 'ubuntu-latest'
         run: go mod tidy -diff
 
       # gofmt reports by printing paths and always exits 0, so an empty output is the
       # pass and the check has to be spelled out rather than run bare.
       - name: Check formatting
+        if: matrix.os == 'ubuntu-latest'
         run: |
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
@@ -27,6 +33,7 @@ jobs:
           fi
 
       - name: Vet
+        if: matrix.os == 'ubuntu-latest'
         run: go vet ./...
 
       - name: Test

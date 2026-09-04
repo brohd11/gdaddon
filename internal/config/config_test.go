@@ -9,6 +9,7 @@ import (
 
 func TestLoadMissingFile(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -28,6 +29,7 @@ func TestLoadMissingFile(t *testing.T) {
 func TestResolvedArchiveDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	// Default: ~/.gdaddon/archive.
 	cfg := &Config{}
@@ -56,6 +58,7 @@ func TestResolvedArchiveDir(t *testing.T) {
 // quietly archived to the wrong place instead of saying so.
 func TestResolvedArchiveDirRejectsOtherUserTilde(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	cfg := &Config{ArchiveDir: "~bob/pkgs"}
 	got, err := cfg.ResolvedArchiveDir()
@@ -67,6 +70,7 @@ func TestResolvedArchiveDirRejectsOtherUserTilde(t *testing.T) {
 func TestEnsureWritesDefaultsOnce(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	dir := filepath.Join(home, ".gdaddon", "config")
 	configPath := filepath.Join(dir, "config.yml")
 	sourcesPath := filepath.Join(dir, "sources.yml")
@@ -108,6 +112,7 @@ func TestEnsureWritesDefaultsOnce(t *testing.T) {
 func TestEnsureGitignore(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	path := filepath.Join(home, ".gdaddon", ".gitignore")
 
 	created, got, err := EnsureGitignore()
@@ -148,6 +153,7 @@ func TestEnsureGitignore(t *testing.T) {
 func TestLoadSources(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	dir := filepath.Join(home, ".gdaddon", "config")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -197,6 +203,7 @@ sources:
 func TestSaveLastSourcePreservesCommentsAndOtherKeys(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	dir := filepath.Join(home, ".gdaddon", "config")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -232,6 +239,7 @@ last_search_source: old
 func TestSaveLastSourceSeedsDefaultsWhenFileMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 
 	if err := SaveLastSource("chosen"); err != nil {
 		t.Fatalf("SaveLastSource: %v", err)
