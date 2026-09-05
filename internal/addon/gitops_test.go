@@ -132,9 +132,10 @@ func TestGitChanges(t *testing.T) {
 		write(t, work, filepath.Join("newdir", "sub", "a.txt"), "a")
 
 		got := changeCodes(t, work)
+		// Git status uses slash-separated repository paths on every platform.
 		want := map[string]string{
-			filepath.Join("newdir", "b.txt"):        "??",
-			filepath.Join("newdir", "sub", "a.txt"): "??",
+			"newdir/b.txt":     "??",
+			"newdir/sub/a.txt": "??",
 		}
 		for path, code := range want {
 			if got[path] != code {
