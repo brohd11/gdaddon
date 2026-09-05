@@ -3,9 +3,9 @@ module github.com/brohd11/gdaddon
 go 1.26.4
 
 require (
-	github.com/brohd11/bubblestack v0.2.0
-	github.com/brohd11/gitstack v0.2.0
-	github.com/brohd11/goutil v0.1.6
+	github.com/brohd11/bubblestack v0.2.3
+	github.com/brohd11/gitstack v0.2.1
+	github.com/brohd11/goutil v0.2.0
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.10.2
@@ -38,5 +38,4 @@ require (
 	github.com/sahilm/fuzzy v0.1.3 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/yuin/goldmark v1.8.5 // indirect
 )

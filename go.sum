@@ -10,12 +10,12 @@ github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-udiff v0.4.1 h1:OEIrQ8maEeDBXQDoGCbbTTXYJMYRCRO1fnodZ12Gv5o=
 github.com/aymanbagabas/go-udiff v0.4.1/go.mod h1:0L9PGwj20lrtmEMeyw4WKJ/TMyDtvAoK9bf2u/mNo3w=
-github.com/brohd11/bubblestack v0.2.0 h1:QmkWFdVR7TQMfHbHTH0TguTmJt81Pa4Ms/BzPhP6sz8=
-github.com/brohd11/bubblestack v0.2.0/go.mod h1:lctC53kUCH37w6XGhjgd8IeXAxY3WShZ/TVaN7Kxk50=
-github.com/brohd11/gitstack v0.2.0 h1:+DTG8Io/wfJKLsJNtNcQ2dalwXPi7aOis3BncGw+piU=
-github.com/brohd11/gitstack v0.2.0/go.mod h1:803OL4Ck6wdVh0x1s5nSyJLORISa6AY3/G16T9LkyhU=
-github.com/brohd11/goutil v0.1.6 h1:PyJz+tN8kVKvv98K3nxtv8ynv/eL7kpZlDB8lmJj10c=
-github.com/brohd11/goutil v0.1.6/go.mod h1:CNwpa6c70oSgx4GeBgVpa3o38yOVfkBEtr0tqd1jRYs=
+github.com/brohd11/bubblestack v0.2.3 h1:VfumrrlfJ3dust7NhGGbwrrZ8nQhuZAga6dJesSXuc4=
+github.com/brohd11/bubblestack v0.2.3/go.mod h1:ZWoT5dea90Tnc+tcTSLHICD96w77OxiwMOlIzkjpYMU=
+github.com/brohd11/gitstack v0.2.1 h1:YJzMPdigcyH6uzJd+haLEi8MoeGDn5gGz/AGZb9wqoU=
+github.com/brohd11/gitstack v0.2.1/go.mod h1:NbleUYHtSzpxZJpnR91UuSGuZseJ3W5Z+KqpTQuc510=
+github.com/brohd11/goutil v0.2.0 h1:fVD3ZC+RODpikNwr6R/OQU2K9+fIddyfaMCslNLeaoo=
+github.com/brohd11/goutil v0.2.0/go.mod h1:CNwpa6c70oSgx4GeBgVpa3o38yOVfkBEtr0tqd1jRYs=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=
 github.com/charmbracelet/colorprofile v0.4.3/go.mod h1:/zT4BhpD5aGFpqQQqw7a+VtHCzu+zrQtt1zhMt9mR4Q=
 github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886 h1:rdnVWKgJpTVXKuKuJyxDJ+NFJdUaUqGvyGy61OcvlbA=
@@ -72,8 +72,6 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
-github.com/yuin/goldmark v1.8.5 h1:r6N5afV5qj/5S4UTch8agZHJ8UxNCMwX7WjkkJam2NA=
-github.com/yuin/goldmark v1.8.5/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
 go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
 golang.org/x/exp v0.0.0-20231006140011-7918f672742d h1:jtJma62tbqLibJ5sFQz8bKtEM8rJBtfilJ2qTU199MI=
 golang.org/x/exp v0.0.0-20231006140011-7918f672742d/go.mod h1:ldy0pHrwJyGW56pPQzzkH36rKxoZW1tw7ZJpeKx+hdo=
