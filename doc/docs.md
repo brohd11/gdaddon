@@ -222,18 +222,21 @@ one-button "set up this project's addons" operation.
 Addons can declare their own dependencies, and gdaddon reads them so a plugin's
 requirements come along with it.
 
-An installed addon declares dependencies in its `plugin.cfg`:
+An installed addon declares dependencies in its `plugin.cfg` or `version.cfg`:
 
 ```ini
 [plugin]
 name="My Plugin"
 
-deps=["owner/repo@v1.0.0", "other/repo"]
+require=["owner/repo@v1.0.0", "other/repo"]
 ```
 
+The existing `deps` spelling remains valid. If both keys are present, `require` wins,
+including when its list is empty.
+
 Each spec is `owner/repo` with an optional `@tag` (host defaults to `github.com`). When
-an addon is installed, gdaddon reads its `deps`, resolves each against your manifest, and
-flags the addon `⚠ [missing deps]` if any required dependency is absent. Matching uses
+an addon is installed, gdaddon reads its declared dependencies, resolves each against your
+manifest, and flags the addon `⚠ [missing deps]` if any required dependency is absent. Matching uses
 the dependency's **`tag`** with a semver `>=` comparison — so a manifest entry at
 `v1.2.0` satisfies a `@v1.0.0` requirement.
 

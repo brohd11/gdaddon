@@ -37,8 +37,9 @@ Name a repo to install one addon, or pass --all to install everything the
 manifest already lists.
 
 A repo is named as owner/repo, or host/owner/repo for a host other than
-github.com — the same shorthand a plugin.cfg 'deps' entry uses. An optional
-@tag pins a release; without one the latest non-prerelease is installed.
+github.com — the same shorthand a plugin.cfg/version.cfg 'require' or 'deps'
+entry uses. An optional @tag pins a release; without one the latest
+non-prerelease is installed.
 
 The install location is worked out from the downloaded package: a repo whose
 root holds a plugin.cfg is installed whole, a repo shipping an addons/ folder

@@ -98,7 +98,7 @@ func readPluginCfgKey(dir, key string) string {
 
 // installDir reads the installer-specific install-path key an addon may declare in its
 // plugin.cfg/version.cfg under addonDir — a project-root-relative install path the
-// author can pin (like the custom `deps` key). Either `dir` or `path` names it, `dir`
+// author can pin (like the custom dependency keys). Either `dir` or `path` names it, `dir`
 // winning when both are present; `path` is accepted because authors reach for the same
 // word the manifest uses (godot-tree-sitter-gd's version.cfg declares
 // path="addons/addon_lib/tree_sitter_gd"). Returns "" when there's no config, neither

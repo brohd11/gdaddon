@@ -5,7 +5,7 @@
 ### Features
  - Project manifest - one button to install all logged plugins to pinned version
  - Update Check - checks for new releases of all your plugins
- - Declare dependencies - reads from plugin.cfg, see below
+ - Declare dependencies - reads from plugin.cfg or version.cfg, see below
  - Search - query Github, Asset Store, Asset Lib to add directly to your project
  - Global manifest - quickly add your favorite addons to your project
  - Addon sets - save a collection of addons that can be added together
@@ -62,14 +62,18 @@ MyAddon:
 ```
 
 ### Dependency Management
-If your addon relies on third party content, you can define those in the plugin.cfg
+If your addon relies on third party content, you can define those in its `plugin.cfg`
+or `version.cfg`:
 ```
 [plugin]
 name="My Plugin"
----
-deps=["user/repo/@v1.0.0"] # point to the release tag
+require=["user/repo@v1.0.0"] # point to the release tag
 ```
-When the addon is installed, the plugin.cfg will be read and checked for dependencies. If they are found and the dependency is not present, the addon will be flagged and you can run the get dependencies command to add them to your project.
+The existing `deps` spelling remains valid. If both keys are present, `require` wins,
+including when it is an empty list. When the addon is installed, its config will be read
+and checked for dependencies. If they are found and the dependency is not present, the
+addon will be flagged and you can run the get dependencies command to add them to your
+project.
 
 If you don't have a tagged version, just the repo will be added to your project where you can add the proper version manually.
 

@@ -244,12 +244,17 @@ func cloneModeOptions(mode int) string {
 // cloneModeWarning cautions that clone mode places the whole repo at the addon
 // path, so it only works for repos whose root is the addon itself.
 func cloneModeWarning(selected addon.Addon) string {
-	dest := selected.Path
+	dest, declared := selected.Path, ""
 	if dest == "" {
+		// A path-less entry's destination isn't settled until the clone is on disk: the
+		// repo may declare its own install path, which cloneInstall honors over the
+		// addons/<name> default. Nothing here can read that key yet, so don't promise
+		// a location the install may not use.
 		dest = addon.DefaultPath(selected.Name)
+		declared = ",\n    or to the install path the repo declares for itself"
 	}
 	warn := lipgloss.NewStyle().Foreground(core.MutedColor)
-	return warn.Render("  ⚠ clones the whole repo (with .git) to " + dest + ";\n    the repo root must be the addon itself or it won't load in Godot.")
+	return warn.Render("  ⚠ clones the whole repo (with .git) to " + dest + declared + ";\n    the repo root must be the addon itself or it won't load in Godot.")
 }
 
 // packageModeWarning cautions that a branch package is a clone without git's

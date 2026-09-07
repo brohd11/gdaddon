@@ -61,22 +61,59 @@ func TestParseDependencyList(t *testing.T) {
 }
 
 func TestDependenciesFromCfg(t *testing.T) {
-	dir := t.TempDir()
-	cfg := "[plugin]\nname=\"Demo\"\nversion=\"1.0.0\"\ndeps=[\"u/Dep@v1.2.0\"]\n"
-	if err := os.WriteFile(filepath.Join(dir, "plugin.cfg"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name     string
+		filename string
+		keys     string
+		wantID   string
+		wantTag  string
+	}{
+		{"deps in plugin.cfg", "plugin.cfg", `deps=["u/Dep@v1.2.0"]`, "github.com/u/dep", "v1.2.0"},
+		{"require in plugin.cfg", "plugin.cfg", `require=["u/Required@v2.0.0"]`, "github.com/u/required", "v2.0.0"},
+		{"require in version.cfg", "version.cfg", `require=["u/Library"]`, "github.com/u/library", ""},
+		{
+			"require wins over deps",
+			"plugin.cfg",
+			"deps=[\"u/Old@v1.0.0\"]\nrequire=[\"u/New@v3.0.0\"]",
+			"github.com/u/new",
+			"v3.0.0",
+		},
 	}
-	deps, err := Dependencies(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(deps) != 1 || deps[0].RepoID != "github.com/u/dep" || deps[0].Tag != "v1.2.0" {
-		t.Errorf("unexpected deps: %+v", deps)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			cfg := "[plugin]\nname=\"Demo\"\nversion=\"1.0.0\"\n" + tc.keys + "\n"
+			if err := os.WriteFile(filepath.Join(dir, tc.filename), []byte(cfg), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			deps, err := Dependencies(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(deps) != 1 || deps[0].RepoID != tc.wantID || deps[0].Tag != tc.wantTag {
+				t.Errorf("unexpected deps: %+v", deps)
+			}
+		})
 	}
 
-	// No plugin.cfg → no deps, no error.
+	t.Run("empty require overrides deps", func(t *testing.T) {
+		dir := t.TempDir()
+		cfg := "[plugin]\ndeps=[\"u/Old@v1.0.0\"]\nrequire=[]\n"
+		if err := os.WriteFile(filepath.Join(dir, "version.cfg"), []byte(cfg), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		deps, err := Dependencies(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if deps != nil {
+			t.Errorf("empty require should override deps; got %+v", deps)
+		}
+	})
+
+	// No plugin.cfg/version.cfg → no deps, no error.
 	if deps, err := Dependencies(t.TempDir()); err != nil || deps != nil {
-		t.Errorf("expected nil deps for a dir without plugin.cfg; got %+v err=%v", deps, err)
+		t.Errorf("expected nil deps for a dir without config; got %+v err=%v", deps, err)
 	}
 }
 

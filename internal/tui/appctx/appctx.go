@@ -49,7 +49,7 @@ type Ctx struct {
 
 	// DepStatuses caches every dependency each project addon declares, keyed by addon
 	// name (only addons that declare deps appear), each with its install state. Unlike
-	// UpdateChecks it's local-only (compares declared plugin.cfg deps against the
+	// UpdateChecks it's local-only (compares declared addon-config dependencies against the
 	// inspected project), so it's recomputed synchronously in loadProject on every
 	// refresh. The list reads the "needs attention" subset (unsuppressed && not
 	// installed) to draw the "missing deps" marker; the per-addon submenu gates its

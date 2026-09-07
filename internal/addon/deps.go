@@ -12,7 +12,7 @@ import (
 // defaultDepHost is assumed when a dependency item names only owner/repo.
 const defaultDepHost = "github.com"
 
-// Dependency is one parsed entry of an addon's plugin.cfg `dependencies` list:
+// Dependency is one parsed entry of an addon's plugin.cfg dependency list:
 // `owner/repo@tag` or `host/owner/repo@tag` (Tag set), or a tagless `owner/repo`
 // (Tag empty — the release is unambiguous / no version pinned, so the repo is added
 // version-less). RepoURL is the canonical repo url used to list versions and resolve
@@ -29,7 +29,8 @@ type Dependency struct {
 
 // Dependencies reads the dependencies an installed addon declares in its
 // plugin.cfg/version.cfg under addonDir. A missing config or absent/empty
-// `deps` key yields nil with no error.
+// dependency key yields nil with no error. `require` is an alias for `deps` and
+// wins when both keys are present, including when it is explicitly empty.
 func Dependencies(addonDir string) ([]Dependency, error) {
 	cfgPath := pluginCfgPath(addonDir)
 	if cfgPath == "" {
@@ -39,7 +40,12 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %w", cfgPath, err)
 	}
-	raw := cfg.Section("plugin").Key("deps").String()
+	plugin := cfg.Section("plugin")
+	key := "deps"
+	if plugin.HasKey("require") {
+		key = "require"
+	}
+	raw := plugin.Key(key).String()
 	return parseDependencyList(raw), nil
 }
 
@@ -67,7 +73,7 @@ func parseDependencyList(raw string) []Dependency {
 }
 
 // ParseRepoSpec parses an `owner/repo[@tag]` (or `host/owner/repo[@tag]`) spec into
-// the same Dependency shape a plugin.cfg `deps` item yields — the host defaults to
+// the same Dependency shape a plugin.cfg `deps`/`require` item yields — the host defaults to
 // github.com and RepoURL/RepoID come out canonical. Exported for the CLI's
 // `gdaddon install <owner/repo>` argument, which deliberately shares this parser so a
 // hand-typed spec and a declared dependency can never diverge.

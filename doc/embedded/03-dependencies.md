@@ -4,11 +4,14 @@ An addon can declare that it needs other addons, and gdaddon will help you get t
 
 ## Declaring them
 
-An addon's author adds a `deps` line to its `plugin.cfg`:
+An addon's author adds a `require` line to its `plugin.cfg` or `version.cfg`:
 
 ```
-deps=["owner/repo@v1.0.0", "owner/other"]
+require=["owner/repo@v1.0.0", "owner/other"]
 ```
+
+The existing `deps` spelling remains valid. If both keys are present, `require` wins,
+even when its list is empty.
 
 The host defaults to github.com, and the tag is optional. `owner/repo@v1.0.0` means "at
 least v1.0.0"; `owner/other` means "any version".
@@ -19,7 +22,7 @@ the release it shipped in. Comparison is semver `>=`, so a newer tag satisfies a
 
 ## The Dependencies screen
 
-Any installed addon that declares deps grows a Dependencies action. It lists every
+Any installed addon that declares dependencies grows a Dependencies action. It lists every
 declared dep with its status:
 
 - `installed` — present and satisfying the version

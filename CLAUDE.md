@@ -128,7 +128,7 @@ The targeted form's `cmd/addoninstall.go` is thin wiring; the reusable flow is `
 per-addon TUI action can call them unchanged).
 
 The repo spec is parsed by `addon.ParseRepoSpec`, which is `parseDependency` exported:
-the CLI argument and a `plugin.cfg` `deps` item are deliberately the same syntax
+the CLI argument and a `plugin.cfg`/`version.cfg` `require` or `deps` item are deliberately the same syntax
 (`owner/repo`, `host/owner/repo`, optional `@tag`) parsed by the same code, so they
 can't drift. `@tag` matches a release via `TagEqual` (leading `v` tolerated either way);
 no tag means `addon.LatestRelease`. Asset choice is `addon.SelectRelease` +
@@ -258,9 +258,10 @@ semver latest to compare). The pin comes from per-host `commit_archive_url` +
 (a host without the rules, or a sources.yml predating them) degrades to the old floating
 branch-HEAD archive with no commit recorded — regen sources.yml to pick up new defaults.
 
-An installed addon may declare its own dependencies in its `plugin.cfg`
-(`deps=["owner/repo@v1.0.0", "owner/repo"]` — host defaults to github.com,
-tag optional). The per-addon **Dependencies** TUI action (shown whenever the installed
+An installed addon may declare its own dependencies in its `plugin.cfg` or `version.cfg`
+(`require=["owner/repo@v1.0.0", "owner/repo"]`, with the existing `deps` spelling retained —
+`require` wins by key presence when both exist; host defaults to github.com, tag optional).
+The per-addon **Dependencies** TUI action (shown whenever the installed
 plugin declares any deps) opens a screen listing every declared dep with its
 *install-aware* status — `[installed]`/`[not installed]`/`[missing]`/`[outdated]`/
 `[suppressed]`. From it: **Add all missing** adds the manifest-absent (non-suppressed)
@@ -342,7 +343,7 @@ cmd/
   repos.go           — the `repos` subcommand: run a shell command in every nested git repo (uses addon.FindGitRepos / addon.HasUncommittedChanges)
   paths.go           — resolveRoot (project-root arg / git-root detection, may prompt on stdin — TUI path only), resolveRootQuiet (never prompts or exits — the subcommand path) and resolveRootArg (the optional positional [project_root] the subcommands share). The manifest is discovered by the TUI context scan (appctx.Ctx.Scan), discoverManifest, or findOrCreateManifest in addoninstall.go
 internal/
-  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, plugin.cfg dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/CurrentBranch/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, isGitCheckout, normalizeGitRemote) that classify a plugin folder's `.git`
+  addon/             — manifest parsing, install state (Inspect), Install/InstallAll, addon-config version read, manifest Update/AddEntry, addon-config dependency parsing + semver matching (deps.go), ~/.gdaddon global list. The git engine lives in the gitstack module (below); addon re-exports it via aliases in git_reexport.go (addon.GitFetch/GitSync/GitChanges/CurrentBranch/… = gitstack/repo.*) plus the manifest-aware FetchAll([]Status) adapter, so existing addon.* callers are unchanged. gitscan.go keeps only the manifest/scan probes (gitProbe, isGitCheckout, normalizeGitRemote) that classify a plugin folder's `.git`
   source/            — config-driven version resolution from a URL (resolver.go/parse.go): per-host VCS rules from config/sources.yml (releases, branches, source archives; RepoID), github.com/codeberg.org as defaults, git-clone fallback for ruleless hosts
   archive/           — local package archive (~/.gdaddon/archive or config/config.yml archive_dir): store/list package zips (List per repo, Repos for all), remove (RemoveRepo / Remove by path), merge into a listing
   config/            — ~/.gdaddon/config/ split into config.yml (archive_dir, last search source — Load; the theme moved out to the framework-wide ~/.bubblestack/config.yml) and sources.yml (search sources + per-host VCS rules — LoadSources); `Ensure` dumps both defaults on first run, each file the source of truth once present
@@ -477,7 +478,7 @@ Key packages/functions:
   update check. Keys: `v` (row-level, an addon's own Git page) and `V` (the all-repos page) —
   deliberately not `g`/`G`, which bubbles binds to jump-to-top/bottom on every list.
 - `addon.InstallOne` / `addon.InstallDepsFor` (`internal/addon/install_one.go`) — install one addon and pin it, and walk the dependency closure rooted at one installed addon. The targeted counterpart to `InstallAll`/`InstallAllDeps`; front-end agnostic, so the CLI's `gdaddon install` and (later) a per-addon TUI action share them. Both take an `addon.DepConfirmer` (`InstallOneOpts.ConfirmDep` / the parameter before `report`), nil meaning "install the closure unattended". See "Installing one addon" above for the semantics that differ from the manifest-wide flow.
-- `addon.ParseRepoSpec` / `addon.SelectRelease` / `addon.SelectAsset` — parse an `owner/repo[@tag]` spec (the exported `parseDependency`, shared with `deps=` items), pick the release for a tag (or the latest non-prerelease), and pick its install asset (`*AmbiguousAssetError` when a release ships several uploads).
+- `addon.ParseRepoSpec` / `addon.SelectRelease` / `addon.SelectAsset` — parse an `owner/repo[@tag]` spec (the exported `parseDependency`, shared with `require=`/`deps=` items), pick the release for a tag (or the latest non-prerelease), and pick its install asset (`*AmbiguousAssetError` when a release ships several uploads).
 - `addon.UpdateEntry` / `addon.AddEntry` — rewrite a manifest entry's url/path/version/tag in place (empty url/path leaves that line untouched) / append a new entry (deduped by `source.RepoID`). `addon.SetKind` / `addon.SetLock` / `addon.SetCommit` / `addon.SetIsDependency` write single scalar lines the same way (empty/false value removes the line) — `SetCommit` records/clears a branch package's pinned HEAD sha, `SetIsDependency` records/clears a dep's auto-added provenance. `addon.OrphanDeps` reports which `is_dependency` entries nothing installed still needs (the "unused dependency" marker).
 - `source.AvailableVersions` / `source.Branches` / `source.RepoID` — configured-host releases (uploaded `.zip`s + a generated source archive), branch archives, and canonical repo identity, driven by per-host VCS rules from config/sources.yml (github.com/codeberg.org as defaults). `Branches` pins each branch to its HEAD commit (`Asset.Commit` + a `commit_archive_url`) when the host rule supplies `branches.commit_path` + `commit_archive_url`, else falls back to the floating branch-HEAD archive.
 - `archive.Archive` / `archive.List` / `archive.Repos` / `archive.Merge` — save a downloaded asset zip (ctx-first, so the archive task's abort cancels the download), read one repo's archived packages back as "(archived)" releases (local-file URLs), enumerate every archived repo (the Archive tab), and fold them into a `source.Listing` (with archive-only fallback when the upstream fetch fails). A commit-pinned branch package is stored under `<branch>@<sha>` (so distinct commits of the same branch don't overwrite), and `parseArchiveTag` recovers the branch + `Asset.Commit` pin when the archive is listed back.
