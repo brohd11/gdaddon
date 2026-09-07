@@ -219,6 +219,13 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 
 	if _, err := os.Stat(dest); err == nil {
 		if isGitCheckout(dest) {
+			// Nothing to clone — but the checkout can still be in the wrong place: an
+			// entry pinning no path only learns the addon's declared one from the
+			// checkout itself, which an install made before that was consulted never
+			// applied. Settling here relocates it once instead of stranding it forever.
+			if a.Path == "" {
+				destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Name, false, report)
+			}
 			report("[%s] Already cloned at %s. Skipping (manage updates with git).", a.Name, destRel)
 			return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
 		}
@@ -235,7 +242,71 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 		return InstallResult{}, err
 	}
 	report("  -> Successfully cloned to %s", destRel)
+
+	// A clone can only declare its own install path once it is on disk, so a derived
+	// dest is provisional — settle it against the config the clone brought with it.
+	// Only when the entry pins no path of its own, which keeps the precedence
+	// installStaged applies to a package (manifest path > the addon's declared
+	// dir=/path= key > addons/<name>); a clone just resolves the middle term after the
+	// clone rather than before it.
+	if a.Path == "" {
+		destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Name, true, report)
+	}
 	return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
+}
+
+// settleDeclaredPath moves a cloned checkout from its derived location to the install
+// path the clone declares in its own plugin.cfg/version.cfg (see installDir),
+// returning where it ended up (project-relative and absolute). It mirrors
+// cloneInstall's handling of an occupied destination: a checkout already at the
+// declared path is a live working copy that is never overwritten, a non-git folder
+// there is replaced. The checkout is already installed and usable at fromRel, so a
+// move that cannot be made is reported and the derived location kept rather than
+// failing an install that otherwise succeeded.
+//
+// fresh says whether the checkout at fromRel was just cloned by this install. Only
+// then may it be discarded to resolve a clash with a checkout already at the declared
+// path — one that was already there is the user's working copy, uncommitted work and
+// all, and is left exactly where it is.
+func settleDeclaredPath(fromRel, from, baseDir, name string, fresh bool, report Reporter) (string, string) {
+	declared := installDir(from)
+	if declared == "" {
+		return fromRel, from
+	}
+	to, err := resolveUnder(baseDir, declared)
+	if err != nil {
+		report("  -> Keeping %s at %s: %v", name, fromRel, err)
+		return fromRel, from
+	}
+	// Compared resolved, not as written: the declared value is the author's spelling of
+	// the path the derivation already produced as often as not.
+	if to == from {
+		return fromRel, from
+	}
+
+	if _, err := os.Stat(to); err == nil {
+		if isGitCheckout(to) {
+			if !fresh {
+				report("[%s] Declared path %s already holds a checkout; keeping %s.", name, declared, fromRel)
+				return fromRel, from
+			}
+			report("[%s] Already cloned at %s; discarding the copy at %s.", name, declared, fromRel)
+			os.RemoveAll(from)
+			return declared, to
+		}
+		report("[%s] Replacing non-git folder at %s with the clone.", name, declared)
+		if err := os.RemoveAll(to); err != nil {
+			report("  -> Keeping %s at %s: %v", name, fromRel, err)
+			return fromRel, from
+		}
+	}
+
+	if err := Relocate(baseDir, fromRel, declared); err != nil {
+		report("  -> Keeping %s at %s: %v", name, fromRel, err)
+		return fromRel, from
+	}
+	report("  -> Moved to %s (declared by the addon)", declared)
+	return declared, to
 }
 
 // Relocate moves an installed addon directory from fromRel to toRel (both

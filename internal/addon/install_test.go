@@ -3,6 +3,7 @@ package addon
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -129,4 +130,123 @@ func TestIntendedVersion(t *testing.T) {
 	if got := intendedVersion(Addon{}); got != "" {
 		t.Errorf("no intent; got %q", got)
 	}
+}
+
+// seedDeclaredPathRepo builds a local repo whose root carries a version.cfg declaring
+// its own install path — the shape cloneInstall can only read after the clone.
+func seedDeclaredPathRepo(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "godot-gdsh")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, dir, "init", "-q", "-b", "main")
+	setIdentity(t, dir)
+	write(t, dir, "version.cfg", "[plugin]\nversion=\"0.1.0\"\npath=\"addons/addon_lib/gdsh\"\n")
+	commit(t, dir, "README.md")
+	return dir
+}
+
+// A clone can't be asked where it wants to live until it is on disk, so cloneInstall
+// settles the derived destination against the config the clone brought with it: an
+// addon declaring path=/dir= lands there rather than at addons/<name>. The precedence
+// matches a package install's — a path pinned in the manifest still wins.
+func TestCloneInstallHonorsDeclaredPath(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	entry := func(path string) Addon {
+		return Addon{Name: "godot-gdsh", Path: path, Kind: KindClone, Tag: "main"}
+	}
+
+	t.Run("declared path wins over the derived default", func(t *testing.T) {
+		a, root := entry(""), t.TempDir()
+		a.URL = seedDeclaredPathRepo(t)
+
+		res, err := Install(context.Background(), a, root, quietReport)
+		if err != nil {
+			t.Fatalf("Install: %v", err)
+		}
+		if res.Path != "addons/addon_lib/gdsh" {
+			t.Errorf("Path = %q, want addons/addon_lib/gdsh", res.Path)
+		}
+		if res.Version != "0.1.0" {
+			t.Errorf("Version = %q, want 0.1.0", res.Version)
+		}
+		// The whole working copy moved, .git and all.
+		if _, err := os.Stat(filepath.Join(root, "addons", "addon_lib", "gdsh", ".git")); err != nil {
+			t.Errorf("clone not at the declared path: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "addons", "godot-gdsh")); !os.IsNotExist(err) {
+			t.Errorf("derived path should be empty after the move")
+		}
+	})
+
+	t.Run("a pinned manifest path still wins", func(t *testing.T) {
+		a, root := entry("addons/custom"), t.TempDir()
+		a.URL = seedDeclaredPathRepo(t)
+
+		res, err := Install(context.Background(), a, root, quietReport)
+		if err != nil {
+			t.Fatalf("Install: %v", err)
+		}
+		if res.Path != "addons/custom" {
+			t.Errorf("Path = %q, want addons/custom", res.Path)
+		}
+		if _, err := os.Stat(filepath.Join(root, "addons", "addon_lib", "gdsh")); !os.IsNotExist(err) {
+			t.Errorf("declared path should not be used when the entry pins one")
+		}
+	})
+
+	t.Run("an already-installed checkout is relocated", func(t *testing.T) {
+		a, root := entry(""), t.TempDir()
+		a.URL = seedDeclaredPathRepo(t)
+		// Stand in for a checkout an earlier install left at the derived path: clone it
+		// there directly, so the re-install finds it rather than cloning anew.
+		derived := filepath.Join(root, "addons", "godot-gdsh")
+		if err := gitCloneBranch(context.Background(), a.URL, "main", derived, a.Name, quietReport); err != nil {
+			t.Fatalf("seed clone: %v", err)
+		}
+		write(t, derived, "WIP.txt", "uncommitted")
+
+		res, err := Install(context.Background(), a, root, quietReport)
+		if err != nil {
+			t.Fatalf("Install: %v", err)
+		}
+		if res.Path != "addons/addon_lib/gdsh" {
+			t.Errorf("Path = %q, want addons/addon_lib/gdsh", res.Path)
+		}
+		// Relocated by rename, so uncommitted work rides along.
+		if _, err := os.Stat(filepath.Join(root, "addons", "addon_lib", "gdsh", "WIP.txt")); err != nil {
+			t.Errorf("uncommitted work lost in the move: %v", err)
+		}
+		if _, err := os.Stat(derived); !os.IsNotExist(err) {
+			t.Errorf("derived path should be empty after the move")
+		}
+	})
+
+	t.Run("an existing checkout at the declared path is kept", func(t *testing.T) {
+		a, root := entry(""), t.TempDir()
+		a.URL = seedDeclaredPathRepo(t)
+		if _, err := Install(context.Background(), a, root, quietReport); err != nil {
+			t.Fatalf("first Install: %v", err)
+		}
+		// Mark the checkout so the re-install is shown to have kept it rather than
+		// replaced it with the fresh clone.
+		write(t, filepath.Join(root, "addons", "addon_lib", "gdsh"), "WIP.txt", "uncommitted")
+
+		res, err := Install(context.Background(), a, root, quietReport)
+		if err != nil {
+			t.Fatalf("second Install: %v", err)
+		}
+		if res.Path != "addons/addon_lib/gdsh" {
+			t.Errorf("Path = %q, want addons/addon_lib/gdsh", res.Path)
+		}
+		if _, err := os.Stat(filepath.Join(root, "addons", "addon_lib", "gdsh", "WIP.txt")); err != nil {
+			t.Errorf("existing checkout was overwritten: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "addons", "godot-gdsh")); !os.IsNotExist(err) {
+			t.Errorf("the discarded clone should leave nothing behind")
+		}
+	})
 }
