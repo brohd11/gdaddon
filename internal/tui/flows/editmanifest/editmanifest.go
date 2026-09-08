@@ -83,7 +83,11 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 			return core.Seq(
 				core.SetStatusAndLog(a.Name+": updated"),
 				core.PropagateAll(dirty),
-				core.Pop(),
+				// The parent entry submenu was built from the pre-edit Addon and its
+				// closures retain those values. Drop both it and this form after the
+				// owning list refreshes, so reopening the entry reconstructs all
+				// actions (including project path metadata) from the new manifest.
+				core.Pop(2),
 			)
 		},
 	})
