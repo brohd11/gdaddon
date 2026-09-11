@@ -135,10 +135,10 @@ function Get-AssetUrl([string]$Target, [string]$Version) {
 # registry directly and send the message ourselves. Without it, new terminals keep
 # inheriting Explorer's stale environment block until the user signs out.
 function Send-EnvironmentChange {
-    if (-not ('BrohdInstaller.Native' -as [type])) {
+    if (-not ('InstallScripts.Native' -as [type])) {
         # Add-Type is per-session and throws if the type already exists, which it does
         # when a second installer runs in the same shell -- hence the guard above.
-        Add-Type -Namespace BrohdInstaller -Name Native -MemberDefinition @'
+        Add-Type -Namespace InstallScripts -Name Native -MemberDefinition @'
 [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
 public static extern IntPtr SendMessageTimeout(
     IntPtr hWnd, uint Msg, UIntPtr wParam, string lParam,
@@ -151,7 +151,7 @@ public static extern IntPtr SendMessageTimeout(
     $result = [UIntPtr]::Zero
     # A hung top-level window must not hang the installer, hence the timeout and
     # ABORTIFHUNG. The result is advisory; nothing here depends on it.
-    [void][BrohdInstaller.Native]::SendMessageTimeout(
+    [void][InstallScripts.Native]::SendMessageTimeout(
         $HWND_BROADCAST, $WM_SETTINGCHANGE, [UIntPtr]::Zero, 'Environment',
         $SMTO_ABORTIFHUNG, 5000, [ref]$result)
 }
