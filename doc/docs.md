@@ -377,7 +377,7 @@ status that blocks execution — clear it with:
 xattr -dr com.apple.quarantine path/to/gdaddon
 ```
 
-Building from source avoids that entirely. `make` cross-compiles all targets; `go build -o
-build/mac-arm64/gdaddon .` builds for the current platform. The `install_unix.sh` script
-symlinks the built binary into `~/.local/bin/gdaddon` so you can run `gdaddon` from any
-project (update `GO_DIR` inside it if your repo path differs).
+Building from source avoids that entirely. `make` builds for the current platform;
+`make all` cross-compiles all targets. In the Go workspace, `./builds.sh` builds the
+apps and symlinks their binaries into `~/.local/bin`. For a standalone checkout,
+`make -s binary-path` reports the built executable to link or copy into your PATH.

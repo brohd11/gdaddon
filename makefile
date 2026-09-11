@@ -1,6 +1,6 @@
 # Go release makefile. Copy into a repo beside main.go and set the three project variables
 # below; everything under the "end config" marker is shared verbatim and is rewritten by
-# the workspace's render-makefiles.sh -- edit Makefile.template, never a repo's copy.
+# the workspace's render-go.sh -- edit sh-templates/go/templates/makefile.template.
 #
 #   APP_NAME     the installed binary name. It need not match the repo or the directory --
 #                only install.sh's BINARY has to agree with it.
@@ -24,12 +24,16 @@ LDFLAGS     = -ldflags "-s -w -X $(VERSION_PKG).version=$(VERSION)"
 HOST_OS     = $(shell go env GOOS)
 HOST_ARCH   = $(shell go env GOARCH)
 
-.PHONY: build all test package clean $(PLATFORMS)
+.PHONY: build binary-path all test package clean $(PLATFORMS)
 
 # Host build -> build/<os>-<arch>/$(APP_NAME). Default target so the dev loop compiles one
 # target, not five.
 build:
 	go build $(LDFLAGS) -o $(OUT_DIR)/$(HOST_OS)-$(HOST_ARCH)/$(APP_NAME) .
+
+# Report the host binary path for local tooling, including workspace installation.
+binary-path:
+	@printf '%s\n' '$(abspath $(OUT_DIR))/$(HOST_OS)-$(HOST_ARCH)/$(APP_NAME)'
 
 # Run this module's test suite. The sibling modules are separate repos consumed as tagged
 # dependencies and each has its own CI, so this covers only the module it sits in.

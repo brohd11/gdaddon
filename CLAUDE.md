@@ -486,9 +486,9 @@ Key packages/functions:
 
 ## Installing the binary
 
-**Dev:** `install_unix.sh` symlinks the built binary into `~/.local/bin/gdaddon`
-(target tracks `build/`, so it follows rebuilds). Update `GO_DIR` inside the script if
-your repo path differs.
+**Dev:** The Go workspace's `builds.sh` calls the shared `install_local_binary`
+function to symlink the built binary into `~/.local/bin/gdaddon` (the link follows
+rebuilds). `make -s binary-path` reports the host executable path.
 
 **Release (general users):** `install.sh` places the binary and nothing else does —
 `gdaddon` has no self-install command, matching gote/gossh/golaunch/repoview. It's the

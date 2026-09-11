@@ -8,8 +8,8 @@
 #   VERSION=v0.3.0           pin a release    (default: latest)
 #   --no-modify-path         never touch shell rc files
 #
-# Body below "end config" is shared with ~/main/go/install.template.sh -- to update,
-# chop at that line and paste the current template body.
+# Body below "end config" comes from sh-templates/go/templates/install.template.sh.
+# Update the template, then run the workspace's render-go.sh.
 
 set -eu
 
