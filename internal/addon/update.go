@@ -273,7 +273,7 @@ func CheckUpdates(ctx context.Context, statuses []Status) map[string]UpdateInfo 
 // SkippedUpdate is an addon with a newer release whose asset can't be chosen
 // automatically (several uploaded packages) — surfaced so the user updates it by hand.
 type SkippedUpdate struct {
-	Name string
+	Name string // the addon's label, for reporting; this carries no manifest identity
 	Tag  string
 }
 
@@ -300,7 +300,7 @@ func ResolveUpdatePlans(ctx context.Context, manifestPath, baseDir string) ([]Up
 		case ResolvePlan:
 			return result{plan: plan}, true
 		case ResolveAmbiguous:
-			return result{skipped: SkippedUpdate{Name: a.Name, Tag: plan.NewTag}, isSkip: true}, true
+			return result{skipped: SkippedUpdate{Name: a.Label(), Tag: plan.NewTag}, isSkip: true}, true
 		default:
 			return result{}, false
 		}
@@ -331,12 +331,12 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 		if old == "" {
 			old = "Unknown/None"
 		}
-		report("[%s] Updating %s → %s...", a.Name, old, p.NewTag)
+		report("[%s] Updating %s → %s...", a.Label(), old, p.NewTag)
 
 		target := Addon{Name: a.Name, URL: p.Asset.URL, Path: a.Path, Tag: p.NewTag}
 		res, err := Install(ctx, target, baseDir, report)
 		if err != nil {
-			report("[%s] Error: %v", a.Name, err)
+			report("[%s] Error: %v", a.Label(), err)
 			continue
 		}
 		if res.Path != "" {
@@ -345,11 +345,15 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 				version = strings.TrimPrefix(p.NewTag, "v")
 			}
 			if err := UpdateEntry(manifestPath, a.Name, p.Asset.URL, res.Path, version, p.NewTag); err != nil {
-				report("[%s] Error pinning manifest: %v", a.Name, err)
+				report("[%s] Error pinning manifest: %v", a.Label(), err)
 				continue
 			}
+			if err := AdoptName(manifestPath, a, res); err != nil {
+				report("[%s] Could not record the declared name: %v", a.Label(), err)
+			}
 			outcomes = append(outcomes, InstallOutcome{
-				Name: a.Name, URL: a.URL, PriorPath: a.Path, Path: res.Path, Version: version,
+				Name: a.Name, Display: displayOf(a, res), URL: a.URL,
+				PriorPath: a.Path, Path: res.Path, Version: version,
 			})
 		}
 	}

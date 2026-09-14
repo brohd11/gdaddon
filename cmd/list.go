@@ -87,7 +87,7 @@ func printListTable(statuses []addon.Status, withUpdates bool) {
 		if local == "" {
 			local = "-"
 		}
-		line := fmt.Sprintf("%-12s %-24s local=%s pinned=%s", s.State.String(), s.Addon.Name, local, ver)
+		line := fmt.Sprintf("%-12s %-24s local=%s pinned=%s", s.State.String(), s.Addon.Label(), local, ver)
 		if withUpdates {
 			state, latest := updateStateFor(s, checks, withUpdates)
 			line += " update=" + state
@@ -102,7 +102,10 @@ func printListTable(statuses []addon.Status, withUpdates bool) {
 // listEntryJSON is the stable, machine-parseable shape of one addon's status,
 // emitted by `gdaddon list --json` for the GDScript side to consume.
 type listEntryJSON struct {
-	Name          string `json:"name"`
+	Name string `json:"name"` // the manifest key: the entry's identity
+	// DisplayName is the addon's own name when it records one; absent otherwise. Name
+	// stays the field to match on — this one is for rendering.
+	DisplayName   string `json:"display_name,omitempty"`
 	State         string `json:"state"` // missing/installed/mismatch/unversioned/branch_changed/invalid
 	Kind          string `json:"kind"`  // package/clone/submodule
 	Path          string `json:"path"`  // manifest-relative
@@ -201,6 +204,7 @@ func printListJSON(statuses []addon.Status, projectRoot string, withUpdates bool
 
 		entries = append(entries, listEntryJSON{
 			Name:          s.Addon.Name,
+			DisplayName:   s.Addon.Display,
 			State:         s.State.String(),
 			Kind:          kindLabel(s.Addon.Kind),
 			Path:          s.Addon.Path,

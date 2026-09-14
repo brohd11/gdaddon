@@ -53,7 +53,7 @@ func FetchRepos(statuses []Status) []repo.Repo {
 		if !s.Addon.IsGitWorkdir() || !s.Present() {
 			continue
 		}
-		repos = append(repos, repo.Repo{Name: s.Addon.Name, Dir: s.FullPath})
+		repos = append(repos, repo.Repo{Name: s.Addon.Label(), Dir: s.FullPath})
 	}
 	return repos
 }

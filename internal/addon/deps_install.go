@@ -125,7 +125,7 @@ func importDeps(parent context.Context, manifestPath, baseDir string, confirm De
 			Dep:        d,
 			DeclaredBy: declaredBy[d.RepoID],
 			Action:     DepAdd,
-			EntryName:  DeriveName(d.RepoURL),
+			EntryName:  EntryKey(d.RepoURL),
 			AssetURL:   depDownloadURL(d, asset),
 		})
 		if err != nil {
@@ -177,7 +177,7 @@ func AddDepEntry(ctx context.Context, manifestPath string, d Dependency, asDepen
 // instead of paying for a second lookup. resolved is ResolveDepAsset's ok; false means
 // the tag had no asset, which is a skip (added false, err nil), not an error.
 func writeDepEntry(manifestPath string, d Dependency, asset source.Asset, resolved, asDependency bool) (name string, added bool, err error) {
-	name = DeriveName(d.RepoURL)
+	name = EntryKey(d.RepoURL)
 	if d.Tag != "" && !resolved {
 		return name, false, nil
 	}

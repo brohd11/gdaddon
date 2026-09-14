@@ -122,7 +122,7 @@ func newStoreInstallConfirm(selected addon.Addon, local, version string) *compon
 			}
 			return sh.Box(fmt.Sprintf(
 				"Install %s\n\n  version:  %s\n  path:     %s",
-				selected.Name, version, path))
+				selected.Label(), version, path))
 		},
 		OnYes: core.Replace(newStoreInstallTask(selected, local, version)),
 	})
@@ -220,7 +220,7 @@ func confirmInstallBody(sh *core.Shared, selected addon.Addon, pick versionItem)
 	urlBlock := core.IndentLines(core.HardWrap(pick.asset.URL, sh.ConfirmWidth()-4), "    ")
 	return fmt.Sprintf(
 		"Install %s\n\n  version:  %s\n  asset:    %s\n  path:     %s\n  url:\n%s",
-		selected.Name, pick.tag, pick.asset.Name, selected.Path, urlBlock)
+		selected.Label(), pick.tag, pick.asset.Name, selected.Path, urlBlock)
 }
 
 // installSourceOptions renders the two install sources stacked vertically, the active
@@ -250,7 +250,7 @@ func cloneModeWarning(selected addon.Addon) string {
 		// repo may declare its own install path, which cloneInstall honors over the
 		// addons/<name> default. Nothing here can read that key yet, so don't promise
 		// a location the install may not use.
-		dest = addon.DefaultPath(selected.Name)
+		dest = addon.DefaultPath(selected.Slug())
 		declared = ",\n    or to the install path the repo declares for itself"
 	}
 	warn := lipgloss.NewStyle().Foreground(core.MutedColor)

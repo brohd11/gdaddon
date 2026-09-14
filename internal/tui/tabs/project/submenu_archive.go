@@ -41,7 +41,7 @@ func newArchiveSubmenu(st addon.Status, sh *core.Shared) *components.PickerScree
 
 	return components.NewPicker(items, components.PickerOpts{
 		Crumb:   "Archive",
-		Title:   st.Addon.Name,
+		Title:   st.Addon.Label(),
 		PopStop: true, // command hub: the browse/archive sub-flow returns here (PopTo)
 	})
 }

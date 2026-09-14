@@ -48,7 +48,7 @@ var suppressKey = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "suppress"
 func newDepsScreen(st addon.Status, sh *core.Shared) *components.PickerScreen {
 	return components.NewPicker(depsItems(st, sh), components.PickerOpts{
 		Crumb:   "Dependencies",
-		Title:   st.Addon.Name,
+		Title:   st.Addon.Label(),
 		PopStop: true,
 		Help:    []key.Binding{suppressKey},
 		Refresh: func(sh *core.Shared, payload any) ([]list.Item, bool) {
@@ -329,7 +329,7 @@ func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(contex
 				// pin later), so there is no asset to look up.
 				if d.Tag == "" {
 					plan.add = append(plan.add, plannedDep{
-						name: addon.DeriveName(d.RepoURL),
+						name: addon.EntryKey(d.RepoURL),
 						url:  addon.NormalizeRepoURL(d.RepoURL),
 					})
 					continue
@@ -340,7 +340,7 @@ func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(contex
 					continue
 				}
 				plan.add = append(plan.add, plannedDep{
-					name: addon.DeriveName(d.RepoURL),
+					name: addon.EntryKey(d.RepoURL),
 					url:  asset.URL,
 					tag:  d.Tag,
 				})

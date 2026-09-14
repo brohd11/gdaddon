@@ -28,10 +28,18 @@ type InstallOneOpts struct {
 // InstallOneResult is where the entry landed, plus every dependency installed on its
 // behalf (empty when Deps was false or the addon declares none).
 type InstallOneResult struct {
-	Name    string
+	Name string
+	// Display is the entry's label once installed — the addon's own name when it
+	// declares one — so a caller can report what it installed rather than the key.
+	Display string
 	Path    string
 	Version string
 	Deps    []InstallOutcome
+}
+
+// Label is the installed entry's human-facing name, on the same rule as Addon.Label.
+func (r InstallOneResult) Label() string {
+	return Addon{Name: r.Name, Display: r.Display}.Label()
 }
 
 // InstallOne records one addon in the manifest and installs it — the targeted
@@ -87,6 +95,9 @@ func InstallOne(ctx context.Context, o InstallOneOpts) (InstallOneResult, error)
 		if err := UpdateEntry(o.ManifestPath, name, "", res.Path, version, ""); err != nil {
 			return InstallOneResult{}, err
 		}
+		if err := AdoptName(o.ManifestPath, entry, res); err != nil {
+			report("  -> Could not record the declared name for %s: %v", entry.Label(), err)
+		}
 		entry.Path, entry.Version = res.Path, version
 	}
 	// Always write the kind so a package install over a former clone clears the stale
@@ -111,7 +122,7 @@ func InstallOne(ctx context.Context, o InstallOneOpts) (InstallOneResult, error)
 		}
 	}
 
-	out := InstallOneResult{Name: name, Path: res.Path, Version: res.Version}
+	out := InstallOneResult{Name: name, Display: displayOf(entry, res), Path: res.Path, Version: res.Version}
 	if !o.Deps {
 		return out, nil
 	}
@@ -216,7 +227,7 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 	}
 	// entryName is what this dependency is (or would be) recorded as — the same identity
 	// depIndex falls back to when the repo was renamed upstream.
-	entryName := DeriveName(d.RepoURL)
+	entryName := EntryKey(d.RepoURL)
 	var st Status
 	i := newDepIndex(addonsOf(statuses)).find(d)
 	present := i >= 0
@@ -232,7 +243,7 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 
 	switch {
 	case present && st.Present() && depSatisfied(d, st.Addon.Tag):
-		report("  -> %s is already installed. Skipping...", st.Addon.Name)
+		report("  -> %s is already installed. Skipping...", st.Addon.Label())
 		return st.Addon, nil, true, nil
 
 	case !present:
@@ -276,10 +287,10 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 		req.AssetURL, req.EntryName, req.LocalTag = asset.URL, st.Addon.Name, st.Addon.Tag
 		commit = func() bool {
 			if err := UpsertEntry(manifestPath, Addon{Name: st.Addon.Name, URL: asset.URL, Tag: d.Tag}); err != nil {
-				report("  -> Could not re-pin %s: %v", st.Addon.Name, err)
+				report("  -> Could not re-pin %s: %v", st.Addon.Label(), err)
 				return false
 			}
-			report("  -> Re-pinned %s %s → %s", st.Addon.Name, st.Addon.Tag, d.Tag)
+			report("  -> Re-pinned %s %s → %s", st.Addon.Label(), st.Addon.Tag, d.Tag)
 			entryName = st.Addon.Name
 			return true
 		}
@@ -313,7 +324,7 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 
 	res, err := Install(ctx, entry, baseDir, report)
 	if err != nil {
-		report("  -> [%s] Error: %v", entry.Name, err)
+		report("  -> [%s] Error: %v", entry.Label(), err)
 		return entry, nil, false, nil
 	}
 	if res.Path == "" {
@@ -321,10 +332,14 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 		return entry, nil, true, nil
 	}
 	if err := UpdateEntry(manifestPath, entry.Name, "", res.Path, res.Version, ""); err != nil {
-		report("  -> Could not pin %s: %v", entry.Name, err)
+		report("  -> Could not pin %s: %v", entry.Label(), err)
+	}
+	if err := AdoptName(manifestPath, entry, res); err != nil {
+		report("  -> Could not record the declared name for %s: %v", entry.Label(), err)
 	}
 	outcome := InstallOutcome{
-		Name: entry.Name, URL: entry.URL, PriorPath: entry.Path, Path: res.Path, Version: res.Version,
+		Name: entry.Name, Display: displayOf(entry, res), URL: entry.URL,
+		PriorPath: entry.Path, Path: res.Path, Version: res.Version,
 	}
 	entry.Path, entry.Version = res.Path, res.Version
 	return entry, &outcome, true, nil

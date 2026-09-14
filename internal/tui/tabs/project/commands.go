@@ -10,13 +10,15 @@ import (
 )
 
 // pinInstall writes the freshly installed entry's url/path/version/tag (+clone
-// flag) into the manifest and returns a human status line. path is passed in
-// explicitly so the post-install location form can pin a corrected path; the
+// flag) into the manifest and returns a human status line. It takes the whole
+// addon.InstallResult so every field the install resolved — path, version, and the
+// name the package declares for itself — is pinned from one value; the
 // url/version/tag derivation is shared with the silent finish path. A manifest
 // write failure is an error — the install itself succeeded, but claiming the pin
 // landed when it didn't would desync the manifest from disk silently.
-func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, path, instVersion string) (string, error) {
+func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, res addon.InstallResult) (string, error) {
 	name, url := selected.Name, pick.asset.URL
+	path, instVersion := res.Path, res.Version
 	// Installing from the local archive must not pin the machine-specific archive
 	// path as the manifest url — keep the entry's canonical repo url instead.
 	if pick.archived {
@@ -67,14 +69,18 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, pat
 	if err := addon.SetCommit(manifestPath, name, commit); err != nil {
 		return "", err
 	}
+	if err := addon.AdoptName(manifestPath, selected, res); err != nil {
+		return "", err
+	}
 
+	label := selected.Label()
 	if pick.clone {
-		return "cloned " + name + " (" + pick.tag + ")", nil
+		return "cloned " + label + " (" + pick.tag + ")", nil
 	}
 	if commit != "" {
-		return "pinned " + name + " @ " + shortSHA(commit), nil
+		return "pinned " + label + " @ " + shortSHA(commit), nil
 	}
-	return "updated " + name + " → " + version, nil
+	return "updated " + label + " → " + version, nil
 }
 
 // commitRemove removes the addon from the project according to the chosen mode:
@@ -93,9 +99,9 @@ func commitRemove(sh *core.Shared, st addon.Status, mode int) core.Action {
 			return core.SeqErr(err, core.ResetToRoot())
 		}
 	}
-	msg := "removed " + st.Addon.Name
+	msg := "removed " + st.Addon.Label()
 	if mode == removeLocal {
-		msg = "deleted files for " + st.Addon.Name
+		msg = "deleted files for " + st.Addon.Label()
 	}
 	return core.Seq(
 		core.SetStatus(msg),

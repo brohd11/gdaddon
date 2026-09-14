@@ -28,13 +28,13 @@ func storeInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 		sel = a.Version
 	}
 
-	report("[%s] Resolving store release...", a.Name)
+	report("[%s] Resolving store release...", a.Label())
 	downloadURL, err := store.ResolveDownload(ctx, id, sel)
 	if err != nil {
 		return InstallResult{}, err
 	}
 
-	stagingRoot, pkgName, cleanup, err := fetchZip(ctx, downloadURL, a.Name, report)
+	stagingRoot, pkgName, cleanup, err := fetchZip(ctx, downloadURL, a.Label(), report)
 	if err != nil {
 		return InstallResult{}, err
 	}

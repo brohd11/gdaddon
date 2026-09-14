@@ -218,8 +218,10 @@ func TestInstallDepsForRequestFields(t *testing.T) {
 	if req.DeclaredBy != "a" {
 		t.Errorf("DeclaredBy = %q, want a", req.DeclaredBy)
 	}
-	if req.EntryName != "b" {
-		t.Errorf("EntryName = %q, want b", req.EntryName)
+	// The entry a dep would be recorded under is keyed by identity, so the prompt
+	// names host/owner/repo rather than the bare repo name.
+	if want := strings.ToLower(ds.spec("b")); req.EntryName != want {
+		t.Errorf("EntryName = %q, want %q", req.EntryName, want)
 	}
 	// Tagless dep: recorded repo-only, so the url shown is the repo it clones from.
 	if req.AssetURL == "" {
@@ -264,10 +266,10 @@ func TestInstallAllDepsDeclineIsRemembered(t *testing.T) {
 	for _, e := range entries {
 		recorded[e.Name] = true
 	}
-	if !recorded["b"] {
+	if !recorded[strings.ToLower(ds.spec("b"))] {
 		t.Error("b (accepted) should have been recorded in the manifest")
 	}
-	if recorded["c"] {
+	if recorded[strings.ToLower(ds.spec("c"))] {
 		t.Error("c (declined) was recorded in the manifest")
 	}
 }

@@ -120,7 +120,7 @@ func addonItem(r rowData) components.Item {
 			return core.Action{}, false
 		}
 	}
-	return components.Item{Name: s.Addon.Name + rowMarker(r), Desc: addonDesc(s), Pick: pick, Keys: keys}
+	return components.Item{Name: s.Addon.Label() + rowMarker(r), Desc: addonDesc(s), Pick: pick, Keys: keys}
 }
 
 // depsNeedAttention reports whether any declared dependency still needs the user's
@@ -238,7 +238,7 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 // status mode keyed on real state/warnings rather than the marker-suffixed Title.
 // SortStatusInstalled sorts identically; its hiding happens in visibleRows.
 func sortRows(rows []rowData, mode appctx.SortMode) {
-	name := func(i int) string { return strings.ToLower(rows[i].s.Addon.Name) }
+	name := func(i int) string { return strings.ToLower(rows[i].s.Addon.Label()) }
 	switch mode {
 	case appctx.SortReverse:
 		sort.SliceStable(rows, func(i, j int) bool { return name(i) > name(j) })

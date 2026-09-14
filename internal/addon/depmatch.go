@@ -36,6 +36,12 @@ type depIndex struct {
 // newDepIndex indexes entries by canonical repo id and by name. Entries whose url doesn't
 // parse have no repo identity and are reachable by name alone; later duplicates win, which
 // matches the map-building the four call sites did before this existed.
+//
+// "By name" means every name an entry answers to, because a dep spec names a *repo*: the
+// key's slug (which for a legacy key is the whole key, and for an identity key is the repo
+// name the spec would have used) and the addon's own declared name. Indexing the raw key
+// instead would silently retire the rename fallback the moment entries became
+// identity-keyed — "github.com/owner/repo" matches no spec any plugin.cfg ever writes.
 func newDepIndex(entries []Addon) depIndex {
 	ix := depIndex{
 		byRepo: make(map[string]int, len(entries)),
@@ -45,7 +51,10 @@ func newDepIndex(entries []Addon) depIndex {
 		if id, err := source.RepoID(e.URL); err == nil {
 			ix.byRepo[id] = i
 		}
-		ix.byName[e.Name] = i
+		ix.byName[e.Slug()] = i
+		if e.Display != "" {
+			ix.byName[e.Display] = i
+		}
 	}
 	return ix
 }

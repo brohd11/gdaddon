@@ -59,7 +59,7 @@ func locationTargets(outcomes []addon.InstallOutcome) []postinstall.Target {
 	var targets []postinstall.Target
 	for _, o := range outcomes {
 		if o.Path != "" && o.Path != o.PriorPath {
-			targets = append(targets, postinstall.Target{Name: o.Name, URL: o.URL, Path: o.Path, Version: o.Version})
+			targets = append(targets, postinstall.Target{Name: o.Name, Display: o.Display, URL: o.URL, Path: o.Path, Version: o.Version})
 		}
 	}
 	return targets

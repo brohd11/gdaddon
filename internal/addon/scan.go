@@ -60,7 +60,7 @@ func ScanInstalled(root string) ([]Installed, error) {
 			return nil
 		}
 		kind, remote, branch := gitProbe(path)
-		name := readPluginCfgKey(path, "name")
+		name := getLocalPluginName(path)
 		if name == "" {
 			name = base
 		}

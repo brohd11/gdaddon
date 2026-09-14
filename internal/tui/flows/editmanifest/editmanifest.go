@@ -1,5 +1,5 @@
 // Package editmanifest is the shared "Edit Manifest" flow: a form that lists an
-// entry's raw fields (url, path, version, tag, kind) prefilled with their current
+// entry's raw fields (name, url, path, version, tag, kind) prefilled with their current
 // values and writes them back. It works against any of the flat-shaped manifest
 // files — the project manifest, the global list, or a set — so it lives in the flows
 // layer (core ← components ← flows ← tabs ← tui) and is opened by more than one tab
@@ -23,19 +23,25 @@ import (
 
 // New builds the Edit Manifest form for entry a in the manifest at manifestPath.
 // dirty is broadcast on a successful save (e.g. appctx.ProjectDirty{}) so whichever
-// tab root owns this manifest reloads. The entry name is read-only. In global mode
-// only url and path are shown — version, tag, and kind are irrelevant to the global
-// library, so those fields (and the kind write) are omitted.
+// tab root owns this manifest reloads. The entry's *key* is read-only — it is the
+// entry's identity, and renaming it is not an edit but a different entry — while the
+// name beneath it is the editable label and is shown in global mode too. In global mode
+// only name, url, and path are shown: version, tag, and kind are irrelevant to the
+// global library, so those fields (and the kind write) are omitted.
 func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *components.FormScreen {
+	nameF := components.NewTextField("name", "Name:    ", "(blank to clear)")
 	urlF := components.NewTextField("url", "URL:     ", "(blank to clear)")
 	pathF := components.NewTextField("path", "Path:    ", "(blank to clear)")
+	nameF.SetValue(a.Display)
 	urlF.SetValue(a.URL)
 	pathF.SetValue(a.Path)
 
 	fields := []components.FormField{
+		// The heading carries the key, not the label: it is what every write below
+		// addresses and the one thing this form cannot change.
 		components.NewHeading("Edit " + a.Name),
 		components.NewSpacer(),
-		urlF, pathF,
+		nameF, urlF, pathF,
 	}
 	help := []key.Binding{
 		core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
@@ -67,6 +73,7 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 		Focus:  "url",
 		Help:   help,
 		OnSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
+			display := strings.TrimSpace(f.Value("name"))
 			url := strings.TrimSpace(f.Value("url"))
 			path := strings.TrimSpace(f.Value("path"))
 			version := strings.TrimSpace(f.Value("version"))
@@ -74,6 +81,10 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 
 			if err := addon.EditEntry(manifestPath, a.Name, url, path, version, tag); err != nil {
 				return core.SeqErr(err, core.Async(f.Focus("url")))
+			}
+			// Blank clears the line, matching every other field on this form.
+			if err := addon.SetDisplayName(manifestPath, a.Name, display); err != nil {
+				return core.SeqErr(err, core.Async(f.Focus("name")))
 			}
 			if !globalMode {
 				if err := addon.SetKind(manifestPath, a.Name, addon.ParseKind(kindF.Value())); err != nil {

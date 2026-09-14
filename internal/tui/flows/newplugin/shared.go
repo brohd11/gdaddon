@@ -72,8 +72,11 @@ func newAddonForm(spec formSpec) *components.FormScreen {
 
 // submitAddonForm is the shared OnSubmit pipeline: trim the url and refocus its field
 // when it is empty, normalize it (a nil normalize keeps it as typed — the store flow
-// preserves the canonical store url rather than mangling it into a .git url), derive
-// a blank name from the final url, and hand the values to the flow's confirm push.
+// preserves the canonical store url rather than mangling it into a .git url), key a
+// blank name off the final url, and hand the values to the flow's confirm push.
+//
+// A typed name still wins and becomes the entry key, which is how you deliberately
+// track two checkouts of one repo under names of your own.
 func submitAddonForm(f *components.FormScreen, normalize func(string) string, next func(name, url, path string) core.Action) core.Action {
 	url := strings.TrimSpace(f.Value("url"))
 	if url == "" {
@@ -84,7 +87,7 @@ func submitAddonForm(f *components.FormScreen, normalize func(string) string, ne
 	}
 	name := strings.TrimSpace(f.Value("name"))
 	if name == "" {
-		name = addon.DeriveName(url)
+		name = addon.EntryKey(url)
 	}
 	return next(name, url, strings.TrimSpace(f.Value("path")))
 }

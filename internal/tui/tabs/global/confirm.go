@@ -18,7 +18,7 @@ const (
 // ↑/↓ move the selection (via the confirm's OnKey), enter commits the chosen mode.
 func newRemoveConfirm(g globalItem) *components.DialogScreen {
 	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
-		Crumb:  g.name + " — Remove",
+		Crumb:  g.label() + " — Remove",
 		Count:  2,
 		Start:  removeGlobal, // default = non-destructive
 		Render: func(sh *core.Shared, mode int) string { return sh.Box(removeConfirmBody(sh, g, mode)) },
@@ -28,7 +28,7 @@ func newRemoveConfirm(g globalItem) *components.DialogScreen {
 }
 
 func removeConfirmBody(sh *core.Shared, g globalItem, mode int) string {
-	return widgets.RemoveConfirmBody(g.name, "url", g.url, removeOptions(mode))
+	return widgets.RemoveConfirmBody(g.label(), "url", g.url, removeOptions(mode))
 }
 
 // removeOptions renders the two removal modes stacked vertically, the active one

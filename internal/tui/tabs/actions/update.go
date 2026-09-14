@@ -97,7 +97,7 @@ func updateAllBody(plans []addon.UpdatePlan, skipped []addon.SkippedUpdate) stri
 		if old == "" {
 			old = "unknown"
 		}
-		lines = append(lines, fmt.Sprintf("  %s   %s → %s", p.Addon.Name, old, p.NewTag))
+		lines = append(lines, fmt.Sprintf("  %s   %s → %s", p.Addon.Label(), old, p.NewTag))
 	}
 	if len(skipped) > 0 {
 		lines = append(lines, "", "Skipped (multiple packages — update manually):")

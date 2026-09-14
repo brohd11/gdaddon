@@ -27,10 +27,18 @@ import (
 // canonical repo url for the global list. The entry is already pinned to Path on disk
 // — the form only optionally relocates it and records it globally.
 type Target struct {
+	// Name is the manifest key every write here addresses; Display is the entry's own
+	// name, shown instead wherever a human reads it.
 	Name    string
+	Display string
 	URL     string
 	Path    string
 	Version string
+}
+
+// label is the target's human-facing name: its own when recorded, else its key.
+func (t Target) label() string {
+	return addon.Addon{Name: t.Name, Display: t.Display}.Label()
 }
 
 // global toggle options (index 0 = skip the global action, 1 = perform it).
@@ -73,7 +81,7 @@ func New(sh *core.Shared, targets []Target) *components.FormScreen {
 		globalF.OnToggle(true) // default to performing the update for an existing entry
 	}
 
-	heading := "Confirm install location for " + t.Name
+	heading := "Confirm install location for " + t.label()
 	if len(targets) > 1 {
 		heading += fmt.Sprintf("   (%d remaining)", len(targets))
 	}
@@ -94,7 +102,7 @@ func New(sh *core.Shared, targets []Target) *components.FormScreen {
 		},
 		// Dismiss keeps the already-pinned path; log it and move on.
 		OnCancel: func(sh *core.Shared) core.Action {
-			return advance(sh, rest, core.SetStatusAndLog(t.Name+": kept at "+t.Path))
+			return advance(sh, rest, core.SetStatusAndLog(t.label()+": kept at "+t.Path))
 		},
 		OnKey: func(sh *core.Shared, k string) (core.Action, bool) {
 			if k == skipAllKey {
@@ -135,7 +143,7 @@ func commit(sh *core.Shared, t Target, rest []Target, f *components.FormScreen, 
 	// accept (no move, global skipped) keeps just a transient status.
 	var logs []core.Action
 	if moved {
-		logs = append(logs, core.SetStatusAndLog("moved "+t.Name+" → "+finalPath))
+		logs = append(logs, core.SetStatusAndLog("moved "+t.label()+" → "+finalPath))
 	}
 	if globalF.Index() == globalDo {
 		if err := applyGlobal(c, t, finalPath); err != nil {
@@ -146,7 +154,7 @@ func commit(sh *core.Shared, t Target, rest []Target, f *components.FormScreen, 
 		}
 	}
 	if len(logs) == 0 {
-		logs = append(logs, core.SetStatus("kept "+t.Name+" at "+finalPath))
+		logs = append(logs, core.SetStatus("kept "+t.label()+" at "+finalPath))
 	}
 	return advance(sh, rest, logs...)
 }
@@ -192,16 +200,17 @@ func applyGlobal(c *appctx.Ctx, t Target, path string) error {
 	if stripped, err := source.RepoURL(t.URL); err == nil {
 		url = stripped
 	}
-	return addon.AddEntry(globalPath, t.Name, url, path)
+	// AddEntryFull so the addon's own name is exported alongside the url and path.
+	return addon.AddEntryFull(globalPath, addon.Addon{Name: t.Name, Display: t.Display, URL: url, Path: path})
 }
 
 // globalActionMsg describes the global write for the log: an update when the repo was
 // already listed, an export otherwise. Read from the cached list (pre-write).
 func globalActionMsg(c *appctx.Ctx, t Target) string {
 	if inGlobal, _ := globalEntry(t.URL, c.GlobalAddons); inGlobal {
-		return "updated global path for " + t.Name
+		return "updated global path for " + t.label()
 	}
-	return "exported " + t.Name + " to global"
+	return "exported " + t.label() + " to global"
 }
 
 // globalEntry reports whether url's repo is already in the global list and, if so, the

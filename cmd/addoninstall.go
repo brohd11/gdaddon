@@ -130,7 +130,7 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 		return installHint(err, entry.Name)
 	}
 
-	fmt.Printf("\ninstalled %s", res.Name)
+	fmt.Printf("\ninstalled %s", res.Label())
 	if res.Version != "" {
 		fmt.Printf(" %s", res.Version)
 	}
@@ -139,7 +139,7 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 	for _, d := range res.Deps {
-		fmt.Printf("  dependency %s → %s\n", d.Name, d.Path)
+		fmt.Printf("  dependency %s → %s\n", d.Label(), d.Path)
 	}
 	if aborted {
 		fmt.Println("\nstopped at your request; remaining dependencies were not installed")
@@ -224,7 +224,7 @@ func runInstallAll() error {
 func resolveEntry(ctx context.Context, spec addon.Dependency) (addon.Addon, error) {
 	name := addonInstallName
 	if name == "" {
-		name = addon.DeriveName(spec.RepoURL)
+		name = addon.EntryKey(spec.RepoURL)
 	}
 
 	if addonInstallClone {

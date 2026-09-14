@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/brohd11/gdaddon/internal/store"
 )
@@ -15,11 +16,31 @@ import (
 // Path/Version the resolved result, URL the entry's source url. Only single-folder
 // installs (a pinnable Path) produce an outcome.
 type InstallOutcome struct {
-	Name      string
+	Name string
+	// Display is the entry's label at the end of the install: the name it already
+	// recorded, else the one the package just declared. Carried so a follow-up screen
+	// renders what the manifest now holds without re-reading it.
+	Display   string
 	URL       string
 	PriorPath string
 	Path      string
 	Version   string
+}
+
+// Label is the outcome's human-facing name, on the same rule as Addon.Label: the addon's
+// own name when it has one, else its key's slug.
+func (o InstallOutcome) Label() string {
+	return Addon{Name: o.Name, Display: o.Display}.Label()
+}
+
+// displayOf is the label an install's outcome carries: the name already on the entry,
+// else the one the package just declared. The in-memory entry predates AdoptName's
+// write, so the fresh result is what fills the gap.
+func displayOf(a Addon, res InstallResult) string {
+	if a.Display != "" {
+		return a.Display
+	}
+	return sanitizeDisplay(res.Name)
 }
 
 // InstallAll applies the manifest's skip/update policy: already-installed and
@@ -33,53 +54,104 @@ func InstallAll(ctx context.Context, manifestPath string, statuses []Status, bas
 		a := s.Addon
 		switch s.State {
 		case StateInvalid:
-			report("Skipping %s: missing 'url'", a.Name)
+			report("Skipping %s: missing 'url'", a.Label())
 			continue
 		case StateInstalled:
-			report("[%s] v%s is already installed. Skipping...", a.Name, s.LocalVersion)
+			report("[%s] v%s is already installed. Skipping...", a.Label(), s.LocalVersion)
 			continue
 		case StateUnversioned:
-			report("[%s] already exists at %s (no version specified). Skipping...", a.Name, a.Path)
+			report("[%s] already exists at %s (no version specified). Skipping...", a.Label(), a.Path)
 			continue
 		case StateBranchChanged:
 			// A git checkout on a different branch than the manifest records: a present git
 			// workdir is never touched by a batch install. Report the drift and skip;
 			// reconcile (re-record the tag) is the explicit per-addon "Update branch record".
-			report("[%s] branch changed (recorded %s, on %s). Skipping...", a.Name, a.Tag, s.LiveBranch)
+			report("[%s] branch changed (recorded %s, on %s). Skipping...", a.Label(), a.Tag, s.LiveBranch)
 			continue
 		case StateMismatch:
 			old := s.LocalVersion
 			if old == "" {
 				old = "Unknown/None"
 			}
-			report("[%s] Version mismatch! Local is %s, YAML wants %s. Updating...", a.Name, old, a.Version)
+			report("[%s] Version mismatch! Local is %s, YAML wants %s. Updating...", a.Label(), old, a.Version)
 		}
 
 		res, err := Install(ctx, a, baseDir, report)
 		if err != nil {
-			report("[%s] Error: %v", a.Name, err)
+			report("[%s] Error: %v", a.Label(), err)
 			continue
 		}
 		if res.Path != "" {
 			if err := UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version, ""); err != nil {
-				report("[%s] Error pinning manifest: %v", a.Name, err)
+				report("[%s] Error pinning manifest: %v", a.Label(), err)
 				continue
 			}
+			if err := AdoptName(manifestPath, a, res); err != nil {
+				report("[%s] Could not record the declared name: %v", a.Label(), err)
+			}
 			outcomes = append(outcomes, InstallOutcome{
-				Name: a.Name, URL: a.URL, PriorPath: a.Path, Path: res.Path, Version: res.Version,
+				Name: a.Name, Display: displayOf(a, res), URL: a.URL,
+				PriorPath: a.Path, Path: res.Path, Version: res.Version,
 			})
 		}
 	}
 	return outcomes, nil
 }
 
-// InstallResult reports where a single addon landed so the manifest entry can be
-// pinned. Path is the project-root-relative install path and Version is read from
-// the installed plugin.cfg; both are empty when the install can't be tracked to a
-// single folder (a package that ships several top-level addons).
+// InstallResult reports what a single addon install produced, so the manifest entry can
+// be pinned from it. Path is the project-root-relative install path, Version and Name are
+// read back out of the installed plugin.cfg; all three are empty when the install can't
+// be tracked to a single folder (a package that ships several top-level addons). Name is
+// the addon's own declared name and is empty when its config doesn't carry one.
 type InstallResult struct {
 	Path    string
 	Version string
+	Name    string
+}
+
+// installedAt reports what landed at dest (absolute) for the entry path destRel
+// (project-root-relative). Every install path ends here, so each one comes back with the
+// same data read the same way, rather than each branch assembling its own result and
+// picking up whichever fields it happened to remember.
+func installedAt(destRel, dest string) InstallResult {
+	return InstallResult{
+		Path:    destRel,
+		Version: getLocalPluginVersion(dest),
+		Name:    getLocalPluginName(dest),
+	}
+}
+
+// AdoptName records the name an installed package declares for itself — on its manifest
+// entry, and on the matching global-list entry — for whichever of the two has no name of
+// its own yet. It never renames a key and never overwrites a name already recorded, be it
+// one the user typed or one an earlier install adopted, so every install path can call it
+// unconditionally: it is a no-op for an already-named entry and for a package whose
+// config declares no name.
+//
+// This is the one place an install's result becomes the entry's label. The pin sites call
+// it instead of each deciding for itself what an addon is called, which is how the CLI,
+// the TUI, the dependency walker, and update-all all end up recording the same thing.
+func AdoptName(manifestPath string, a Addon, res InstallResult) error {
+	display := sanitizeDisplay(res.Name)
+	if display == "" {
+		return nil
+	}
+	setGlobalDisplayName(a.URL, display)
+	if a.Display != "" {
+		return nil
+	}
+	return SetDisplayName(manifestPath, a.Name, display)
+}
+
+// sanitizeDisplay trims a declared name and rejects one carrying control characters
+// (which no INI value should hold, and which a manifest line cannot represent). Returns
+// "" for anything unusable, which every caller reads as "declares no name".
+func sanitizeDisplay(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return ""
+	}
+	return name
 }
 
 // Install fetches a single addon and installs it under baseDir. The destination
@@ -94,7 +166,7 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 	// A submodule's checkout is owned by the parent repo; gdaddon registers it for the
 	// utility actions but must never install or overwrite it.
 	if a.IsSubmodule() {
-		return InstallResult{}, fmt.Errorf("%q is a submodule, managed by the parent repo; not installable", a.Name)
+		return InstallResult{}, fmt.Errorf("%q is a submodule, managed by the parent repo; not installable", a.Label())
 	}
 
 	if a.IsClone() {
@@ -107,7 +179,7 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 		return storeInstall(ctx, a, baseDir, report)
 	}
 
-	stagingRoot, pkgName, cleanup, err := fetchToStaging(ctx, a.URL, a.Name, report)
+	stagingRoot, pkgName, cleanup, err := fetchToStaging(ctx, a.URL, a.Label(), report)
 	if err != nil {
 		return InstallResult{}, err
 	}
@@ -125,7 +197,7 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 // bundled copy never clobbers a plugin the user manages separately. Shared by the
 // generic and store install branches.
 func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report Reporter) (InstallResult, error) {
-	placements := resolveInstall(stagingRoot, a.Name, a.Path, pkgName)
+	placements := resolveInstall(stagingRoot, a.Slug(), a.Path, pkgName)
 
 	if len(placements) == 1 {
 		if err := writePlacement(placements[0], baseDir, report); err != nil {
@@ -133,7 +205,7 @@ func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report 
 		}
 		dest := filepath.Join(baseDir, placements[0].destRel)
 		stampVersion(dest, intendedVersion(a), canonicalRepoURL(a.URL))
-		return InstallResult{Path: placements[0].destRel, Version: getLocalPluginVersion(dest)}, nil
+		return installedAt(placements[0].destRel, dest), nil
 	}
 
 	primary := primaryPlacement(placements, a)
@@ -145,7 +217,7 @@ func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report 
 			}
 			dest := filepath.Join(baseDir, p.destRel)
 			stampVersion(dest, intendedVersion(a), canonicalRepoURL(a.URL))
-			res = InstallResult{Path: p.destRel, Version: getLocalPluginVersion(dest)}
+			res = installedAt(p.destRel, dest)
 			continue
 		}
 		// Bundled extra: never overwrite an existing folder (it may be a plugin the
@@ -188,8 +260,10 @@ func writePlacement(p placement, baseDir string, report Reporter) error {
 // pinned and every folder is written only if absent.
 func primaryPlacement(placements []placement, a Addon) int {
 	want := map[string]bool{}
-	if a.Name != "" {
-		want[a.Name] = true
+	// The entry's slug, not its key: an identity-keyed entry
+	// (github.com/owner/repo) still matches the folder named repo.
+	if s := a.Slug(); s != "" {
+		want[s] = true
 	}
 	if a.Path != "" {
 		want[filepath.Base(a.Path)] = true
@@ -210,7 +284,7 @@ func primaryPlacement(placements []placement, a Addon) int {
 func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	destRel := a.Path
 	if destRel == "" {
-		destRel = DefaultPath(a.Name)
+		destRel = DefaultPath(a.Slug())
 	}
 	dest, err := filepath.Abs(filepath.Join(baseDir, destRel))
 	if err != nil {
@@ -224,21 +298,21 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 			// checkout itself, which an install made before that was consulted never
 			// applied. Settling here relocates it once instead of stranding it forever.
 			if a.Path == "" {
-				destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Name, false, report)
+				destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Label(), false, report)
 			}
-			report("[%s] Already cloned at %s. Skipping (manage updates with git).", a.Name, destRel)
-			return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
+			report("[%s] Already cloned at %s. Skipping (manage updates with git).", a.Label(), destRel)
+			return installedAt(destRel, dest), nil
 		}
 		// A non-git folder here (e.g. a prior package install being converted to a
 		// clone): replace it so the clone can take its place. Package folders are
 		// freely overwritten elsewhere and hold no uncommitted git work.
-		report("[%s] Replacing non-git folder at %s with a fresh clone.", a.Name, destRel)
+		report("[%s] Replacing non-git folder at %s with a fresh clone.", a.Label(), destRel)
 		if err := os.RemoveAll(dest); err != nil {
 			return InstallResult{}, fmt.Errorf("could not remove existing folder %s: %w", destRel, err)
 		}
 	}
 
-	if err := gitCloneBranch(ctx, a.URL, a.Tag, dest, a.Name, report); err != nil {
+	if err := gitCloneBranch(ctx, a.URL, a.Tag, dest, a.Label(), report); err != nil {
 		return InstallResult{}, err
 	}
 	report("  -> Successfully cloned to %s", destRel)
@@ -250,9 +324,9 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 	// dir=/path= key > addons/<name>); a clone just resolves the middle term after the
 	// clone rather than before it.
 	if a.Path == "" {
-		destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Name, true, report)
+		destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Label(), true, report)
 	}
-	return InstallResult{Path: destRel, Version: getLocalPluginVersion(dest)}, nil
+	return installedAt(destRel, dest), nil
 }
 
 // settleDeclaredPath moves a cloned checkout from its derived location to the install

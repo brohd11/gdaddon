@@ -285,16 +285,18 @@ func TestAddDepEntry(t *testing.T) {
 	path := filepath.Join(dir, "addon_manifest.yml")
 	dep := Dependency{RepoID: "github.com/u/widget", RepoURL: "https://github.com/u/Widget"}
 
+	// The entry is keyed by identity, which is also lower-cased — the url's "Widget"
+	// casing is not part of the key.
 	name, added, err := AddDepEntry(context.Background(), path, dep, true)
-	if err != nil || !added || name != "Widget" {
-		t.Fatalf("AddDepEntry = (%q, %v, %v), want (Widget, true, nil)", name, added, err)
+	if err != nil || !added || name != "github.com/u/widget" {
+		t.Fatalf("AddDepEntry = (%q, %v, %v), want (github.com/u/widget, true, nil)", name, added, err)
 	}
 	addons, err := Parse(path)
 	if err != nil || len(addons) != 1 {
 		t.Fatalf("Parse = %v, %v; want one entry", addons, err)
 	}
 	got := addons[0]
-	if got.Name != "Widget" || got.URL != "https://github.com/u/Widget.git" || got.Tag != "" || !got.Dependency {
+	if got.Name != "github.com/u/widget" || got.URL != "https://github.com/u/Widget.git" || got.Tag != "" || !got.Dependency {
 		t.Errorf("tagless dep should land repo-only with is_dependency set; got %+v", got)
 	}
 

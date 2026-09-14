@@ -18,9 +18,21 @@ import (
 // submenu commands (Import / Remove). It is a payload, not a list row — the rows
 // are self-dispatching components.Item values built in globalItems.
 type globalItem struct {
-	name, url, path, version, tag string
-	kind                          addon.Kind
+	// name is the manifest key — what every write to plugins.yml addresses — while
+	// display is the entry's own name. Keep them apart: removing by the rendered label
+	// would miss an identity-keyed entry entirely.
+	name, display, url, path, version, tag string
+	kind                                   addon.Kind
 }
+
+// entry rebuilds the addon.Addon this row came from, for the label and for the import
+// that copies it into a project manifest.
+func (g globalItem) entry() addon.Addon {
+	return addon.Addon{Name: g.name, Display: g.display, URL: g.url, Path: g.path, Version: g.version, Tag: g.tag, Kind: g.kind}
+}
+
+// label is the row and heading text: the entry's own name, else its key's slug.
+func (g globalItem) label() string { return g.entry().Label() }
 
 // globalTitle is the list's base Title; the active sort mode is appended.
 const globalTitle = "Global Plugins"
@@ -55,9 +67,9 @@ func globalItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	if path, err := addon.GlobalListPath(); err == nil {
 		if addons, err := addon.Parse(path); err == nil {
 			for _, a := range addons {
-				g := globalItem{name: a.Name, url: a.URL, path: a.Path, version: a.Version, tag: a.Tag, kind: a.Kind}
+				g := globalItem{name: a.Name, display: a.Display, url: a.URL, path: a.Path, version: a.Version, tag: a.Tag, kind: a.Kind}
 				items = append(items, components.Item{
-					Name: g.name,
+					Name: g.label(),
 					Desc: g.url,
 					Pick: func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(g, sh)) },
 				})

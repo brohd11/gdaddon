@@ -46,7 +46,7 @@ func newRemoveConfirm(st addon.Status) *components.DialogScreen {
 				if path == "" {
 					path = "(none)"
 				}
-				return sh.Box(fmt.Sprintf("Remove submodule %s\n\n  path:  %s\n\n  removes the manifest entry only;\n  the parent repo still manages the files", st.Addon.Name, path))
+				return sh.Box(fmt.Sprintf("Remove submodule %s\n\n  path:  %s\n\n  removes the manifest entry only;\n  the parent repo still manages the files", st.Addon.Label(), path))
 			},
 			OnYes: func(sh *core.Shared) core.Action { return commitRemove(sh, st, removeProject) },
 			Help:  confirmHelp,
@@ -63,7 +63,7 @@ func newRemoveConfirm(st addon.Status) *components.DialogScreen {
 }
 
 func removeConfirmBody(sh *core.Shared, st addon.Status, mode int) string {
-	return widgets.RemoveConfirmBody(st.Addon.Name, "path", st.Addon.Path, removeOptions(mode))
+	return widgets.RemoveConfirmBody(st.Addon.Label(), "path", st.Addon.Path, removeOptions(mode))
 }
 
 // removeOptions renders the two removal modes stacked vertically, the active one
@@ -87,5 +87,5 @@ func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (
 	if err != nil {
 		return nil, "cannot archive: " + err.Error(), false
 	}
-	return packages.NewArchiveConfirm(selected.Name, repoID, pick.tag, []source.Asset{pick.asset})
+	return packages.NewArchiveConfirm(selected.Label(), repoID, pick.tag, []source.Asset{pick.asset})
 }

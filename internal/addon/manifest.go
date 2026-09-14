@@ -135,9 +135,9 @@ func writeEntryFields(manifestPath, name, url, path, version, tag string, remove
 }
 
 // AddEntryFull appends a manifest entry from a fully-specified Addon (deduped by
-// repo identity, creating the file if absent): AddEntry writes the url/path, then
-// version and/or tag lines are pinned on when non-empty, and a kind: line is added
-// for a non-package Kind. It composes the existing writers so every "add a complete
+// repo identity, creating the file if absent): AddEntry writes the url/path, a name:
+// line records the addon's own name when it has one, then version and/or tag lines are
+// pinned on when non-empty, and a kind: line is added for a non-package Kind. It composes the existing writers so every "add a complete
 // entry" path (importing a set entry or a global entry, a set "Add Version", adding a
 // tagged dependency) carries the same fields without a second manifest shape — and
 // scales as the Addon struct grows. Empty version/tag and a package Kind behave
@@ -145,6 +145,11 @@ func writeEntryFields(manifestPath, name, url, path, version, tag string, remove
 func AddEntryFull(manifestPath string, a Addon) error {
 	if err := AddEntry(manifestPath, a.Name, a.URL, a.Path); err != nil {
 		return err
+	}
+	if a.Display != "" {
+		if err := SetDisplayName(manifestPath, a.Name, a.Display); err != nil {
+			return err
+		}
 	}
 	if a.Version != "" || a.Tag != "" {
 		if err := UpdateEntry(manifestPath, a.Name, "", "", a.Version, a.Tag); err != nil {
@@ -236,6 +241,24 @@ func SetLock(manifestPath, name string, lock bool) error {
 // fields (a sha is deliberately not stored in tag, which deps compare via semver).
 func SetCommit(manifestPath, name, commit string) error {
 	return setScalarField(manifestPath, name, "commit", `commit: "`+commit+`"`, commit != "")
+}
+
+// SetDisplayName sets (or clears) the `name:` line on an entry, in place. A non-empty
+// display inserts/updates `name: "<display>"`; an empty one removes the line (an absent
+// name falls back to the key's slug, so the manifest stays minimal).
+//
+// The value is always quoted, unlike the bare url/path lines and unlike the unescaped
+// version/tag quoting: this is the only field whose content is the addon author's free
+// text rather than something gdaddon derived, so it is the only one that could otherwise
+// change the shape of the YAML around it.
+func SetDisplayName(manifestPath, name, display string) error {
+	return setScalarField(manifestPath, name, "name", "name: "+quoteYAML(display), display != "")
+}
+
+// quoteYAML renders s as a YAML double-quoted scalar, escaping the two characters that
+// would otherwise end it early, so arbitrary text round-trips back through Parse.
+func quoteYAML(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
 // SetIsDependency sets (or clears) the `is_dependency:` line on an entry, in place. For

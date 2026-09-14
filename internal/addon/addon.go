@@ -7,6 +7,7 @@ package addon
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -55,12 +56,20 @@ func ParseKind(label string) Kind {
 	}
 }
 
-// Addon is a single manifest entry. Name is the manifest key. Tag records the
-// release tag the entry was installed from (empty for branch-HEAD installs, which
-// have no tag); it's what dependency specs match against, since Version holds the
-// author-controlled plugin.cfg version which can diverge from the tag.
+// Addon is a single manifest entry. Name is the manifest key — the entry's identity,
+// which for a new entry is its canonical repo id (see EntryKey) and for a hand-written
+// or legacy entry is whatever the user typed. Display is the human-facing label; Name
+// is never rendered directly, Label is. Tag records the release tag the entry was
+// installed from (empty for branch-HEAD installs, which have no tag); it's what
+// dependency specs match against, since Version holds the author-controlled plugin.cfg
+// version which can diverge from the tag.
 type Addon struct {
-	Name    string `yaml:"-"`
+	Name string `yaml:"-"`
+	// Display is the addon's own name, as its plugin.cfg/version.cfg declares it — read
+	// off disk on install (see AdoptName) or typed into Edit Manifest. It is a label and
+	// nothing else: no lookup, path, or dependency match ever keys on it, so it is free
+	// to hold spaces and punctuation a manifest key could not. Empty falls back to Slug.
+	Display string `yaml:"name"`
 	URL     string `yaml:"url"`
 	Path    string `yaml:"path"`
 	Version string `yaml:"version"`
@@ -91,6 +100,26 @@ type Addon struct {
 	// user adopts it. Carries through set import/export but is dropped on export to global
 	// (an explicit promotion). The user toggles it off, never on.
 	Dependency bool `yaml:"is_dependency"`
+}
+
+// Label is the entry's human-facing name: the name the addon declares for itself when
+// recorded, else its Slug. Every rendered string — list rows, headings, report lines —
+// goes through here, so an identity-keyed entry reads as "My Plugin" rather than
+// "github.com/owner/my-plugin".
+func (a Addon) Label() string {
+	if a.Display != "" {
+		return a.Display
+	}
+	return a.Slug()
+}
+
+// Slug is the folder-safe short form of the manifest key: its last path segment. It is
+// what a path derivation or a folder-name match may use, where the full key must not
+// appear (addons/github.com/owner/repo is not a place to install anything). A legacy
+// key has no separator and is its own slug, so this is a no-op for every entry written
+// before identity keys.
+func (a Addon) Slug() string {
+	return path.Base(a.Name)
 }
 
 // IsLocked reports whether the entry is pinned (no update alerts, install/update
@@ -263,6 +292,14 @@ func statusFor(a Addon, baseDir string) Status {
 // install/update to pin the real installed version.
 func getLocalPluginVersion(addonPath string) string {
 	return readPluginCfgKey(addonPath, "version")
+}
+
+// getLocalPluginName reports the name an installed addon declares for itself in its
+// plugin.cfg/version.cfg under addonPath, or "" if absent. The one reader of that key:
+// ScanInstalled names a found folder with it, and an install records it on the entry
+// (see AdoptName), so both learn an addon's name the same way.
+func getLocalPluginName(addonPath string) string {
+	return readPluginCfgKey(addonPath, "name")
 }
 
 // ProjectName reads config/name from a Godot project.godot at root. exists

@@ -51,11 +51,17 @@ above; the attribute is set by browsers, not by `curl`.
 Each addon has an entry in the manifest. This editable via the TUI, or by hand.
 The path field is for installing repos that are in the submodule format, where it is difficult to infer the plugin directory name.
 
+The key is the entry's identity: new entries are keyed by repo (`<host>/<owner>/<repo>`), so re-adding an addon
+updates the entry it already has rather than making a second one. Keys you write yourself keep working as they always did.
+The `name` field is the label you actually read — filled in on install from the addon's own `plugin.cfg` when it declares
+a `name`, never overwriting one you set.
+
 A branch can be installed as a live git clone (`kind: clone`) or as a commit-pinned package snapshot — the latter records the branch's HEAD `commit:` sha and installs that commit's archive, so it's reproducible. See the [docs](doc/docs.md) for details.
 
 ```
-MyAddon:
-    tag: "v1.0.0-stable"
+github.com/user/repo:
+	name: "MyAddon"
+	tag: "v1.0.0-stable"
 	version: "1.0.0"
 	url: https://github.com/user/repo/archive/refs/tags/v1.0.0-stable.zip
 	path: addons/terrain_3d

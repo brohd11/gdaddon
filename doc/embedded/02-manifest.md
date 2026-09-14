@@ -5,13 +5,16 @@
 ## An entry
 
 ```
-my_addon:
+github.com/owner/my_addon:
+  name: "My Addon"
   url: https://example.com/addon.zip
   path: addons/my_addon
   version: "1.2.3"
   tag: "v1.2.3"
 ```
 
+- `name` — what the addon calls itself. A label: it's what you see in lists and
+  messages, and nothing is looked up by it
 - `url` — a `.zip` to download, or a `.git` repo to clone
 - `path` — where it installs, relative to the project root
 - `version` — the version in the addon's own `plugin.cfg`; if it already matches, the
@@ -25,6 +28,22 @@ typed into `plugin.cfg`, while `tag` is the release you actually took.
 You can edit the file by hand. gdaddon rewrites entries a line at a time and leaves your
 comments and formatting alone.
 
+## Keys and names
+
+The key — the line at column 0 — is the entry's identity. New entries are keyed by the
+addon's repo, `<host>/<owner>/<repo>`, so re-adding the same addon finds the entry it
+already has instead of making a second one, whatever the addon has renamed itself to
+since.
+
+Keys you write yourself are just as valid. `my_addon:` works exactly as it always did,
+nothing is rewritten, and you can key an entry however you like — which is how you track
+two checkouts of one repo side by side.
+
+`name` is separate from all that, and it's the part you read. gdaddon fills it in on
+install from the addon's own `plugin.cfg`, if that file declares one, and never
+overwrites a name that's already there — so type your own and it stays. Clear it and
+lists fall back to the last segment of the key. The Edit Manifest action sets both.
+
 ## Optional keys
 
 - `commit: "abc1234…"` — a branch snapshot pinned to this exact commit
@@ -32,9 +51,10 @@ comments and formatting alone.
 - `suppress_deps: ["owner/repo"]` — declared dependencies to ignore (see the
   Dependencies page)
 
-`path` may be omitted. gdaddon then derives one — `addons/<name>`, unless the package's
-`plugin.cfg` declares its own `dir=` (or `path=`), which wins — and writes the result back
-into the manifest on install.
+`path` may be omitted. gdaddon then derives one — `addons/` plus the key's last segment,
+unless the package's `plugin.cfg` declares its own `dir=` (or `path=`), which wins — and
+writes the result back into the manifest on install. The `name` never decides a folder:
+an addon calling itself `My Addon` still installs to `addons/my_addon`.
 
 A package that nests its plugin under a namespace folder
 (`addons/addon_lib/tree_sitter_gd/`) derives the full path, namespace and all. The addon

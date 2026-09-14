@@ -53,7 +53,7 @@ func setPluginRows(setName, setPath string, mode appctx.SortMode) []list.Item {
 				desc = "(no version pinned)"
 			}
 			items = append(items, components.Item{
-				Name: e.Name,
+				Name: e.Label(),
 				Desc: desc,
 				Pick: func(sh *core.Shared) core.Action { return core.Push(newSetEntrySubmenu(setName, setPath, e)) },
 			})
@@ -130,7 +130,7 @@ func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.Pick
 			},
 		},
 	}
-	return components.NewPicker(items, components.PickerOpts{Title: e.Name})
+	return components.NewPicker(items, components.PickerOpts{Title: e.Label()})
 }
 
 // toggleSetLock flips the set entry's lock flag, then re-renders the member submenu
@@ -142,7 +142,7 @@ func toggleSetLock(setName, setPath string, e addon.Addon) core.Action {
 	}
 	e.Lock = newLock
 	return core.Seq(
-		core.SetStatus(verb+" "+e.Name+" in "+setName),
+		core.SetStatus(verb+" "+e.Label()+" in "+setName),
 		core.PropagateAll(appctx.SetsDirty{}),
 		core.Replace(newSetEntrySubmenu(setName, setPath, e)),
 	)
@@ -150,13 +150,13 @@ func toggleSetLock(setName, setPath string, e addon.Addon) core.Action {
 
 func newRemovePluginConf(setName, setPath string, e addon.Addon) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
-		Text: fmt.Sprintf("Remove %s from %s?", e.Name, setName),
+		Text: fmt.Sprintf("Remove %s from %s?", e.Label(), setName),
 		OnYesLambda: func(sh *core.Shared) core.Action {
 			if err := addon.RemoveEntry(setPath, e.Name); err != nil {
 				return core.StatusErr(err)
 			}
 			return core.Seq(
-				core.SetStatus("removed "+e.Name+" from "+setName),
+				core.SetStatus("removed "+e.Label()+" from "+setName),
 				core.PropagateAll(appctx.SetsDirty{}), // the plugins list self-refreshes
 				core.Pop(2),                           // drop this confirm + the member submenu
 			)

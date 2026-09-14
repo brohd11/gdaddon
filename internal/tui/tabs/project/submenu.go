@@ -144,7 +144,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 	}
 	return components.NewPicker(items, components.PickerOpts{
 		// Crumb:   "Plugin",
-		Title:   a.Name,
+		Title:   a.Label(),
 		Dir:     dir,
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 	})
@@ -249,7 +249,7 @@ func newOpenSubmenu(st addon.Status) *components.PickerScreen {
 	}
 	return components.NewPicker(items, components.PickerOpts{
 		Crumb:   "Open",
-		Title:   st.Addon.Name,
+		Title:   st.Addon.Label(),
 		PopStop: true,
 	})
 }
@@ -264,7 +264,7 @@ func toggleLock(sh *core.Shared, st addon.Status) core.Action {
 	}
 	st.Addon.Lock = newLock
 	return core.Seq(
-		core.SetStatus(verb+" "+st.Addon.Name),
+		core.SetStatus(verb+" "+st.Addon.Label()),
 		core.PropagateAll(appctx.ProjectDirty{}),
 		core.Replace(newSubmenuScreen(st, sh)),
 	)
@@ -280,7 +280,7 @@ func keepAddon(sh *core.Shared, st addon.Status) core.Action {
 	}
 	st.Addon.Dependency = false
 	return core.Seq(
-		core.SetStatus("keeping "+st.Addon.Name+" (no longer a dependency)"),
+		core.SetStatus("keeping "+st.Addon.Label()+" (no longer a dependency)"),
 		core.PropagateAll(appctx.ProjectDirty{}),
 		core.Replace(newSubmenuScreen(st, sh)),
 	)
@@ -296,7 +296,7 @@ func updateBranchRecord(sh *core.Shared, st addon.Status) core.Action {
 		return core.StatusErr(err)
 	}
 	return core.Seq(
-		core.SetStatus("recorded branch "+st.LiveBranch+" for "+st.Addon.Name),
+		core.SetStatus("recorded branch "+st.LiveBranch+" for "+st.Addon.Label()),
 		core.PropagateAll(appctx.ProjectDirty{}),
 		core.Pop(),
 	)
@@ -315,13 +315,17 @@ func exportToGlobal(sh *core.Shared, a addon.Addon) core.Action {
 	}
 	globalPath, err := addon.GlobalListPath()
 	if err == nil {
-		err = addon.AddEntry(globalPath, a.Name, url, a.Path)
+		// AddEntryFull, not AddEntry: the entry's own name rides along to the global
+		// list rather than waiting for some later install there to rediscover it.
+		export := a
+		export.URL, export.Version, export.Tag, export.Dependency = url, "", "", false
+		err = addon.AddEntryFull(globalPath, export)
 	}
 	if err != nil {
 		return core.SeqErr(err, core.ResetToRoot())
 	}
 	return core.Seq(
-		core.SetStatus("added "+a.Name+" to global list"),
+		core.SetStatus("added "+a.Label()+" to global list"),
 		core.PropagateAll(appctx.GlobalDirty{}),
 		core.Pop(),
 	)

@@ -52,9 +52,10 @@ func IndexByRepo(entries []Addon) map[string]Addon {
 	return m
 }
 
-// IndexByName maps each entry's Name to the entry (later duplicates win). The by-name
-// companion to IndexByRepo, for the lookups that can't rely on repo identity alone —
-// see MissingDeps' upstream-rename fallback.
+// IndexByName maps each entry's key to the entry (later duplicates win). The by-key
+// companion to IndexByRepo, for re-reading an entry you already hold after a manifest
+// write. The dependency system's name matching is not this — it answers to an addon's
+// repo name and declared name, and lives in depIndex.
 func IndexByName(entries []Addon) map[string]Addon {
 	m := make(map[string]Addon, len(entries))
 	for _, e := range entries {
@@ -99,6 +100,30 @@ func InGlobalList(url string) bool {
 	}
 	_, ok := FindByRepo(entries, url)
 	return ok
+}
+
+// setGlobalDisplayName records display on the global list's entry for url's repo, when
+// that entry exists and has no name of its own. Matched by repo identity rather than by
+// key: the global list keeps a canonical repo url (source.RepoURL) while the project
+// entry that triggered this is pinned to a release asset, and either side may still be on
+// a hand-written key.
+//
+// Best-effort and silent, the same posture as InGlobalList — a user with no global list
+// is the ordinary case, and nothing about an install should fail over a label.
+func setGlobalDisplayName(url, display string) {
+	globalPath, err := GlobalListPath()
+	if err != nil {
+		return
+	}
+	entries, err := Parse(globalPath)
+	if err != nil { // includes file-not-exist → nothing to backfill
+		return
+	}
+	e, ok := FindByRepo(entries, url)
+	if !ok || e.Display != "" {
+		return
+	}
+	_ = SetDisplayName(globalPath, e.Name, display)
 }
 
 // UpsertEntry updates the existing entry for a.URL's repo (matched by source.RepoID)

@@ -21,5 +21,5 @@ func repoFromStatus(s addon.Status) repo.Repo {
 	if branch == "" {
 		branch = s.Addon.Tag
 	}
-	return repo.Repo{Name: s.Addon.Name, Dir: s.FullPath, Branch: branch}
+	return repo.Repo{Name: s.Addon.Label(), Dir: s.FullPath, Branch: branch}
 }

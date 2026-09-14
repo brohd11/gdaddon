@@ -34,7 +34,7 @@ func commitRemove(sh *core.Shared, g globalItem, mode int) core.Action {
 		return core.SeqErr(err, core.ResetToRoot())
 	}
 	global := core.Seq(
-		core.SetStatus("removed "+g.name),
+		core.SetStatus("removed "+g.label()),
 		core.PropagateAll(appctx.GlobalDirty{}),
 		core.ShowTab(appctx.TitleGlobal),
 	)

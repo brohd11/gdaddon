@@ -99,7 +99,7 @@ func reposFor(sh *core.Shared, sc scope) []repo.Repo {
 			continue
 		}
 		out = append(out, repo.Repo{
-			Name: s.Addon.Name,
+			Name: s.Addon.Label(),
 			Dir:  s.FullPath,
 			Sync: c.GitSync[s.Addon.Name],
 		})
