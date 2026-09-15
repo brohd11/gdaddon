@@ -42,6 +42,10 @@ func DefaultSources() []SourceConfig {
 			},
 			VCS: &VCSRule{
 				Host: "github.com",
+				Tags: TagsRule{
+					URL:      "https://api.github.com/repos/{owner}/{repo}/tags?per_page=100",
+					NamePath: "name",
+				},
 				Releases: ReleasesRule{
 					URL:            "https://api.github.com/repos/{owner}/{repo}/releases?per_page=30",
 					TagPath:        "tag_name",
@@ -117,6 +121,10 @@ func DefaultSources() []SourceConfig {
 			},
 			VCS: &VCSRule{
 				Host: "codeberg.org",
+				Tags: TagsRule{
+					URL:      "https://codeberg.org/api/v1/repos/{owner}/{repo}/tags?limit=100",
+					NamePath: "name",
+				},
 				Releases: ReleasesRule{
 					URL:            "https://codeberg.org/api/v1/repos/{owner}/{repo}/releases?limit=30",
 					TagPath:        "tag_name",

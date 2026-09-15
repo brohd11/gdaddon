@@ -28,9 +28,11 @@ Actions ▸ Install All + Deps.
 
 The repo is `owner/repo`, or `host/owner/repo` for a host other than github.com — the
 same shorthand a `plugin.cfg`/`version.cfg` `require` or `deps` entry uses. An optional
-`@tag` picks a release;
-without one you get the latest non-prerelease. A leading `v` is optional on either side,
-so `@1.2.0` finds a release tagged `v1.2.0`.
+`@tag` picks a release, or downloads the tag's source ZIP when no release exists.
+Without one you get the latest published non-prerelease. A leading `v` is optional
+on either side, so `@1.2.0` finds `v1.2.0`; exact names take precedence within the
+release lookup and within the tag lookup. Tags without releases are available in
+the TUI's **Tags** browser and never become automatic update candidates.
 
 ```
 gdaddon install brohd11/Godot-Script-Tabs
@@ -61,7 +63,10 @@ A release is the default. To track a branch instead, install it as a live git cl
 ```
 gdaddon install owner/repo --clone         # the remote's default branch
 gdaddon install owner/repo@dev --clone     # the dev branch
+gdaddon install owner/repo@main --clone    # the main branch
 ```
+
+Without `--clone`, `@main` names a Git tag and does not select a branch.
 
 The checked-out branch is recorded as the entry's `tag`, so it reads as a clone rather
 than as branch drift on the next refresh. Updating a clone is git's job, not gdaddon's —

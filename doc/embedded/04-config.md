@@ -42,10 +42,16 @@ own and it appears alongside it.
 
 ### Per-host VCS rules
 
-How to talk to a git host: where its releases live, how to list branches, how to build a
+How to talk to a git host: where its releases live, how to list tags and branches, how to build a
 source-archive URL. github.com and codeberg.org ship as defaults, and any host with a
-rule gets full release/branch listing. A host *without* one still works — gdaddon falls
+rule gets the listings configured for it. A host *without* one still works — gdaddon falls
 back to a plain git clone, it just can't enumerate versions for you.
+
+Git tag discovery uses `vcs.tags` (`url`, `name_path`, and optional `results_path`)
+with `vcs.source_archive`. The GitHub and Codeberg defaults include these rules.
+Explicit version lookups follow the API's `Link` pagination headers to find older
+releases and tags. Existing source files are not migrated or supplemented: regenerate
+`sources.yml` to pick up the new defaults.
 
 Branch pinning also comes from these rules (`commit_archive_url` and
 `branches.commit_path`). A `sources.yml` written before those keys existed will still

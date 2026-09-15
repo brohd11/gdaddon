@@ -20,10 +20,19 @@ type SourceConfig struct {
 type VCSRule struct {
 	Host             string       `yaml:"host"` // index key, e.g. "github.com"
 	Releases         ReleasesRule `yaml:"releases"`
+	Tags             TagsRule     `yaml:"tags,omitempty"`
 	Branches         BranchesRule `yaml:"branches,omitempty"`
 	SourceArchive    ArchiveSpec  `yaml:"source_archive,omitempty"`     // appended to every release
 	BranchArchiveURL string       `yaml:"branch_archive_url,omitempty"` // when a manifest URL tracks refs/heads/<branch>
 	CommitArchiveURL string       `yaml:"commit_archive_url,omitempty"` // archive for a specific commit; templates {commit} — pins a branch install to its HEAD sha
+}
+
+// TagsRule lists Git tags independently of published releases. Pagination follows
+// the API's Link header, as it does for explicit release lookups.
+type TagsRule struct {
+	URL         string `yaml:"url"`
+	ResultsPath string `yaml:"results_path,omitempty"`
+	NamePath    string `yaml:"name_path"`
 }
 
 // ReleasesRule extracts releases from a host's release-list endpoint. AssetsPath

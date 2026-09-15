@@ -10,6 +10,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/config"
@@ -142,12 +143,18 @@ func cloneFallback(ref repoRef) *Listing {
 }
 
 func resolveReleases(ctx context.Context, rule *config.VCSRule, owner, repo string) ([]Release, error) {
+	endpoint := restrule.Render(rule.Releases.URL, vars(owner, repo, "", ""))
+	releases, _, err := resolveReleasesPage(ctx, rule, owner, repo, endpoint)
+	return releases, err
+}
+
+func resolveReleasesPage(ctx context.Context, rule *config.VCSRule, owner, repo, endpoint string) ([]Release, string, error) {
 	r := rule.Releases
-	endpoint := restrule.Render(r.URL, vars(owner, repo, "", ""))
 
 	var root any
-	if err := restrule.GetJSON(ctx, endpoint, &root); err != nil {
-		return nil, err
+	next, err := restrule.GetJSONPage(ctx, endpoint, &root)
+	if err != nil {
+		return nil, "", err
 	}
 	arr, _ := restrule.GetPath(root, r.ResultsPath)
 	raw, _ := arr.([]any)
@@ -177,13 +184,13 @@ func resolveReleases(ctx context.Context, rule *config.VCSRule, owner, repo stri
 		if rule.SourceArchive.URL != "" {
 			rel.Assets = append(rel.Assets, Asset{
 				Name:      rule.SourceArchive.Name,
-				URL:       restrule.Render(rule.SourceArchive.URL, vars(owner, repo, tag, "")),
+				URL:       restrule.Render(rule.SourceArchive.URL, vars(owner, repo, url.PathEscape(tag), "")),
 				Generated: true,
 			})
 		}
 		releases = append(releases, rel)
 	}
-	return releases, nil
+	return releases, next, nil
 }
 
 func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo string) ([]Asset, error) {

@@ -23,6 +23,13 @@ import (
 func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []source.Release, archived archivedSet) *components.PickerScreen {
 	var items []list.Item
 	items = append(items, opts.LeadItems...)
+	if opts.Source != SourceArchive && source.SupportsTags(repoURL) {
+		items = append(items, components.Item{
+			Name: "Tags",
+			Desc: "browse Git tags, including tags without releases",
+			Pick: func(sh *core.Shared) core.Action { return core.Push(newTagsLoading(repoID, repoURL, opts, archived)) },
+		})
+	}
 	if opts.IncludeHEAD {
 		items = append(items, components.Item{
 			Name: "HEAD",

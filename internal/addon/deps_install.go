@@ -2,7 +2,6 @@ package addon
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/brohd11/gdaddon/internal/archive"
@@ -193,9 +192,9 @@ func writeDepEntry(manifestPath string, d Dependency, asset source.Asset, resolv
 	return name, true, nil
 }
 
-// ResolveDepAsset finds the dependency's required release and picks its install asset
+// ResolveDepAsset finds the dependency's required release or Git tag and picks its install asset
 // (source.AutoAsset: the single uploaded build, or the generated source archive
-// when none was uploaded; ambiguous multi-upload releases yield ok=false).
+// when none was uploaded or no release exists; ambiguous multi-upload releases yield ok=false).
 //
 // It is archive-first: a tag-equal local copy avoids the network and survives upstream
 // delisting. It falls through to the network when the archive has no (unambiguous) match.
@@ -203,16 +202,11 @@ func ResolveDepAsset(ctx context.Context, d Dependency) (source.Asset, bool) {
 	if asset, ok := archivedDepAsset(d); ok {
 		return asset, true
 	}
-	listing, err := source.AvailableVersions(ctx, d.RepoURL)
-	if err != nil || listing == nil {
+	rel, err := source.ResolveTag(ctx, d.RepoURL, d.Tag)
+	if err != nil {
 		return source.Asset{}, false
 	}
-	for _, rel := range listing.Releases {
-		if tagEqual(rel.Tag, d.Tag) {
-			return source.AutoAsset(rel)
-		}
-	}
-	return source.Asset{}, false
+	return source.AutoAsset(rel)
 }
 
 // archivedDepAsset returns a locally archived asset for the dependency's required tag,
@@ -239,5 +233,5 @@ func TagEqual(a, b string) bool { return tagEqual(a, b) }
 // tagEqual matches a required tag against a release tag, tolerating a leading "v" on
 // either side (e.g. "1.2.0" matches "v1.2.0").
 func tagEqual(a, b string) bool {
-	return a == b || strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
+	return source.TagEqual(a, b)
 }

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/brohd11/gdaddon/internal/addon"
-	"github.com/brohd11/gdaddon/internal/source"
 
 	"github.com/spf13/cobra"
 )
@@ -38,8 +37,9 @@ manifest already lists.
 
 A repo is named as owner/repo, or host/owner/repo for a host other than
 github.com — the same shorthand a plugin.cfg/version.cfg 'require' or 'deps'
-entry uses. An optional @tag pins a release; without one the latest
-non-prerelease is installed.
+entry uses. An optional @tag picks a release, or the tag's source ZIP when no
+release exists. Without one the latest published non-prerelease is installed.
+Use --clone to interpret @main (or another ref) as a live branch checkout.
 
 The install location is worked out from the downloaded package: a repo whose
 root holds a plugin.cfg is installed whole, a repo shipping an addons/ folder
@@ -236,11 +236,7 @@ func resolveEntry(ctx context.Context, spec addon.Dependency) (addon.Addon, erro
 		}, nil
 	}
 
-	listing, err := source.AvailableVersions(ctx, spec.RepoURL)
-	if err != nil {
-		return addon.Addon{}, fmt.Errorf("could not list versions of %s: %w", spec.RepoID, err)
-	}
-	rel, err := addon.SelectRelease(listing.Releases, spec.Tag)
+	rel, err := addon.ResolveVersion(ctx, spec.RepoURL, spec.Tag)
 	if err != nil {
 		return addon.Addon{}, fmt.Errorf("%s: %w", spec.RepoID, err)
 	}

@@ -16,6 +16,16 @@ even when its list is empty.
 The host defaults to github.com, and the tag is optional. `owner/repo@v1.0.0` means "at
 least v1.0.0"; `owner/other` means "any version".
 
+A tag does not need a published release. gdaddon prefers the matching release's
+uploaded package; when the tag has no release, it downloads and extracts the tag's
+source ZIP. Multiple uploaded builds still require an explicit asset choice.
+The local package archive is checked first, allowing saved packages to work offline.
+
+Tags without releases can also be selected through **Tags** in the package browser.
+They do not participate in “latest” installs or automatic updates, which use published
+releases. `@main` names a tag, not a branch.
+For a live branch checkout, use the CLI's `--clone` option.
+
 Matching is against the entry's `tag` — the release identity — not its `version`, since
 the version string in a `plugin.cfg` is the author's to invent and often disagrees with
 the release it shipped in. Comparison is semver `>=`, so a newer tag satisfies a dep.

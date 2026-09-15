@@ -91,6 +91,11 @@ func TestEnsureWritesDefaultsOnce(t *testing.T) {
 	if len(srcs) != len(DefaultSources()) || srcs[0].Name != "GitHub" {
 		t.Fatalf("dumped sources mismatch: %+v", srcs)
 	}
+	for _, s := range srcs {
+		if s.VCS != nil && (s.VCS.Tags.URL == "" || s.VCS.Tags.NamePath != "name") {
+			t.Errorf("generated provider lacks tag discovery: %+v", s.VCS)
+		}
+	}
 
 	// Idempotent: a second call leaves the (possibly user-edited) files alone.
 	if err := os.WriteFile(configPath, []byte("archive_dir: ~/custom\n"), 0o644); err != nil {

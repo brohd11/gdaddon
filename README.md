@@ -73,13 +73,17 @@ or `version.cfg`:
 ```
 [plugin]
 name="My Plugin"
-require=["user/repo@v1.0.0"] # point to the release tag
+require=["user/repo@v1.0.0"] # point to a Git tag
 ```
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 including when it is an empty list. When the addon is installed, its config will be read
 and checked for dependencies. If they are found and the dependency is not present, the
 addon will be flagged and you can run the get dependencies command to add them to your
 project.
+
+A Git tag does not need a published release: gdaddon installs its source ZIP when
+there is no matching release. The package browser's **Tags** entry exposes these
+versions for manual installation. Latest installs and updates use published releases.
 
 If you don't have a tagged version, just the repo will be added to your project where you can add the proper version manually.
 

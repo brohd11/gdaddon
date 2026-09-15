@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -26,18 +27,47 @@ import (
 // credential are fetched anonymously. The body is decoded with UseNumber so numeric
 // ids and pagination fields coerce cleanly when out is an any.
 func GetJSON(ctx context.Context, endpoint string, out any) error {
+	_, err := GetJSONPage(ctx, endpoint, out)
+	return err
+}
+
+// GetJSONPage also returns the next page advertised by a standard Link header.
+// Resolve relative links against the endpoint URL; only follow the same origin.
+func GetJSONPage(ctx context.Context, endpoint string, out any) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	resp, err := authedGet(ctx, endpoint, "application/json", gitcred.TokenForURL(ctx, endpoint))
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	dec := json.NewDecoder(resp.Body)
 	dec.UseNumber()
-	return dec.Decode(out)
+	if err := dec.Decode(out); err != nil {
+		return "", err
+	}
+	for _, header := range resp.Header.Values("Link") {
+		for _, link := range strings.Split(header, ",") {
+			parts := strings.Split(link, ";")
+			for _, param := range parts[1:] {
+				if strings.TrimSpace(param) != `rel="next"` && strings.TrimSpace(param) != "rel=next" {
+					continue
+				}
+				base, err := url.Parse(endpoint)
+				if err != nil {
+					return "", err
+				}
+				next, err := base.Parse(strings.Trim(strings.TrimSpace(parts[0]), "<>"))
+				if err != nil || next.Scheme != base.Scheme || next.Host != base.Host {
+					return "", fmt.Errorf("invalid pagination link from %s", endpoint)
+				}
+				return next.String(), nil
+			}
+		}
+	}
+	return "", nil
 }
 
 // Get performs an authenticated GET and returns the response for the caller to

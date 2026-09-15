@@ -1,11 +1,25 @@
 package addon
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/source"
 )
+
+// ResolveVersion keeps untagged installs on published releases, while explicit
+// tags may use a source package when no release exists.
+func ResolveVersion(ctx context.Context, repoURL, tag string) (source.Release, error) {
+	if tag != "" {
+		return source.ResolveTag(ctx, repoURL, tag)
+	}
+	listing, err := source.AvailableVersions(ctx, repoURL)
+	if err != nil {
+		return source.Release{}, err
+	}
+	return SelectRelease(listing.Releases, "")
+}
 
 // AmbiguousAssetError reports a release whose uploaded assets can't be picked without
 // a user: source.AutoAsset only auto-selects when a release ships exactly one uploaded
@@ -36,6 +50,11 @@ func SelectRelease(releases []source.Release, tag string) (source.Release, error
 			return source.Release{}, fmt.Errorf("no releases found")
 		}
 		return rel, nil
+	}
+	for _, rel := range releases {
+		if rel.Tag == tag {
+			return rel, nil
+		}
 	}
 	for _, rel := range releases {
 		if tagEqual(rel.Tag, tag) {
