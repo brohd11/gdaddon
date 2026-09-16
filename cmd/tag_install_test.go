@@ -21,7 +21,7 @@ func TestResolveEntryTagWithoutRelease(t *testing.T) {
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("GITHUB_TOKEN", "test-token")
 	orig := http.DefaultClient.Transport
-	t.Cleanup(func() { http.DefaultClient.Transport = orig; addonInstallClone = false })
+	t.Cleanup(func() { http.DefaultClient.Transport = orig })
 	http.DefaultClient.Transport = tagTransport(func(r *http.Request) (*http.Response, error) {
 		body := ""
 		switch r.URL.Path {
@@ -50,8 +50,14 @@ func TestResolveEntryTagWithoutRelease(t *testing.T) {
 	if _, err := resolveEntry(context.Background(), spec); err == nil {
 		t.Fatal("@main silently became a branch")
 	}
-	addonInstallClone = true
-	entry, err = resolveEntry(context.Background(), spec)
+
+	// A branch is only ever reached through the spec's own clone: prefix — the ref half
+	// alone never changes what kind of install this is.
+	cloneSpec, ok := addon.ParseRepoSpec("clone:u/r@main")
+	if !ok {
+		t.Fatal("clone:u/r@main did not parse")
+	}
+	entry, err = resolveEntry(context.Background(), cloneSpec)
 	if err != nil || entry.Kind != addon.KindClone || entry.Tag != "main" || !strings.HasSuffix(entry.URL, ".git") {
 		t.Fatalf("clone entry = %+v, err=%v", entry, err)
 	}

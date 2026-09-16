@@ -13,8 +13,21 @@ require=["owner/repo@v1.0.0", "owner/other"]
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 even when its list is empty.
 
-The host defaults to github.com, and the tag is optional. `owner/repo@v1.0.0` means "at
-least v1.0.0"; `owner/other` means "any version".
+A spec is `[clone:]owner/repo[@ref]`. The host defaults to github.com — write
+`host/owner/repo` for anything else — and both the prefix and the `@ref` are optional:
+
+| spec | means |
+| --- | --- |
+| `owner/repo@v1.0.0` | at least v1.0.0 |
+| `owner/repo@latest` | the newest published non-prerelease, pinned when it's recorded |
+| `owner/repo` | any version — recorded unpinned, installed from the default branch |
+| `clone:owner/repo@main` | a live git checkout of branch `main` |
+| `clone:owner/repo` | a live git checkout of the remote's default branch |
+
+`@` always names the ref and nothing else. A clone is asked for with the `clone:` prefix,
+never by spelling it into the ref: `@clone-main` is just a branch called `clone-main`.
+`package:` is accepted as the explicit spelling of the default. `submodule:` is not —
+a submodule belongs to the parent repo, and gdaddon never installs one.
 
 A tag does not need a published release. gdaddon prefers the matching release's
 uploaded package; when the tag has no release, it downloads and extracts the tag's
@@ -23,8 +36,24 @@ The local package archive is checked first, allowing saved packages to work offl
 
 Tags without releases can also be selected through **Tags** in the package browser.
 They do not participate in “latest” installs or automatic updates, which use published
-releases. `@main` names a tag, not a branch.
-For a live branch checkout, use the CLI's `--clone` option.
+releases. `@main` names a tag, not a branch — use `clone:owner/repo@main` for the branch.
+
+### The two words that aren't tags
+
+`latest` is reserved. It resolves to the newest published non-prerelease **when the entry
+is recorded**, and the manifest stores the tag it resolved to, not the word — so the entry
+is a real pin and moving it forward stays an explicit act (`gdaddon update-addons`). A repo
+that publishes a literal rolling tag named `latest` can't be pinned to it by name; the
+reserved meaning wins.
+
+A `clone:` dep's `@ref` is a *branch*, so it isn't version-compared at all. The entry it
+creates records `kind: clone` with the branch in `tag:` and no `version:` — a checkout
+tracks a branch, so there is nothing to pin. Leaving the ref off clones the remote's
+default branch, and the branch it lands on is written back to the entry.
+
+Requiring a clone says how a dependency the manifest *lacks* should be added. It does not
+override an entry you already have: if you deliberately pinned that repo to a release, it
+still satisfies the requirement and gdaddon leaves it alone.
 
 Matching is against the entry's `tag` — the release identity — not its `version`, since
 the version string in a `plugin.cfg` is the author's to invent and often disagrees with
@@ -57,6 +86,16 @@ downloaded:
   my-addon declares a dependency:
     github.com/someone/util-lib @v0.4.1
     https://github.com/someone/util-lib/releases/download/v0.4.1/util-lib.zip
+  Install it? [y/N/a(ll)/q(uit)]:
+```
+
+A dependency that asked for a checkout says so, since accepting it means live code with
+its own `.git` that tracks a branch rather than a pinned snapshot:
+
+```
+  my-addon declares a dependency:
+    github.com/someone/util-lib (clone: main)
+    https://github.com/someone/util-lib.git
   Install it? [y/N/a(ll)/q(uit)]:
 ```
 

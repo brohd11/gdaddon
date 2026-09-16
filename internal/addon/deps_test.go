@@ -44,6 +44,47 @@ func TestParseDependencyList(t *testing.T) {
 			`["single-segment", "@v1.0.0", "a/b/c/d@v1"]`,
 			nil,
 		},
+		{
+			"clone: requires a live checkout, and @ref is a branch",
+			`["clone:u/Live@main", "clone:u/Default", "clone:codeberg.org/u/Foo@dev"]`,
+			[]Dependency{
+				{Host: "github.com", Owner: "u", Repo: "Live", Tag: "main", Kind: KindClone, RepoURL: "https://github.com/u/Live", RepoID: "github.com/u/live"},
+				{Host: "github.com", Owner: "u", Repo: "Default", Kind: KindClone, RepoURL: "https://github.com/u/Default", RepoID: "github.com/u/default"},
+				{Host: "codeberg.org", Owner: "u", Repo: "Foo", Tag: "dev", Kind: KindClone, RepoURL: "https://codeberg.org/u/Foo", RepoID: "codeberg.org/u/foo"},
+			},
+		},
+		{
+			"package: is the explicit spelling of the default",
+			`["package:u/Pkg@v1.0.0"]`,
+			[]Dependency{
+				{Host: "github.com", Owner: "u", Repo: "Pkg", Tag: "v1.0.0", RepoURL: "https://github.com/u/Pkg", RepoID: "github.com/u/pkg"},
+			},
+		},
+		{
+			// The word is carried through parsing and resolved when the entry is
+			// recorded; nothing here reaches the network.
+			"@latest is kept as the reserved word",
+			`["u/Fresh@latest"]`,
+			[]Dependency{
+				{Host: "github.com", Owner: "u", Repo: "Fresh", Tag: "latest", RepoURL: "https://github.com/u/Fresh", RepoID: "github.com/u/fresh"},
+			},
+		},
+		{
+			// A submodule is the parent repo's to manage, and `latest` is a release
+			// concept that a branch checkout cannot honour.
+			"submodule: and clone:@latest are rejected",
+			`["submodule:u/Sub", "clone:u/Live@latest", "clone:"]`,
+			nil,
+		},
+		{
+			// The colon here belongs to the host, not to a kind prefix — the shape the
+			// dependency tests' own local server produces.
+			"a host carrying a port is not a kind prefix",
+			`["127.0.0.1:8080/o/c@v1.0.0"]`,
+			[]Dependency{
+				{Host: "127.0.0.1:8080", Owner: "o", Repo: "c", Tag: "v1.0.0", RepoURL: "https://127.0.0.1:8080/o/c", RepoID: "127.0.0.1:8080/o/c"},
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,16 +108,19 @@ func TestDependenciesFromCfg(t *testing.T) {
 		keys     string
 		wantID   string
 		wantTag  string
+		wantKind Kind
 	}{
-		{"deps in plugin.cfg", "plugin.cfg", `deps=["u/Dep@v1.2.0"]`, "github.com/u/dep", "v1.2.0"},
-		{"require in plugin.cfg", "plugin.cfg", `require=["u/Required@v2.0.0"]`, "github.com/u/required", "v2.0.0"},
-		{"require in version.cfg", "version.cfg", `require=["u/Library"]`, "github.com/u/library", ""},
+		{"deps in plugin.cfg", "plugin.cfg", `deps=["u/Dep@v1.2.0"]`, "github.com/u/dep", "v1.2.0", KindPackage},
+		{"require in plugin.cfg", "plugin.cfg", `require=["u/Required@v2.0.0"]`, "github.com/u/required", "v2.0.0", KindPackage},
+		{"require in version.cfg", "version.cfg", `require=["u/Library"]`, "github.com/u/library", "", KindPackage},
+		{"clone: read end to end from a cfg", "plugin.cfg", `require=["clone:u/Live@main"]`, "github.com/u/live", "main", KindClone},
 		{
 			"require wins over deps",
 			"plugin.cfg",
 			"deps=[\"u/Old@v1.0.0\"]\nrequire=[\"u/New@v3.0.0\"]",
 			"github.com/u/new",
 			"v3.0.0",
+			KindPackage,
 		},
 	}
 	for _, tc := range cases {
@@ -90,7 +134,7 @@ func TestDependenciesFromCfg(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(deps) != 1 || deps[0].RepoID != tc.wantID || deps[0].Tag != tc.wantTag {
+			if len(deps) != 1 || deps[0].RepoID != tc.wantID || deps[0].Tag != tc.wantTag || deps[0].Kind != tc.wantKind {
 				t.Errorf("unexpected deps: %+v", deps)
 			}
 		})
@@ -287,9 +331,9 @@ func TestAddDepEntry(t *testing.T) {
 
 	// The entry is keyed by identity, which is also lower-cased — the url's "Widget"
 	// casing is not part of the key.
-	name, added, err := AddDepEntry(context.Background(), path, dep, true)
-	if err != nil || !added || name != "github.com/u/widget" {
-		t.Fatalf("AddDepEntry = (%q, %v, %v), want (github.com/u/widget, true, nil)", name, added, err)
+	entry, added, err := AddDepEntry(context.Background(), path, dep, true)
+	if err != nil || !added || entry.Name != "github.com/u/widget" {
+		t.Fatalf("AddDepEntry = (%q, %v, %v), want (github.com/u/widget, true, nil)", entry.Name, added, err)
 	}
 	addons, err := Parse(path)
 	if err != nil || len(addons) != 1 {
@@ -320,5 +364,46 @@ func TestAddDepEntry(t *testing.T) {
 	}
 	if addons, _ = Parse(path); len(addons) != 2 {
 		t.Errorf("a skipped dep should write nothing; got %+v", addons)
+	}
+}
+
+// TestAddDepEntryClone covers what a `clone:` requirement becomes in the manifest: the
+// canonical .git url, the branch in tag:, kind: clone, and no version — a checkout tracks
+// a branch, so there is nothing to pin. It also asserts the path costs no network call:
+// a branch has no release to resolve, and a dead context would fail any lookup attempted.
+func TestAddDepEntryClone(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "addon_manifest.yml")
+
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	branch, _ := ParseRepoSpec("clone:u/Live@main")
+	entry, added, err := AddDepEntry(dead, path, branch, true)
+	if err != nil || !added {
+		t.Fatalf("AddDepEntry = (%v, %v), want (true, nil)", added, err)
+	}
+	if entry.Kind != KindClone || entry.Tag != "main" || entry.URL != "https://github.com/u/Live.git" {
+		t.Fatalf("clone entry = %+v", entry)
+	}
+
+	// No branch named: the entry records none either, and the install fills in whatever
+	// the remote's default turned out to be (see pinInstalled).
+	def, _ := ParseRepoSpec("clone:u/Default")
+	if _, added, err := AddDepEntry(dead, path, def, true); err != nil || !added {
+		t.Fatalf("default-branch clone = (%v, %v), want (true, nil)", added, err)
+	}
+
+	addons, err := Parse(path)
+	if err != nil || len(addons) != 2 {
+		t.Fatalf("Parse = %v, %v; want two entries", addons, err)
+	}
+	byRepo := IndexByRepo(addons)
+	live := byRepo["github.com/u/live"]
+	if live.Kind != KindClone || live.Tag != "main" || live.Version != "" || !live.Dependency {
+		t.Errorf("recorded clone = %+v, want kind clone on branch main with no version", live)
+	}
+	if other := byRepo["github.com/u/default"]; other.Kind != KindClone || other.Tag != "" {
+		t.Errorf("recorded default-branch clone = %+v, want kind clone with no tag", other)
 	}
 }

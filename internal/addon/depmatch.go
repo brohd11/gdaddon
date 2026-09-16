@@ -94,8 +94,14 @@ func declaredDeps(a Addon, projectRoot string) ([]Dependency, error) {
 // satisfied by presence alone, and a tag pair that cannot be compared (a date stamp, a
 // branch checkout with no tag) is *trusted* rather than treated as a miss — deliberate
 // HEAD-tracking is not something to nag about.
+//
+// A clone requirement is satisfied by presence too, whatever kind the recorded entry is:
+// `clone:` says how a *missing* dependency should be added, not that an entry the user
+// pinned to a release on purpose is now wrong. It needs its own line rather than falling
+// through, because its ref is a branch and a branch can be named something that parses as
+// a version ("2.0"), which would otherwise be compared as one.
 func depSatisfied(d Dependency, recordedTag string) bool {
-	if d.Tag == "" {
+	if d.Tag == "" || d.IsClone() {
 		return true
 	}
 	sat, verified := d.SatisfiedByTag(recordedTag)

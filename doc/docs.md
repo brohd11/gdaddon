@@ -228,17 +228,34 @@ An installed addon declares dependencies in its `plugin.cfg` or `version.cfg`:
 [plugin]
 name="My Plugin"
 
-require=["owner/repo@v1.0.0", "other/repo"]
+require=["owner/repo@v1.0.0", "other/repo", "clone:third/repo@main"]
 ```
 
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 including when its list is empty.
 
-Each spec is `owner/repo` with an optional `@tag` (host defaults to `github.com`). When
-an addon is installed, gdaddon reads its declared dependencies, resolves each against your
-manifest, and flags the addon `⚠ [missing deps]` if any required dependency is absent. Matching uses
-the dependency's **`tag`** with a semver `>=` comparison — so a manifest entry at
-`v1.2.0` satisfies a `@v1.0.0` requirement.
+Each spec is `[clone:]owner/repo[@ref]` (host defaults to `github.com`; write
+`host/owner/repo` for another). `@` always names the ref:
+
+- `@v1.0.0` — that release tag, or newer.
+- `@latest` — the newest published non-prerelease, resolved and pinned when the entry is
+  recorded, so the manifest holds a real tag rather than the word. It is reserved: a repo
+  publishing a literal `latest` tag cannot be pinned to it by name.
+- no `@ref` — unpinned; the repo is recorded for you to pin later.
+- `clone:…@main` — a live git checkout of branch `main` (`clone:…` alone takes the
+  remote's default branch). The entry records `kind: clone` with the branch in `tag:` and
+  no version, since a checkout tracks a branch instead of pinning one. `package:` is the
+  explicit spelling of the default; `submodule:` is rejected, as gdaddon never installs one.
+
+Don't spell a branch into the ref — `@clone-main` is a branch called `clone-main`, nothing
+more.
+
+When an addon is installed, gdaddon reads its declared dependencies, resolves each against
+your manifest, and flags the addon `⚠ [missing deps]` if any required dependency is absent.
+Matching uses the dependency's **`tag`** with a semver `>=` comparison — so a manifest entry
+at `v1.2.0` satisfies a `@v1.0.0` requirement. A clone requirement is satisfied by presence
+alone, whatever kind the existing entry is: `clone:` says how a *missing* dependency should
+be added, not that an entry you pinned to a release on purpose is now wrong.
 
 To act on it:
 

@@ -82,12 +82,15 @@ func InstallAll(ctx context.Context, manifestPath string, statuses []Status, bas
 			continue
 		}
 		if res.Path != "" {
-			if err := UpdateEntry(manifestPath, a.Name, "", res.Path, res.Version, ""); err != nil {
-				report("[%s] Error pinning manifest: %v", a.Label(), err)
-				continue
-			}
 			if err := AdoptName(manifestPath, a, res); err != nil {
 				report("[%s] Could not record the declared name: %v", a.Label(), err)
+			}
+			// pinInstalled, not a bare UpdateEntry: a clone records no version and has its
+			// checked-out branch written back, and this is the third site that installs
+			// then pins (with InstallOne and ensureDep).
+			if _, err := pinInstalled(manifestPath, baseDir, a, res); err != nil {
+				report("[%s] Error pinning manifest: %v", a.Label(), err)
+				continue
 			}
 			outcomes = append(outcomes, InstallOutcome{
 				Name: a.Name, Display: displayOf(a, res), URL: a.URL,

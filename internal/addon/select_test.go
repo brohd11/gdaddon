@@ -40,6 +40,29 @@ func TestParseRepoSpec(t *testing.T) {
 			true,
 		},
 		{"surrounding space is tolerated", "  u/r  ", Dependency{Host: "github.com", Owner: "u", Repo: "r", RepoURL: "https://github.com/u/r", RepoID: "github.com/u/r"}, true},
+		{
+			// The half of the grammar that replaced the old --clone flag: a hand-typed
+			// spec and a declared require= item go through this one parser.
+			"clone: with a branch",
+			"clone:brohd11/Godot-Script-Tabs@dev",
+			Dependency{Host: "github.com", Owner: "brohd11", Repo: "Godot-Script-Tabs", Tag: "dev", Kind: KindClone, RepoURL: "https://github.com/brohd11/Godot-Script-Tabs", RepoID: "github.com/brohd11/godot-script-tabs"},
+			true,
+		},
+		{
+			"clone: without a branch takes the remote default",
+			"clone:u/r",
+			Dependency{Host: "github.com", Owner: "u", Repo: "r", Kind: KindClone, RepoURL: "https://github.com/u/r", RepoID: "github.com/u/r"},
+			true,
+		},
+		{
+			"@latest is carried through as the reserved word",
+			"u/r@latest",
+			Dependency{Host: "github.com", Owner: "u", Repo: "r", Tag: "latest", RepoURL: "https://github.com/u/r", RepoID: "github.com/u/r"},
+			true,
+		},
+		{"submodule: is not installable", "submodule:u/r", Dependency{}, false},
+		{"clone: cannot ask for @latest", "clone:u/r@latest", Dependency{}, false},
+		{"bare clone: names no repo", "clone:", Dependency{}, false},
 		{"single segment", "justaname", Dependency{}, false},
 		{"too many segments", "a/b/c/d", Dependency{}, false},
 		{"empty owner", "/repo", Dependency{}, false},

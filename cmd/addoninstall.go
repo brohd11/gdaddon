@@ -17,7 +17,6 @@ var (
 	addonInstallRoot      string
 	addonInstallAsset     string
 	addonInstallName      string
-	addonInstallClone     bool
 	addonInstallNoDeps    bool
 	addonInstallTrustDeps bool
 )
@@ -27,7 +26,7 @@ var (
 const manifestFileName = "addon_manifest.yml"
 
 var addonInstallCmd = &cobra.Command{
-	Use:   "install [--all | <owner/repo>[@tag]]",
+	Use:   "install [--all | [clone:]<owner/repo>[@ref]]",
 	Short: "Install Godot addons into this project and record them in the manifest",
 	Long: `Install downloads addons into the project and records them in its addon
 manifest, along with the dependencies they declare (and theirs, and so on).
@@ -38,8 +37,12 @@ manifest already lists.
 A repo is named as owner/repo, or host/owner/repo for a host other than
 github.com — the same shorthand a plugin.cfg/version.cfg 'require' or 'deps'
 entry uses. An optional @tag picks a release, or the tag's source ZIP when no
-release exists. Without one the latest published non-prerelease is installed.
-Use --clone to interpret @main (or another ref) as a live branch checkout.
+release exists; @latest is the newest published non-prerelease, which is also
+what you get with no @ref at all.
+
+Prefix the repo with 'clone:' to install a live git checkout instead of a
+release, in which case @ref names the branch and leaving it off takes the
+remote's default branch.
 
 The install location is worked out from the downloaded package: a repo whose
 root holds a plugin.cfg is installed whole, a repo shipping an addons/ folder
@@ -65,9 +68,10 @@ discovers.
   gdaddon install --all --trust-deps               # ... and don't ask about deps
   gdaddon install brohd11/my-addon
   gdaddon install brohd11/my-addon@v1.2.0
+  gdaddon install brohd11/my-addon@latest          # newest release, pinned
   gdaddon install codeberg.org/someone/their-addon
-  gdaddon install brohd11/my-addon --clone         # git checkout, default branch
-  gdaddon install brohd11/my-addon@dev --clone     # git checkout, branch dev`,
+  gdaddon install clone:brohd11/my-addon           # git checkout, default branch
+  gdaddon install clone:brohd11/my-addon@dev       # git checkout, branch dev`,
 	Args:          cobra.MaximumNArgs(1),
 	SilenceUsage:  true,
 	SilenceErrors: false,
@@ -80,7 +84,6 @@ func init() {
 	f.StringVar(&addonInstallRoot, "root", "", "project root (default: the git toplevel, else the current directory)")
 	f.StringVar(&addonInstallAsset, "asset", "", "pick a release asset by name (substring) when the release ships several")
 	f.StringVar(&addonInstallName, "name", "", "manifest entry name (default: derived from the repo)")
-	f.BoolVar(&addonInstallClone, "clone", false, "install as a git checkout of a branch (@ref names the branch) instead of a release")
 	f.BoolVar(&addonInstallNoDeps, "no-deps", false, "don't install declared dependencies")
 	f.BoolVar(&addonInstallTrustDeps, "trust-deps", false, "install declared dependencies without confirming each one")
 	rootCmd.AddCommand(addonInstallCmd)
@@ -96,7 +99,7 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 
 	spec, ok := addon.ParseRepoSpec(args[0])
 	if !ok {
-		return fmt.Errorf("could not parse %q: expected owner/repo, host/owner/repo, either with an optional @tag", args[0])
+		return fmt.Errorf("could not parse %q: expected [clone:]owner/repo or [clone:]host/owner/repo, either with an optional @ref", args[0])
 	}
 
 	projectRoot, err := resolveRootQuiet(addonInstallRoot)
@@ -150,26 +153,26 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 
 // checkInstallArgs rejects the combinations that name no target, two targets, or a
 // single-addon option alongside --all. Cobra can express none of these: --all and the
-// positional are different kinds of thing, and --asset/--name/--clone are only
-// meaningful when there is one addon to describe.
+// positional are different kinds of thing, and --asset/--name are only meaningful when
+// there is one addon to describe. A clone needs no guard here — it is part of the spec,
+// so it can only ever arrive on the positional --all rejects outright.
 func checkInstallArgs(args []string) error {
 	switch {
 	case addonInstallAll && len(args) == 1:
 		return fmt.Errorf("--all installs the whole manifest; drop %q (or drop --all to install just it)", args[0])
 	case !addonInstallAll && len(args) == 0:
-		return fmt.Errorf("name a repo to install (owner/repo[@tag]), or pass --all for the whole manifest")
+		return fmt.Errorf("name a repo to install ([clone:]owner/repo[@ref]), or pass --all for the whole manifest")
 	case addonInstallNoDeps && addonInstallTrustDeps:
 		return fmt.Errorf("--no-deps skips dependencies and --trust-deps installs them all; pick one")
 	}
 	if !addonInstallAll {
 		return nil
 	}
-	// --trust-deps is deliberately absent below: unlike --asset/--name/--clone it
-	// describes the dependency policy, not the one addon being installed.
+	// --trust-deps is deliberately absent below: unlike --asset/--name it describes the
+	// dependency policy, not the one addon being installed.
 	for flag, set := range map[string]bool{
 		"--asset": addonInstallAsset != "",
 		"--name":  addonInstallName != "",
-		"--clone": addonInstallClone,
 	} {
 		if set {
 			return fmt.Errorf("%s describes a single addon and can't be combined with --all", flag)
@@ -227,13 +230,10 @@ func resolveEntry(ctx context.Context, spec addon.Dependency) (addon.Addon, erro
 		name = addon.EntryKey(spec.RepoURL)
 	}
 
-	if addonInstallClone {
-		return addon.Addon{
-			Name: name,
-			URL:  "https://" + spec.RepoID + ".git",
-			Tag:  spec.Tag, // empty → whatever the remote's default branch is
-			Kind: addon.KindClone,
-		}, nil
+	// Built by the same helper the dependency walker uses, so `gdaddon install clone:x`
+	// and a declared `require=["clone:x"]` cannot record different things.
+	if spec.IsClone() {
+		return addon.CloneEntry(spec, name, false), nil
 	}
 
 	rel, err := addon.ResolveVersion(ctx, spec.RepoURL, spec.Tag)

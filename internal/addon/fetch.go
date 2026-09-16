@@ -164,8 +164,8 @@ func fetchGit(ctx context.Context, url, addonName string, report Reporter) (stri
 // strips .git). The parent dir is created first. ctx cancels the in-flight clone.
 //
 // An empty branch omits --branch entirely, so the clone lands on whatever the remote's
-// default branch is — the "just clone it" case the CLI's bare `--clone` needs, where no
-// branch was named and gdaddon shouldn't guess at "main" vs "master". The caller is
+// default branch is — the "just clone it" case a bare `clone:owner/repo` spec needs, where
+// no branch was named and gdaddon shouldn't guess at "main" vs "master". The caller is
 // then responsible for reading the checked-out branch back (CurrentBranch) and
 // recording it, since a clone entry with no tag reads as branch-drifted.
 func gitCloneBranch(ctx context.Context, url, branch, dest, addonName string, report Reporter) error {

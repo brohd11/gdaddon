@@ -112,8 +112,10 @@ func importDeps(parent context.Context, manifestPath, baseDir string, confirm De
 	added := 0
 	for _, d := range missing {
 		asset, resolved := source.Asset{}, true
-		if d.Tag != "" {
-			asset, resolved = ResolveDepAsset(ctx, d)
+		if needsDepAsset(d) {
+			// d is reassigned: an `@latest` spec comes back carrying the tag it resolved
+			// to, and that is what gets confirmed, written and reported below.
+			d, asset, resolved = ResolveDepAsset(ctx, d)
 		}
 		if !resolved {
 			report("  -> Skipping %s: no asset for %s", d.RepoID, d.Tag)
@@ -136,7 +138,7 @@ func importDeps(parent context.Context, manifestPath, baseDir string, confirm De
 			continue
 		}
 
-		name, ok, err := writeDepEntry(manifestPath, d, asset, resolved, false)
+		entry, ok, err := writeDepEntry(manifestPath, d, asset, resolved, false)
 		if err != nil {
 			report("  -> Could not add %s: %v", d.RepoID, err)
 			continue
@@ -145,29 +147,50 @@ func importDeps(parent context.Context, manifestPath, baseDir string, confirm De
 			report("  -> Skipping %s: no asset for %s", d.RepoID, d.Tag)
 			continue
 		}
-		if d.Tag == "" {
-			report("  -> Added %s (no version)", name)
-		} else {
-			report("  -> Added %s %s", name, d.Tag)
-		}
+		report("  -> Added %s %s", entry.Name, DepLabel(entry.Kind, entry.Tag))
 		added++
 	}
 	return added, nil
 }
 
 // AddDepEntry resolves one declared dependency and appends it to the manifest: a
-// tagless dep is added repo-only (Install clones it; the user can pin a tag later),
-// a tagged dep is added at its resolved release asset (archive-first, then network —
-// see ResolveDepAsset). asDependency records the is_dependency provenance on the new
-// entry. added is false (with err nil) when a tagged dep's asset can't be resolved;
-// the caller decides how to report the skip. The ctx only bounds the asset lookup —
-// the caller owns the timeout.
-func AddDepEntry(ctx context.Context, manifestPath string, d Dependency, asDependency bool) (name string, added bool, err error) {
+// clone dep is added as a checkout of its branch, a tagless dep is added repo-only
+// (Install clones it; the user can pin a tag later), and a tagged dep is added at its
+// resolved release asset (archive-first, then network — see ResolveDepAsset).
+// asDependency records the is_dependency provenance on the new entry. added is false
+// (with err nil) when a tagged dep's asset can't be resolved; the caller decides how to
+// report the skip. The ctx only bounds the asset lookup — the caller owns the timeout.
+func AddDepEntry(ctx context.Context, manifestPath string, d Dependency, asDependency bool) (entry Addon, added bool, err error) {
 	asset, ok := source.Asset{}, true
-	if d.Tag != "" {
-		asset, ok = ResolveDepAsset(ctx, d)
+	if needsDepAsset(d) {
+		d, asset, ok = ResolveDepAsset(ctx, d)
 	}
 	return writeDepEntry(manifestPath, d, asset, ok, asDependency)
+}
+
+// needsDepAsset reports whether recording d requires resolving a release asset first.
+// A clone checks out a branch and a tagless dep is recorded repo-only, so neither has a
+// release to look up — and neither should pay for (or fail on) a network call.
+func needsDepAsset(d Dependency) bool { return !d.IsClone() && d.Tag != "" }
+
+// DepLabel renders what an entry recorded from a dependency actually is, for progress
+// lines and confirm prompts. A clone is called out as such rather than shown as a bare
+// ref: it brings a .git and tracks a branch, which is a materially different thing to
+// agree to than a pinned snapshot. It takes the recorded kind and ref rather than a
+// Dependency so the TUI's already-resolved plan rows share the one definition.
+//
+// The ref must be the resolved one — an `@latest` dep labels the tag it landed on, never
+// the word.
+func DepLabel(kind Kind, ref string) string {
+	switch {
+	case kind == KindClone && ref == "":
+		return "(clone: default branch)"
+	case kind == KindClone:
+		return "(clone: " + ref + ")"
+	case ref == "":
+		return "(no version)"
+	}
+	return ref
 }
 
 // writeDepEntry is AddDepEntry's post-resolution half: it records the dependency from
@@ -175,21 +198,50 @@ func AddDepEntry(ctx context.Context, manifestPath string, d Dependency, asDepen
 // DepConfirmer the url it is about to download — can commit that same resolution
 // instead of paying for a second lookup. resolved is ResolveDepAsset's ok; false means
 // the tag had no asset, which is a skip (added false, err nil), not an error.
-func writeDepEntry(manifestPath string, d Dependency, asset source.Asset, resolved, asDependency bool) (name string, added bool, err error) {
-	name = EntryKey(d.RepoURL)
-	if d.Tag != "" && !resolved {
-		return name, false, nil
+//
+// It returns the entry it wrote, not just the name, so a caller reports what actually
+// landed in the manifest — a clone's kind, or the tag an `@latest` spec resolved to —
+// rather than re-deriving a label from the spec and getting to disagree with the file.
+// The entry is filled in even when added is false, so the name is always usable.
+func writeDepEntry(manifestPath string, d Dependency, asset source.Asset, resolved, asDependency bool) (entry Addon, added bool, err error) {
+	name := EntryKey(d.RepoURL)
+	if d.IsClone() {
+		entry = CloneEntry(d, name, asDependency)
+		if err := AddEntryFull(manifestPath, entry); err != nil {
+			return entry, false, err
+		}
+		return entry, true, nil
 	}
-	entry := Addon{Name: name, URL: NormalizeRepoURL(d.RepoURL), Dependency: asDependency}
+	entry = Addon{Name: name, URL: NormalizeRepoURL(d.RepoURL), Dependency: asDependency}
 	if d.Tag != "" {
+		if !resolved {
+			return entry, false, nil
+		}
 		entry.URL, entry.Tag = asset.URL, d.Tag
 	}
 	// AddEntryFull with an empty tag behaves like a bare AddEntry; unlike AddEntry it
 	// also records the is_dependency provenance when asDependency is set.
 	if err := AddEntryFull(manifestPath, entry); err != nil {
-		return name, false, err
+		return entry, false, err
 	}
-	return name, true, nil
+	return entry, true, nil
+}
+
+// CloneEntry builds the manifest entry a clone dependency is recorded as: the canonical
+// .git url, the branch in Tag (empty meaning whatever the remote's default is, which the
+// install records afterwards), and kind: clone, which AddEntryFull writes out.
+//
+// The CLI's `gdaddon install clone:owner/repo` builds its entry from here too, for the
+// same reason it shares ParseRepoSpec: a hand-typed spec and a declared dependency must
+// not be able to disagree about what a clone is.
+func CloneEntry(d Dependency, name string, asDependency bool) Addon {
+	return Addon{
+		Name:       name,
+		URL:        NormalizeRepoURL(d.RepoURL),
+		Tag:        d.Tag,
+		Kind:       KindClone,
+		Dependency: asDependency,
+	}
 }
 
 // ResolveDepAsset finds the dependency's required release or Git tag and picks its install asset
@@ -198,15 +250,29 @@ func writeDepEntry(manifestPath string, d Dependency, asset source.Asset, resolv
 //
 // It is archive-first: a tag-equal local copy avoids the network and survives upstream
 // delisting. It falls through to the network when the archive has no (unambiguous) match.
-func ResolveDepAsset(ctx context.Context, d Dependency) (source.Asset, bool) {
-	if asset, ok := archivedDepAsset(d); ok {
-		return asset, true
+//
+// It returns the dependency back because an `@latest` spec names no particular version:
+// the word is resolved here, once, and the *returned* d carries the concrete tag that
+// callers must record. Writing d.Tag straight to the manifest would pin the word instead
+// of the release, which is not a pin at all.
+func ResolveDepAsset(ctx context.Context, d Dependency) (Dependency, source.Asset, bool) {
+	// The archive is keyed by tag, so there is nothing to look up until `latest` has a
+	// value — and a repo that really does ship a rolling `latest` tag must not have a
+	// stale archived copy of it shadow the newest release.
+	if !d.WantsLatest() {
+		if asset, ok := archivedDepAsset(d); ok {
+			return d, asset, true
+		}
 	}
-	rel, err := source.ResolveTag(ctx, d.RepoURL, d.Tag)
+	rel, err := ResolveVersion(ctx, d.RepoURL, d.Tag)
 	if err != nil {
-		return source.Asset{}, false
+		return d, source.Asset{}, false
 	}
-	return source.AutoAsset(rel)
+	if d.WantsLatest() {
+		d.Tag = rel.Tag
+	}
+	asset, ok := source.AutoAsset(rel)
+	return d, asset, ok
 }
 
 // archivedDepAsset returns a locally archived asset for the dependency's required tag,

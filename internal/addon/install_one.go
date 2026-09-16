@@ -85,20 +85,12 @@ func InstallOne(ctx context.Context, o InstallOneOpts) (InstallOneResult, error)
 	}
 
 	if res.Path != "" {
-		// A clone records no version: it tracks a branch, so the plugin.cfg version it
-		// happens to carry right now is not a pin (and Inspect ignores it for a git
-		// workdir anyway). Same rule as the TUI's pinInstall.
-		version := res.Version
-		if o.Entry.Kind == KindClone {
-			version = ""
-		}
-		if err := UpdateEntry(o.ManifestPath, name, "", res.Path, version, ""); err != nil {
-			return InstallOneResult{}, err
-		}
 		if err := AdoptName(o.ManifestPath, entry, res); err != nil {
 			report("  -> Could not record the declared name for %s: %v", entry.Label(), err)
 		}
-		entry.Path, entry.Version = res.Path, version
+		if entry, err = pinInstalled(o.ManifestPath, o.ProjectRoot, entry, res); err != nil {
+			return InstallOneResult{}, err
+		}
 	}
 	// Always write the kind so a package install over a former clone clears the stale
 	// kind line, and clear any commit pin a previous branch-package install left — this
@@ -108,18 +100,6 @@ func InstallOne(ctx context.Context, o InstallOneOpts) (InstallOneResult, error)
 	}
 	if err := SetCommit(o.ManifestPath, name, ""); err != nil {
 		return InstallOneResult{}, err
-	}
-
-	// A clone with no branch named landed on whatever the remote's default is. Record
-	// it: a clone entry whose tag doesn't match the checked-out branch reads as
-	// branch-drifted (StateBranchChanged) on every subsequent inspect.
-	if o.Entry.Kind == KindClone && o.Entry.Tag == "" && res.Path != "" {
-		if branch := CurrentBranch(filepath.Join(o.ProjectRoot, res.Path)); branch != "" {
-			if err := UpdateEntry(o.ManifestPath, name, "", "", "", branch); err != nil {
-				return InstallOneResult{}, err
-			}
-			entry.Tag = branch
-		}
 	}
 
 	out := InstallOneResult{Name: name, Display: displayOf(entry, res), Path: res.Path, Version: res.Version}
@@ -247,39 +227,42 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 		return st.Addon, nil, true, nil
 
 	case !present:
-		asset, ok := resolveDepAssetTimed(ctx, d)
+		// d is reassigned: an `@latest` spec comes back carrying the tag it resolved to,
+		// which is what the confirmer is shown and what gets written.
+		d, asset, ok := resolveDepAssetTimed(ctx, d)
 		if !ok {
 			report("  -> Skipping %s: no asset for %s", d.RepoID, d.Tag)
 			return Addon{}, nil, false, nil
 		}
+		req.Dep = d
 		req.Action = DepAdd
 		req.AssetURL = depDownloadURL(d, asset)
 		commit = func() bool {
-			name, _, err := writeDepEntry(manifestPath, d, asset, true, true)
+			written, _, err := writeDepEntry(manifestPath, d, asset, true, true)
 			if err != nil {
 				report("  -> Could not add %s: %v", d.RepoID, err)
 				return false
 			}
-			if d.Tag == "" {
-				report("  -> Added %s (no version)", name)
-			} else {
-				report("  -> Added %s %s", name, d.Tag)
-			}
-			entryName = name
+			report("  -> Added %s %s", written.Name, DepLabel(written.Kind, written.Tag))
+			entryName = written.Name
 			return true
 		}
 
-	case d.Tag != "":
+	case d.Tag != "" && !d.IsClone():
 		// Present but not satisfying (older than required, or recorded yet absent from
 		// disk): re-pin it at the required tag. UpsertEntry (not AddDepEntry) because
-		// the entry already exists.
-		asset, ok := resolveDepAssetTimed(ctx, d)
+		// the entry already exists. A clone never reaches here — depSatisfied treats a
+		// present entry as satisfying one — and must not, since re-pinning would rewrite
+		// a live checkout's entry to a release asset; the guard says so rather than
+		// leaving it to that invariant holding at a distance.
+		d, asset, ok := resolveDepAssetTimed(ctx, d)
 		if !ok {
 			report("  -> Skipping %s: no asset for %s", d.RepoID, d.Tag)
 			return st.Addon, nil, false, nil
 		}
 		// The write is the same either way; the label distinguishes a genuine version
 		// bump from re-fetching files that went missing under an already-fine tag.
+		req.Dep = d
 		req.Action = DepRepin
 		if depSatisfied(d, st.Addon.Tag) {
 			req.Action = DepReinstall
@@ -331,9 +314,6 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 		// A multi-addon package with nothing to pin; still visit its deps.
 		return entry, nil, true, nil
 	}
-	if err := UpdateEntry(manifestPath, entry.Name, "", res.Path, res.Version, ""); err != nil {
-		report("  -> Could not pin %s: %v", entry.Label(), err)
-	}
 	if err := AdoptName(manifestPath, entry, res); err != nil {
 		report("  -> Could not record the declared name for %s: %v", entry.Label(), err)
 	}
@@ -341,16 +321,54 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 		Name: entry.Name, Display: displayOf(entry, res), URL: entry.URL,
 		PriorPath: entry.Path, Path: res.Path, Version: res.Version,
 	}
-	entry.Path, entry.Version = res.Path, res.Version
-	return entry, &outcome, true, nil
+	pinned, err := pinInstalled(manifestPath, baseDir, entry, res)
+	if err != nil {
+		report("  -> Could not pin %s: %v", entry.Label(), err)
+		return entry, &outcome, true, nil
+	}
+	return pinned, &outcome, true, nil
+}
+
+// pinInstalled records what an install produced on the entry's manifest row: the path it
+// landed at, and its version — except for a clone, which records none, because it tracks
+// a branch and the plugin.cfg version it happens to carry right now is not a pin (Inspect
+// ignores it for a git workdir anyway). A clone installed without a branch named also has
+// the branch it landed on written back, since a clone entry whose tag doesn't match the
+// checked-out branch reads as branch-drifted (StateBranchChanged) on every later inspect.
+//
+// Three sites install and then pin — InstallOne, ensureDep and InstallAll — and these two
+// clone rules used to live only in the first, so a clone installed through either of the
+// others recorded a version it does not have and read as drifted forever. They get one
+// home rather than a copy each.
+func pinInstalled(manifestPath, projectRoot string, entry Addon, res InstallResult) (Addon, error) {
+	version := res.Version
+	if entry.Kind == KindClone {
+		version = ""
+	}
+	if err := UpdateEntry(manifestPath, entry.Name, "", res.Path, version, ""); err != nil {
+		return entry, err
+	}
+	entry.Path, entry.Version = res.Path, version
+
+	if entry.Kind == KindClone && entry.Tag == "" {
+		if branch := CurrentBranch(filepath.Join(projectRoot, res.Path)); branch != "" {
+			if err := UpdateEntry(manifestPath, entry.Name, "", "", "", branch); err != nil {
+				return entry, err
+			}
+			entry.Tag = branch
+		}
+	}
+	return entry, nil
 }
 
 // resolveDepAssetTimed resolves a tagged dependency's asset under DepsResolveTimeout —
-// the ctx bounds only the release listing, matching importDeps. A tagless dependency
-// needs no lookup (it is added repo-only), so it resolves trivially.
-func resolveDepAssetTimed(ctx context.Context, d Dependency) (source.Asset, bool) {
-	if d.Tag == "" {
-		return source.Asset{}, true
+// the ctx bounds only the release listing, matching importDeps. A clone (which checks out
+// a branch) and a tagless dependency (added repo-only) have no release to look up, so
+// both resolve trivially. Like ResolveDepAsset it hands the dependency back, carrying the
+// tag an `@latest` spec resolved to.
+func resolveDepAssetTimed(ctx context.Context, d Dependency) (Dependency, source.Asset, bool) {
+	if !needsDepAsset(d) {
+		return d, source.Asset{}, true
 	}
 	lookup, cancel := context.WithTimeout(ctx, DepsResolveTimeout)
 	defer cancel()
@@ -359,9 +377,9 @@ func resolveDepAssetTimed(ctx context.Context, d Dependency) (source.Asset, bool
 
 // depDownloadURL is the url a resolved dependency would actually be fetched from, for
 // display to a DepConfirmer: the release asset for a tagged dep, else the repo url a
-// tagless one is cloned from (what writeDepEntry records).
+// clone or a tagless one is cloned from (what writeDepEntry records).
 func depDownloadURL(d Dependency, asset source.Asset) string {
-	if d.Tag == "" {
+	if d.Tag == "" || d.IsClone() {
 		return NormalizeRepoURL(d.RepoURL)
 	}
 	return asset.URL

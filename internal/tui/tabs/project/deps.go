@@ -18,12 +18,14 @@ import (
 )
 
 // plannedDep is one dependency the plan will add to the manifest: a resolved
-// install url + tag (tag empty for a tagless repo-only add). Resolving (the network
-// asset lookup) happens before the confirm; committing it is pure manifest IO.
+// install url + tag (tag empty for a tagless repo-only add, or for a clone left on the
+// remote's default branch), plus the kind the entry is recorded as. Resolving (the
+// network asset lookup) happens before the confirm; committing it is pure manifest IO.
 type plannedDep struct {
 	name string
 	url  string
 	tag  string
+	kind addon.Kind
 }
 
 // depPlan is the resolved outcome of reading an addon's declared dependencies,
@@ -244,17 +246,14 @@ func resolveOneDepCmd(manifestPath string, d addon.Dependency) func(context.Cont
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(parent, addon.DepsResolveTimeout)
 			defer cancel()
-			name, added, err := addon.AddDepEntry(ctx, manifestPath, d, true)
+			entry, added, err := addon.AddDepEntry(ctx, manifestPath, d, true)
 			if err != nil {
 				return addResult{err: err}
 			}
 			if !added {
 				return addResult{err: fmt.Errorf("no asset for %s %s", d.RepoID, d.Tag)}
 			}
-			if d.Tag == "" {
-				return addResult{status: fmt.Sprintf("added %s (no version)", name)}
-			}
-			return addResult{status: fmt.Sprintf("added %s %s", name, d.Tag)}
+			return addResult{status: fmt.Sprintf("added %s %s", entry.Name, addon.DepLabel(entry.Kind, entry.Tag))}
 		}
 	}
 }
@@ -325,6 +324,14 @@ func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(contex
 					fmt.Sprintf("%s has %s, needs %s", s.Dep.RepoID, tagOrNone(s.Recorded), s.Dep.Tag))
 			}
 			for _, d := range classified.Add {
+				// A clone checks out a branch, so there is no release to resolve; the
+				// entry it becomes is CloneEntry's, the same one the CLI and the
+				// recursive installer record.
+				if d.IsClone() {
+					e := addon.CloneEntry(d, addon.EntryKey(d.RepoURL), true)
+					plan.add = append(plan.add, plannedDep{name: e.Name, url: e.URL, tag: e.Tag, kind: e.Kind})
+					continue
+				}
 				// Tagless: add the repo version-less (Install All clones it; the user can
 				// pin later), so there is no asset to look up.
 				if d.Tag == "" {
@@ -334,7 +341,9 @@ func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(contex
 					})
 					continue
 				}
-				asset, ok := addon.ResolveDepAsset(ctx, d)
+				// d is reassigned: an `@latest` spec resolves here, and the tag it landed
+				// on is what the confirm shows and what commitDeps writes.
+				d, asset, ok := addon.ResolveDepAsset(ctx, d)
 				if !ok {
 					plan.skipped = append(plan.skipped, d.RepoID+" (no asset for "+d.Tag+")")
 					continue
@@ -373,11 +382,7 @@ func depsConfirmBody(name string, plan depPlan) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Add %d dependenc%s for %s\n", len(plan.add), strutil.Plural(len(plan.add), "y", "ies"), name)
 	for _, p := range plan.add {
-		tag := p.tag
-		if tag == "" {
-			tag = "(no version)"
-		}
-		fmt.Fprintf(&b, "\n  ▸ %s   %s", p.name, tag)
+		fmt.Fprintf(&b, "\n  ▸ %s   %s", p.name, addon.DepLabel(p.kind, p.tag))
 	}
 	var notes []string
 	if plan.satisfied > 0 {
@@ -401,7 +406,7 @@ func commitDeps(sh *core.Shared, name, manifestPath string, plan depPlan) core.A
 	for _, p := range plan.add {
 		// AddEntryFull with an empty tag behaves like a bare AddEntry. Dependency marks
 		// the entry's provenance so it can later flag as an unused dependency.
-		if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: p.name, URL: p.url, Tag: p.tag, Dependency: true}); err != nil {
+		if err := addon.AddEntryFull(manifestPath, addon.Addon{Name: p.name, URL: p.url, Tag: p.tag, Kind: p.kind, Dependency: true}); err != nil {
 			failed++
 			continue
 		}

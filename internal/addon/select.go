@@ -10,8 +10,12 @@ import (
 
 // ResolveVersion keeps untagged installs on published releases, while explicit
 // tags may use a source package when no release exists.
+//
+// The reserved LatestTag word resolves the same way an absent tag does — newest
+// non-prerelease — and this is the one place that decides so, which is why the dependency
+// path resolves through here rather than calling source.ResolveTag itself.
 func ResolveVersion(ctx context.Context, repoURL, tag string) (source.Release, error) {
-	if tag != "" {
+	if tag != "" && !IsLatestTag(tag) {
 		return source.ResolveTag(ctx, repoURL, tag)
 	}
 	listing, err := source.AvailableVersions(ctx, repoURL)

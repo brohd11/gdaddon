@@ -73,8 +73,16 @@ or `version.cfg`:
 ```
 [plugin]
 name="My Plugin"
-require=["user/repo@v1.0.0"] # point to a Git tag
+require=[
+    "user/repo@v1.0.0",       # a Git tag, or newer
+    "user/other@latest",      # newest release, pinned when it's recorded
+    "clone:user/live@main",   # a live git checkout of branch main
+]
 ```
+A spec is `[clone:]owner/repo[@ref]`, where `@` always names the ref and `clone:` asks for
+a live checkout rather than a release — the same text `gdaddon install` takes. See the
+[docs](doc/docs.md) for the full grammar.
+
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 including when it is an empty list. When the addon is installed, its config will be read
 and checked for dependencies. If they are found and the dependency is not present, the
@@ -97,10 +105,10 @@ along with the dependencies that addon declares (and theirs, and so on). Unlike
 
 ```bash
 gdaddon install user/repo-name                     # latest release
-gdaddon install user/repo-name                     # a specific release
+gdaddon install user/repo-name@v1.2.0              # a specific release
 gdaddon install codeberg.org/someone/their-addon   # a host other than github.com
-gdaddon install user/repo-name  --clone            # live git checkout, default branch
-gdaddon install user/repo-name dev --clone
+gdaddon install clone:user/repo-name               # live git checkout, default branch
+gdaddon install clone:user/repo-name@dev           # live git checkout, branch dev
 ```
 
 The project root is the git toplevel (or `--root`), and a manifest is created if there

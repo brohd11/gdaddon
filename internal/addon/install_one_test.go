@@ -236,3 +236,61 @@ func TestInstallOnePinsEntry(t *testing.T) {
 		t.Errorf("re-install changed the entry count: %d → %d", len(entries), len(again))
 	}
 }
+
+// TestPinInstalledCloneRules covers the two clone rules that used to live only inside
+// InstallOne, which is why they are their own function now: ensureDep installs a
+// dependency by calling Install directly, so a `clone:` requirement installed correctly
+// and then read as branch-drifted on every later inspect.
+//
+//  1. A clone records no version — it tracks a branch, so the plugin.cfg version it
+//     happens to carry is not a pin.
+//  2. A clone installed without a branch named has the branch it landed on written back,
+//     because a clone entry whose tag doesn't match the checkout is StateBranchChanged.
+//
+// It exercises the helper rather than a dependency end to end because a declared spec
+// always resolves to an https url, so there is no offline repo a `require=["clone:…"]`
+// item could name.
+func TestPinInstalledCloneRules(t *testing.T) {
+	remote, _ := bareUpstreamClone(t)
+	project := t.TempDir()
+	manifest := writeManifest(t, project, entryBlock("child", remote)+entryBlock("pkg", "https://example.test/u/pkg.zip"))
+
+	// A real checkout at the recorded path, so CurrentBranch has something to read.
+	rel := filepath.Join("addons", "child")
+	if err := os.MkdirAll(filepath.Join(project, "addons"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	git(t, project, "clone", "-q", remote, rel)
+
+	res := InstallResult{Path: rel, Version: "1.0.0"}
+	clone := Addon{Name: "child", URL: remote, Kind: KindClone}
+	pinned, err := pinInstalled(manifest, project, clone, res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pinned.Version != "" || pinned.Tag != "main" || pinned.Path != rel {
+		t.Errorf("pinned clone = %+v, want no version, tag main, path %s", pinned, rel)
+	}
+
+	entries, err := Parse(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := IndexByName(entries)["child"]
+	if got.Version != "" {
+		t.Errorf("clone recorded version %q; a branch checkout pins nothing", got.Version)
+	}
+	if got.Tag != "main" {
+		t.Errorf("clone tag = %q, want the branch it landed on (main) so it doesn't read as drifted", got.Tag)
+	}
+
+	// A package is unaffected: it does record its version, and nothing is written back
+	// over its tag.
+	if _, err := pinInstalled(manifest, project, Addon{Name: "pkg", URL: "https://example.test/u/pkg.zip"}, InstallResult{Path: "addons/pkg", Version: "2.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, _ = Parse(manifest)
+	if pkg := IndexByName(entries)["pkg"]; pkg.Version != "2.0.0" || pkg.Tag != "" {
+		t.Errorf("package entry = %+v, want version 2.0.0 recorded", pkg)
+	}
+}

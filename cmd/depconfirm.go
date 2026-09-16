@@ -78,13 +78,20 @@ func (p *depPrompter) confirm(req addon.DepRequest) (bool, error) {
 // depBanner describes one pending dependency: who declared it, what it is, and the url
 // that would actually be downloaded — the asset, not the repo, since a release can
 // point anywhere.
+//
+// A clone is named as one rather than shown as a bare `@ref`: agreeing to it means a live
+// checkout with its own .git that tracks a branch, which is a different thing to accept
+// than a snapshot pinned to a release, and the ref alone doesn't say which you are getting.
 func depBanner(req addon.DepRequest) string {
 	declarer := req.DeclaredBy
 	if declarer == "" {
 		declarer = "this project"
 	}
 	version := "(no version)"
-	if req.Dep.Tag != "" {
+	switch {
+	case req.Dep.IsClone():
+		version = addon.DepLabel(addon.KindClone, req.Dep.Tag)
+	case req.Dep.Tag != "":
 		version = "@" + req.Dep.Tag
 	}
 

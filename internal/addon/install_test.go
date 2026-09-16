@@ -250,3 +250,46 @@ func TestCloneInstallHonorsDeclaredPath(t *testing.T) {
 		}
 	})
 }
+
+// TestInstallAllPinsCloneWithoutVersion covers the clone rules on the batch install path.
+// InstallAll is the third site that installs and then pins, and it used to write the
+// version off the checkout's plugin.cfg onto a clone entry — a number that pins nothing,
+// since the entry tracks a branch. Clone dependencies land here routinely (importDeps
+// records them, InstallAll installs them), so the rule has to hold on this path too.
+func TestInstallAllPinsCloneWithoutVersion(t *testing.T) {
+	remote, _ := bareUpstreamClone(t)
+	// Give the remote a plugin.cfg carrying a version, so a pin would have something to
+	// record if the rule were missing.
+	seed := t.TempDir()
+	git(t, filepath.Dir(seed), "clone", "-q", remote, seed)
+	if err := os.WriteFile(filepath.Join(seed, "plugin.cfg"), []byte("[plugin]\nname=\"child\"\nversion=\"9.9.9\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	setIdentity(t, seed)
+	git(t, seed, "add", ".")
+	git(t, seed, "commit", "-q", "-m", "plugin")
+	git(t, seed, "push", "-q", "origin", "main")
+
+	project := t.TempDir()
+	manifest := writeManifest(t, project, "child:\n    url: "+remote+"\n    kind: clone\n\n")
+
+	statuses, err := Inspect(manifest, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := InstallAll(context.Background(), manifest, statuses, project, func(string, ...any) {}); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := Parse(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := IndexByName(entries)["child"]
+	if got.Version != "" {
+		t.Errorf("clone recorded version %q; a branch checkout pins nothing", got.Version)
+	}
+	if got.Tag != "main" {
+		t.Errorf("clone tag = %q, want the branch it landed on (main)", got.Tag)
+	}
+}

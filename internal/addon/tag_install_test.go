@@ -147,7 +147,7 @@ func TestTagOnlyAddAndOfflineArchive(t *testing.T) {
 	}
 	dead, cancel := context.WithCancel(context.Background())
 	cancel()
-	asset, ok := ResolveDepAsset(dead, dep)
+	_, asset, ok := ResolveDepAsset(dead, dep)
 	if !ok || !filepath.IsAbs(asset.URL) {
 		t.Fatalf("offline asset = %+v, ok=%v", asset, ok)
 	}
@@ -178,5 +178,45 @@ func TestUnpublishedTagsDoNotChangeLatestOrUpdates(t *testing.T) {
 	}
 	if calls["/repos/u/child/tags"] != 0 {
 		t.Fatal("latest/update fetched unpublished tags")
+	}
+}
+
+// TestLatestIsResolvedNotRecorded pins the reserved `@latest` word's contract: it names
+// the newest published non-prerelease, is resolved when the entry is recorded, and the
+// manifest ends up holding that concrete tag. Storing the word itself would be a pin that
+// pins nothing — and would silently re-point the entry on the next resolve.
+//
+// It also covers the reason `latest` has to be reserved rather than looked up: this repo
+// really does publish a tag called "latest", and the word must not match it.
+func TestLatestIsResolvedNotRecorded(t *testing.T) {
+	bodies, calls := tagInstallHTTP(t)
+	publishSource(t, bodies, "child", `[]`)
+	bodies["/repos/u/child/releases"] = []byte(`[{"tag_name":"v2.0.0"},{"tag_name":"v1.0.0"}]`)
+	bodies["/repos/u/child/tags"] = []byte(`[{"name":"latest"},{"name":"v2.0.0"},{"name":"v1.0.0"}]`)
+
+	dep, ok := ParseRepoSpec("u/child@latest")
+	if !ok || dep.Tag != LatestTag || !dep.WantsLatest() {
+		t.Fatalf("spec = %+v, ok=%v; want the word carried through parsing", dep, ok)
+	}
+
+	resolved, _, got := ResolveDepAsset(context.Background(), dep)
+	if !got || resolved.Tag != "v2.0.0" {
+		t.Fatalf("ResolveDepAsset tag = %q (ok=%v), want the newest release v2.0.0", resolved.Tag, got)
+	}
+	if calls["/repos/u/child/tags"] != 0 {
+		t.Error("`latest` was looked up as a literal tag instead of resolving the newest release")
+	}
+
+	manifest := writeManifest(t, t.TempDir(), "")
+	entry, added, err := AddDepEntry(context.Background(), manifest, dep, true)
+	if err != nil || !added {
+		t.Fatalf("add = %v, %v", added, err)
+	}
+	if entry.Tag != "v2.0.0" {
+		t.Errorf("recorded tag = %q, want the resolved v2.0.0, never %q", entry.Tag, LatestTag)
+	}
+	entries, err := Parse(manifest)
+	if err != nil || len(entries) != 1 || entries[0].Tag != "v2.0.0" {
+		t.Fatalf("manifest entries = %+v, err=%v", entries, err)
 	}
 }

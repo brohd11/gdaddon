@@ -32,7 +32,9 @@ func TestSubcommandsRegistered(t *testing.T) {
 }
 
 // TestCheckInstallArgs covers the combinations cobra can't express: --all and a repo
-// spec are different kinds of target, and --asset/--name/--clone only describe one addon.
+// spec are different kinds of target, and --asset/--name only describe one addon. A
+// clone needs no case here — it is spelled in the spec ("clone:u/r"), so it rides the
+// positional --all already rejects and cannot reach this function on its own.
 func TestCheckInstallArgs(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -40,25 +42,25 @@ func TestCheckInstallArgs(t *testing.T) {
 		args    []string
 		asset   string
 		entry   string
-		clone   bool
 		wantErr bool
 	}{
 		{name: "repo spec alone", args: []string{"u/r"}},
+		{name: "clone spec alone", args: []string{"clone:u/r@main"}},
 		{name: "all alone", all: true},
-		{name: "single-addon flags with a repo", args: []string{"u/r"}, asset: "linux", clone: true},
+		{name: "single-addon flags with a repo", args: []string{"u/r"}, asset: "linux"},
 		{name: "no target", wantErr: true},
 		{name: "both targets", all: true, args: []string{"u/r"}, wantErr: true},
+		{name: "all with a clone spec", all: true, args: []string{"clone:u/r"}, wantErr: true},
 		{name: "all with --asset", all: true, asset: "linux", wantErr: true},
 		{name: "all with --name", all: true, entry: "thing", wantErr: true},
-		{name: "all with --clone", all: true, clone: true, wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			addonInstallAll, addonInstallAsset = tc.all, tc.asset
-			addonInstallName, addonInstallClone = tc.entry, tc.clone
+			addonInstallName = tc.entry
 			t.Cleanup(func() {
 				addonInstallAll, addonInstallAsset = false, ""
-				addonInstallName, addonInstallClone = "", false
+				addonInstallName = ""
 			})
 			err := checkInstallArgs(tc.args)
 			if (err != nil) != tc.wantErr {
@@ -138,5 +140,18 @@ func TestBootstrapRunsForSubcommands(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(home, ".gdaddon", "config")); err != nil {
 		t.Errorf("bootstrap should have created ~/.gdaddon/config: %v", err)
+	}
+}
+
+// TestInstallHasNoCloneFlag pins the removal of --clone. A clone is now spelled in the
+// spec itself ("clone:owner/repo@branch"), which is the same text a plugin.cfg require=
+// item uses — one grammar instead of a flag that only the CLI had. A flag registration
+// surviving an edit would quietly give the two spellings different code paths again.
+func TestInstallHasNoCloneFlag(t *testing.T) {
+	if f := addonInstallCmd.Flags().Lookup("clone"); f != nil {
+		t.Error("install should carry no --clone flag; the spec's clone: prefix replaced it")
+	}
+	if err := addonInstallCmd.Flags().Parse([]string{"--clone"}); err == nil {
+		t.Error("--clone should now be an unknown flag")
 	}
 }

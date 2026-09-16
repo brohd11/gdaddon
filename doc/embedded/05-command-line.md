@@ -27,17 +27,20 @@ stays uninstalled. `--all` does the whole manifest instead; that's the equivalen
 Actions ▸ Install All + Deps.
 
 The repo is `owner/repo`, or `host/owner/repo` for a host other than github.com — the
-same shorthand a `plugin.cfg`/`version.cfg` `require` or `deps` entry uses. An optional
-`@tag` picks a release, or downloads the tag's source ZIP when no release exists.
-Without one you get the latest published non-prerelease. A leading `v` is optional
-on either side, so `@1.2.0` finds `v1.2.0`; exact names take precedence within the
-release lookup and within the tag lookup. Tags without releases are available in
-the TUI's **Tags** browser and never become automatic update candidates.
+same shorthand a `plugin.cfg`/`version.cfg` `require` or `deps` entry uses, prefix and
+all. An optional `@tag` picks a release, or downloads the tag's source ZIP when no
+release exists. Without one you get the latest published non-prerelease, which `@latest`
+also names explicitly. A leading `v` is optional on either side, so `@1.2.0` finds
+`v1.2.0`; exact names take precedence within the release lookup and within the tag
+lookup. Tags without releases are available in the TUI's **Tags** browser and never
+become automatic update candidates.
 
 ```
 gdaddon install brohd11/Godot-Script-Tabs
 gdaddon install brohd11/Godot-Script-Tabs@v0.1.4
+gdaddon install brohd11/Godot-Script-Tabs@latest
 gdaddon install codeberg.org/someone/their-addon
+gdaddon install clone:brohd11/Godot-Script-Tabs@dev
 gdaddon install --all
 gdaddon install --all --no-deps       # the manifest's own entries only
 ```
@@ -58,15 +61,18 @@ opt-in that makes a submodule-shaped repo land somewhere other than `addons/<rep
 
 ### Branches
 
-A release is the default. To track a branch instead, install it as a live git clone:
+A release is the default. To track a branch instead, prefix the repo with `clone:` and
+it is installed as a live git checkout, `@ref` naming the branch:
 
 ```
-gdaddon install owner/repo --clone         # the remote's default branch
-gdaddon install owner/repo@dev --clone     # the dev branch
-gdaddon install owner/repo@main --clone    # the main branch
+gdaddon install clone:owner/repo          # the remote's default branch
+gdaddon install clone:owner/repo@dev      # the dev branch
+gdaddon install clone:owner/repo@main     # the main branch
 ```
 
-Without `--clone`, `@main` names a Git tag and does not select a branch.
+Without the prefix, `@main` names a Git tag and does not select a branch. The prefix is
+part of the spec rather than a flag, so the same text works here and in an addon's
+`require` list — see [Dependencies](03-dependencies.md).
 
 The checked-out branch is recorded as the entry's `tag`, so it reads as a clone rather
 than as branch drift on the next refresh. Updating a clone is git's job, not gdaddon's —
