@@ -27,6 +27,9 @@ returns when the shell exits. `T` and Open ▸ Terminal open a separate window i
 auto-detecting the emulator (Terminal.app on macOS, the common emulators on Linux); `ctrl+t`
 opens the directory in the file manager.
 
+The `t` shell shows `[gdaddon] exit returns to gdaddon` above each zsh, bash or fish prompt.
+Nested app terminals show the full app chain. Other shells show the reminder once on entry.
+
 The archive is what makes a re-install offline-capable: a zip gdaddon has already
 downloaded is stored per repo, listed back as an `(archived)` release, and reinstalled
 from disk. The Archive tab browses and prunes it.

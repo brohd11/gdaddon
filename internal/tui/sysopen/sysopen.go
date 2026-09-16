@@ -27,7 +27,7 @@ func Terminal(dir string) core.Action {
 // TerminalInline hands gdaddon's own terminal to a shell at dir: the TUI suspends and is
 // restored when the shell exits, so no window is left behind.
 func TerminalInline(dir string) core.Action {
-	return bsysopen.TerminalInline(dir)
+	return bsysopen.TerminalInlineFor("gdaddon", dir)
 }
 
 // URL opens target in the default web browser. An addon url that points at a file (a
