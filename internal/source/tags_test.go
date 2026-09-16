@@ -123,9 +123,10 @@ func TestTagsCodeberg(t *testing.T) {
 func TestAvailableVersionsDoesNotFetchTags(t *testing.T) {
 	calls := tagHTTP(t, map[string]tagPage{
 		"/repos/u/r/releases?per_page=30": {body: `[{"tag_name":"v1.0.0"}]`, next: "/older-releases"},
+		"/older-releases":                 {body: `[]`},
 	})
 	listing, err := AvailableVersions(context.Background(), "https://github.com/u/r")
-	if err != nil || len(listing.Releases) != 1 || listing.Releases[0].Tag != "v1.0.0" || len(*calls) != 1 {
+	if err != nil || len(listing.Releases) != 1 || listing.Releases[0].Tag != "v1.0.0" || len(*calls) != 2 {
 		t.Fatalf("listing = %+v, err = %v, calls = %v", listing, err, *calls)
 	}
 }

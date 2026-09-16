@@ -169,6 +169,7 @@ func listDir(base string) ([]source.Release, error) {
 		}
 		tag, commit := parseArchiveTag(td.Name())
 		rel := source.Release{Tag: tag}
+		rel.Prerelease = rel.IsPrerelease()
 		for _, f := range files {
 			if f.IsDir() {
 				continue
@@ -183,8 +184,7 @@ func listDir(base string) ([]source.Release, error) {
 			releases = append(releases, rel)
 		}
 	}
-	// Newest tag first, to match the GitHub listing's ordering convention.
-	sort.Slice(releases, func(i, j int) bool { return releases[i].Tag > releases[j].Tag })
+	source.SortReleases(releases)
 	return releases, nil
 }
 

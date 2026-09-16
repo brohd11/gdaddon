@@ -117,6 +117,29 @@ func TestRemoveRepo(t *testing.T) {
 	}
 }
 
+func TestArchivedSemanticOrder(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	const repo = "github.com/u/r"
+	for _, tag := range []string{"v1.9.0", "v1.10.0-beta2", "v1.10.0"} {
+		if _, err := Store(repo, tag, "addon.zip", strings.NewReader("zip")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	releases, err := List(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, tag := range []string{"v1.10.0", "v1.10.0-beta2", "v1.9.0"} {
+		if releases[i].Tag != tag || len(releases[i].Assets) != 1 {
+			t.Fatalf("releases=%+v", releases)
+		}
+	}
+	if !releases[1].Prerelease {
+		t.Fatal("archived beta not identified")
+	}
+}
+
 func TestRepos(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

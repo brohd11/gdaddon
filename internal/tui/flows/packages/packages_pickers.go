@@ -21,6 +21,9 @@ import (
 // whose assets are themselves local. A SourceAll release with a local twin also carries
 // it on the Selection (releaseSelection) so the install confirm can offer a source toggle.
 func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []source.Release, archived archivedSet) *components.PickerScreen {
+	// Sort the complete remote/archive union without changing a cached listing.
+	releases = append([]source.Release(nil), releases...)
+	source.SortReleases(releases)
 	var items []list.Item
 	items = append(items, opts.LeadItems...)
 	if opts.Source != SourceArchive && source.SupportsTags(repoURL) {
@@ -44,7 +47,7 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 			desc = "1 asset - " + rel.Assets[0].Name
 			// desc = stripSuffix(desc) // not sure about this
 		}
-		if rel.Prerelease {
+		if rel.IsPrerelease() {
 			desc += " · prerelease"
 		}
 		// A commit-pinned branch package (archived as <branch>@<sha>) surfaces its sha.
@@ -119,7 +122,7 @@ func releaseSelection(repoID string, rel source.Release, a source.Asset, archive
 		RepoID:     repoID,
 		Tag:        rel.Tag,
 		Asset:      a,
-		Prerelease: rel.Prerelease,
+		Prerelease: rel.IsPrerelease(),
 		Archived:   isArchived(a),
 	}
 	if !sel.Archived {

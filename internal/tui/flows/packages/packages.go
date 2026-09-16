@@ -44,7 +44,7 @@ type Selection struct {
 	Asset         source.Asset
 	ArchivedAsset source.Asset // a local archived copy of this same remote version, if one exists (install toggle); zero = none
 	Branch        bool         // chosen via the HEAD/branches path (vs a release)
-	Prerelease    bool         // the release was a prerelease (false for branches / archive)
+	Prerelease    bool         // provider flag or semantic prerelease tag (false for branches)
 	Archived      bool         // the asset is a local archived copy (local-file URL)
 }
 

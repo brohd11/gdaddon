@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/brohd11/gdaddon/internal/source"
+	"github.com/brohd11/gdaddon/internal/version"
 )
 
 // UpdateState describes whether a newer release than the installed one is
@@ -15,7 +16,7 @@ type UpdateState int
 
 const (
 	UpdateUnknown   UpdateState = iota // not checked, branch-tracked, no releases, or unresolvable url
-	UpdateCurrent                      // the pinned url is part of the latest release
+	UpdateCurrent                      // the installed release is current or semantically newer
 	UpdateAvailable                    // a newer release than the pinned one exists
 	UpdateLocked                       // the entry is locked: updates are intentionally not checked
 )
@@ -41,14 +42,9 @@ type UpdateInfo struct {
 	LatestTag string // the latest release's tag, when known
 }
 
-// CheckUpdate fetches the addon's release listing and reports whether its pinned
-// url is part of the latest release. "Part of the latest release" means the url
-// matches one of that release's assets (an uploaded .zip or the host's generated
-// source archive), so release-download and archive urls both compare correctly:
-// the same installed version re-resolves to the same asset url, a newer one does
-// not. A url-less entry, a branch-tracked url (HEAD has no release tag to compare
-// against), a fetch error, or a repo with no releases all read as UpdateUnknown
-// so no false notification is shown.
+// CheckUpdate reports an update only when a published candidate is semantically
+// newer. An exact asset match proves current release identity; otherwise missing
+// or uncomparable versions report UpdateUnknown rather than guessing from order.
 func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	if a.URL == "" {
 		return UpdateInfo{}
@@ -84,6 +80,10 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 // release tag to compare against), uncomparable versions — so neither caller flags a
 // false update.
 func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
+	// These exclusions apply equally to prompts and bulk update plans.
+	if a.IsGitWorkdir() || a.Commit != "" || a.IsLocked() {
+		return source.Release{}, UpdateUnknown
+	}
 	listing, err := source.AvailableVersions(ctx, a.URL)
 	if err != nil || listing == nil {
 		return source.Release{}, UpdateUnknown
@@ -108,14 +108,12 @@ func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 			return latest, UpdateCurrent
 		}
 	}
-	// A precisely pinned asset from an older release: definitely outdated.
-	if urlInReleases(a.URL, listing.Releases) {
-		return latest, UpdateAvailable
+	// A matched asset identifies the installed release, but does not prove it is
+	// older. Prefer that identity over potentially stale manifest metadata.
+	if installed, ok := releaseForURL(a.URL, listing.Releases); ok {
+		a.Tag = installed.Tag
+		a.Version = ""
 	}
-	// Otherwise the url is a bare repo/clone url (e.g. a scanned install tracked
-	// from a `source=` key) that matches no asset — fall back to comparing the
-	// installed version/tag against the latest release tag. Uncomparable versions
-	// stay unknown so no false update is flagged.
 	if current, ok := currentByVersion(a, latest.Tag); ok {
 		if current {
 			return latest, UpdateCurrent
@@ -125,21 +123,21 @@ func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 	return source.Release{}, UpdateUnknown
 }
 
-// urlInReleases reports whether url is one of the assets across any of the releases.
-func urlInReleases(url string, releases []source.Release) bool {
+// releaseForURL identifies the release owning a pinned asset URL.
+func releaseForURL(url string, releases []source.Release) (source.Release, bool) {
 	for _, rel := range releases {
 		for _, asset := range rel.Assets {
 			if asset.URL == url {
-				return true
+				return rel, true
 			}
 		}
 	}
-	return false
+	return source.Release{}, false
 }
 
 // currentByVersion compares the addon's installed identifier (prefer its tag, else
 // its plugin.cfg version) against latestTag with semver >=. ok is false when neither
-// side is a comparable dotted-numeric version (a date stamp, no version, …) so the
+// side is a comparable semantic version (a date stamp, no version, …) so the
 // caller can leave the result unknown rather than flag a false update.
 func currentByVersion(a Addon, latestTag string) (current, ok bool) {
 	installed := a.Tag
@@ -360,17 +358,25 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 	return outcomes, nil
 }
 
-// LatestRelease picks the newest non-prerelease (releases come newest-first),
-// falling back to the newest release when every one is a prerelease. Shared by the
-// per-addon update check and selfupdate.
+// LatestRelease picks the highest semantic stable release, falling back to
+// prereleases only when no stable releases exist. Within the eligible group,
+// uncomparable tags are used only when there are no semantic tags; ties retain
+// input order. Provider flags and semantic prerelease suffixes both count.
 func LatestRelease(releases []source.Release) (source.Release, bool) {
-	if len(releases) == 0 {
-		return source.Release{}, false
-	}
+	var best source.Release
+	found := false
 	for _, r := range releases {
-		if !r.Prerelease {
-			return r, true
+		if !found || (best.IsPrerelease() && !r.IsPrerelease()) {
+			best, found = r, true
+			continue
+		}
+		if best.IsPrerelease() != r.IsPrerelease() {
+			continue
+		}
+		if order, ok := version.Compare(r.Tag, best.Tag); (ok && order > 0) ||
+			(!version.IsValid(best.Tag) && version.IsValid(r.Tag)) {
+			best = r
 		}
 	}
-	return releases[0], true
+	return best, found
 }

@@ -36,7 +36,8 @@ type Release struct {
 }
 
 // Listing is everything selectable for a manifest URL: the repo's releases
-// (newest first) and, when the URL tracked a branch, a branch-HEAD option.
+// (semantic versions descending, then other tags) and, when the URL tracked a
+// branch, a branch-HEAD option.
 type Listing struct {
 	Owner    string
 	Repo     string
@@ -144,8 +145,30 @@ func cloneFallback(ref repoRef) *Listing {
 
 func resolveReleases(ctx context.Context, rule *config.VCSRule, owner, repo string) ([]Release, error) {
 	endpoint := restrule.Render(rule.Releases.URL, vars(owner, repo, "", ""))
-	releases, _, err := resolveReleasesPage(ctx, rule, owner, repo, endpoint)
-	return releases, err
+	var releases []Release
+	seenPages, seenTags := map[string]bool{}, map[string]bool{}
+	for endpoint != "" {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if seenPages[endpoint] {
+			return nil, fmt.Errorf("repeated release page: %s", endpoint)
+		}
+		seenPages[endpoint] = true
+		page, next, err := resolveReleasesPage(ctx, rule, owner, repo, endpoint)
+		if err != nil {
+			return nil, err
+		}
+		for _, rel := range page {
+			if !seenTags[rel.Tag] {
+				seenTags[rel.Tag] = true
+				releases = append(releases, rel)
+			}
+		}
+		endpoint = next
+	}
+	SortReleases(releases)
+	return releases, nil
 }
 
 func resolveReleasesPage(ctx context.Context, rule *config.VCSRule, owner, repo, endpoint string) ([]Release, string, error) {
@@ -168,6 +191,7 @@ func resolveReleasesPage(ctx context.Context, rule *config.VCSRule, owner, repo,
 	for _, el := range raw {
 		tag := restrule.GetPathString(el, r.TagPath)
 		rel := Release{Tag: tag, Prerelease: restrule.GetPathBool(el, r.PrereleasePath)}
+		rel.Prerelease = rel.IsPrerelease()
 
 		if assets, ok := restrule.GetPath(el, r.AssetsPath); ok {
 			for _, a := range asSlice(assets) {

@@ -75,7 +75,7 @@ func TestUploadedCount(t *testing.T) {
 	}
 }
 
-func TestURLInReleases(t *testing.T) {
+func TestReleaseForURL(t *testing.T) {
 	releases := []source.Release{
 		{Tag: "v2.0.0", Assets: []source.Asset{{Name: "addon.zip", URL: "https://h/dl/v2.0.0/addon.zip"}}},
 		{Tag: "v1.0.0", Assets: []source.Asset{{Name: "addon.zip", URL: "https://h/dl/v1.0.0/addon.zip"}}},
@@ -91,8 +91,8 @@ func TestURLInReleases(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := urlInReleases(c.url, releases); got != c.want {
-				t.Errorf("urlInReleases(%q) = %v, want %v", c.url, got, c.want)
+			if _, got := releaseForURL(c.url, releases); got != c.want {
+				t.Errorf("releaseForURL(%q) found = %v, want %v", c.url, got, c.want)
 			}
 		})
 	}
