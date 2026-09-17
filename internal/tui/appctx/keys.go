@@ -1,6 +1,9 @@
 package appctx
 
-import "charm.land/bubbles/v2/key"
+import (
+	"charm.land/bubbles/v2/key"
+	"github.com/brohd11/bubblestack/components"
+)
 
 // appKeyMap collects gdaddon-specific key bindings that aren't part of
 // bubblestack's framework keymap (core.Keys in bubblestack/core/keybinds.go).
@@ -16,6 +19,7 @@ type appKeyMap struct {
 	Diff           key.Binding // open the highlighted addon's diff list (Project; git checkouts only)
 	GitAll         key.Binding // open the project-wide (all-repos) Git page (Project)
 	RootGit        key.Binding // open the project repo's own Git page (Project)
+	Density        key.Binding // flip every tab list between the three-row and one-row density
 }
 
 // AppKeys is the active custom keymap. Edit a WithKeys list here to rebind; the
@@ -35,4 +39,8 @@ var AppKeys = appKeyMap{
 	Diff:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	GitAll:  key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "git all")),
 	RootGit: key.NewBinding(key.WithKeys("ctrl+v"), key.WithHelp("ctrl+v", "root git")),
+	// D, not the more obvious C: core.Keys.Clear owns "C" and the router consumes it in
+	// globalKey before a screen is offered the keystroke. Every tab root matches this, and
+	// the preference it flips lives on Ctx, so one press re-densities all six.
+	Density: components.DefaultDensityKey,
 }

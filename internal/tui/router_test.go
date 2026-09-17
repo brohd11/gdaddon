@@ -66,14 +66,16 @@ func TestRouterRenders(t *testing.T) {
 // switching through the router's global keys.
 func TestTabSwitch(t *testing.T) {
 	tm := sized(newTestRouter())
+	projectRoot := tm.(core.Router).Top()
 	tm = pump(tm, keyMsg("]"))
-	if _, ok := tm.(core.Router).Top().(*actions.ActionsScreen); !ok {
-		t.Fatalf("after ] want *actions.ActionsScreen, got %T", tm.(core.Router).Top())
+	root, ok := tm.(core.Router).Top().(*components.RootListScreen)
+	if !ok || root.List().Title != "Actions" {
+		t.Fatalf("after ] want the Actions root, got %T", tm.(core.Router).Top())
 	}
 	_ = view(tm)
 	tm = pump(tm, keyMsg("["))
-	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
-		t.Fatalf("after [ want *project.ProjectScreen, got %T", tm.(core.Router).Top())
+	if tm.(core.Router).Top() != projectRoot {
+		t.Fatal("after [ want the original Project root")
 	}
 }
 

@@ -15,7 +15,6 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
-	tea "charm.land/bubbletea/v2"
 )
 
 // setsTitle is the set list's base Title; the active sort mode is appended.
@@ -25,23 +24,28 @@ const setsTitle = "Sets"
 // list: name A→Z then Z→A (sets/members carry no install state, so no status grouping).
 var setsSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse}
 
-// SetsScreen is the Sets tab root: a "+ New set" row pinned at the top followed by one
-// row per saved set under ~/.gdaddon/sets. It is a Receiver, so it reloads its list
-// after a set is created, edited, or deleted (the SetsDirty broadcast).
-type SetsScreen struct {
-	list list.Model
-	sort appctx.SortMode
-}
-
-var _ core.Filterer = (*SetsScreen)(nil)
-var _ core.Receiver = (*SetsScreen)(nil)
-var _ core.Crumber = (*SetsScreen)(nil)
-
-// CrumbLabel anchors the breadcrumb at the Sets root.
-func (s *SetsScreen) CrumbLabel(bool) string { return "Tab" }
-
-func NewSetsScreen(sh *core.Shared) *SetsScreen {
-	return &SetsScreen{list: core.NewSelectList(setListItems(appctx.SortAlpha), appctx.SortTitle(setsTitle, appctx.SortAlpha))}
+// NewSetsScreen builds the Sets tab from domain rows and refresh/sort callbacks.
+func NewSetsScreen(sh *core.Shared) *components.RootListScreen {
+	mode := appctx.SortAlpha
+	var screen *components.RootListScreen
+	opts := appctx.RootListOpts(sh, appctx.SortTitle(setsTitle, mode))
+	opts.Help = []key.Binding{core.FullHint("sort", appctx.AppKeys.Sort)}
+	opts.OnKey = func(sh *core.Shared, k string, _ list.Item) (core.Action, bool) {
+		if !core.MatchKey(k, appctx.AppKeys.Sort) {
+			return core.Action{}, false
+		}
+		appctx.CycleSort(screen.List(), &mode, setsSortModes, setsTitle,
+			func(mode appctx.SortMode) []list.Item { return setListItems(mode) })
+		return core.Action{}, true
+	}
+	opts.Refresh = func(sh *core.Shared, payload any) ([]list.Item, bool) {
+		if _, ok := payload.(appctx.SetsDirty); !ok {
+			return nil, false
+		}
+		return setListItems(mode), true
+	}
+	screen = components.NewRootList(setListItems(mode), opts)
+	return screen
 }
 
 // setListItems builds the Sets rows: a fixed "+ New set" row on top, then a
@@ -74,37 +78,6 @@ func setListItems(mode appctx.SortMode) []list.Item {
 		},
 	}
 	return append(items, setRows...)
-}
-
-func (s *SetsScreen) Init(*core.Shared) tea.Cmd { return nil }
-
-func (s *SetsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
-
-func (s *SetsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
-		appctx.CycleSort(&s.list, &s.sort, setsSortModes, setsTitle,
-			func(m appctx.SortMode) []list.Item { return setListItems(m) })
-		return s, core.Action{}
-	}
-	return s, components.RootUpdate(sh, &s.list, msg)
-}
-
-func (s *SetsScreen) View(*core.Shared) string { return core.RenderList(s.list) }
-func (s *SetsScreen) HelpView(*core.Shared) string {
-	return core.ShortHelp(s.list, core.HelpTabbed)
-}
-
-// Receive reloads the set list from disk on a SetsDirty broadcast (after a set is
-// created/edited/deleted), so the tab reflects the change.
-func (s *SetsScreen) Receive(sh *core.Shared, payload any) core.Action {
-	if _, ok := payload.(appctx.SetsDirty); ok {
-		s.list.SetItems(setListItems(s.sort))
-	}
-	return core.Action{}
-}
-
-func (s *SetsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
-	s.list.SetSize(width, bodyHeight)
 }
 
 // ---------- new set ----------

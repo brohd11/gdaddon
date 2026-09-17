@@ -83,8 +83,12 @@
 // runs the selected row's Pick, so a menu of mixed commands needs no per-row kind enum,
 // no switch, and — for a pushed screen — no Update method at all: building the rows is
 // the whole flow. An inert row (a placeholder, or a disabled/non-installable entry) is
-// just an Item with a nil Pick. A tab root still writes Update (it owns quit-on-q,
-// notifications, the output pane), but it just forwards components.RootUpdate's pair.
+// just an Item with a nil Pick. All six tab roots use components.RootListScreen:
+// the component owns list interaction and tabbed help, while the router owns quit
+// and the output pane. Tabs supply sort, initialization and broadcast callbacks.
+// appctx.RootListOpts connects each root to Ctx.Compact, so density is shared
+// across tabs and survives root reconstruction. Pickers and roots start expanded
+// and offer D to toggle density by default; pushed pickers keep their own choice.
 //
 // Domain values that are *carried* through a flow rather than rendered (e.g.
 // project.versionItem, global.globalItem) stay plain payload structs — they are
@@ -121,16 +125,16 @@
 //
 // # Adding a tab
 //
-// Add a package under tabs/ whose root implements core.Screen (and Receiver if
-// it reloads on a notification), build its rows as components.Item values and
+// Add a package under tabs/ whose constructor returns components.NewRootList
+// configured through appctx.RootListOpts. Build rows as components.Item values and
 // its sub-flows from the components, and register a {Title, New} TabEntry in the tab
 // set in Run — New is a func(*core.Shared) core.Screen that builds the root from its
-// own state (read context via appctx.Of(sh)). The router calls New lazily and rebuilds
-// it on a theme change, so a root must construct cleanly from sh alone and hold no
-// state it can't reproduce. A root that must rebuild after an out-of-band change
-// (like Global/Archive after a remove) implements core.Receiver: core.PropagateAll(payload)
-// broadcasts an appctx Dirty payload (a bare reload marker) to every root, and the root
-// that recognizes it reloads itself. The visible outcome — the status line and any focus
+// own state (read context via appctx.Of(sh)). The router constructs all roots up front
+// and rebuilds them on a theme change, so retain preferences that must survive on Ctx.
+// Use OnKey for tab commands, Init for async startup, Refresh for row reloads, and
+// Receive when a broadcast needs to return an action. core.PropagateAll(payload)
+// broadcasts an appctx Dirty payload (a bare reload marker) to every root, and the
+// callback that recognizes it reloads the rows. The visible outcome — the status line and any focus
 // switch — is composed at the call site instead of riding the payload: wrap core.SetStatus,
 // the core.PropagateAll, core.ShowTab(title), and any async cmd in one core.Seq, which the
 // router applies in order (its seqMsg drains both the control and async lanes of every

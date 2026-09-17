@@ -11,94 +11,68 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
-	tea "charm.land/bubbletea/v2"
 )
 
 // projectTitle is the browse list's base Title; the active sort mode is appended.
 const projectTitle = "Project"
 
-// browseScreen is the permanent root: the addon list with the pinned Actions
-// row. It shows the status line and output pane below the list.
-type ProjectScreen struct {
-	list list.Model
-	sort appctx.SortMode
-	// fetching marks a fetch-all pass in flight (see fetchAllCmd), so a second "f"
-	// while the first is still running doesn't fan out a duplicate set of fetches.
-	// Cleared when its repoui.FetchDoneMsg arrives.
+// projectState owns the Project tab's domain state; RootListScreen handles its UI.
+type projectState struct {
+	screen *components.RootListScreen
+	sort   appctx.SortMode
+	// fetching prevents duplicate fetch-all work until FetchDoneMsg arrives.
 	fetching bool
 }
 
-var _ core.Filterer = (*ProjectScreen)(nil)
-var _ core.Receiver = (*ProjectScreen)(nil)
-var _ core.Crumber = (*ProjectScreen)(nil)
-
-// CrumbLabel anchors the breadcrumb at the Project root.
-func (s *ProjectScreen) CrumbLabel(bool) string { return "Tab" }
-
-func NewProjectScreen(sh *core.Shared) *ProjectScreen {
-	l := list.New(projectListItems(sh, appctx.SortAlpha), core.NewDelegate(), 0, 0)
-	l.Title = appctx.SortTitle(projectTitle, appctx.SortAlpha)
-	core.StyleList(&l)
-	// The browse short help is decluttered (see HelpView / ShortHelp); these extras
-	// only show in the full (?) help.
-	l.AdditionalFullHelpKeys = func() []key.Binding {
-		return []key.Binding{
-			core.FullHint("select", core.Keys.Select),
-			core.FullHint("sort", appctx.AppKeys.Sort),
-			core.FullHint("terminal", appctx.AppKeys.Terminal),
-			core.FullHint("term window", appctx.AppKeys.TerminalWindow),
-			core.FullHint("open dir", appctx.AppKeys.OpenDir),
-			core.FullHint("fetch", appctx.AppKeys.Fetch),
-			core.FullHint("git", appctx.AppKeys.Git),
-			core.FullHint("diff", appctx.AppKeys.Diff),
-			core.FullHint("git all", appctx.AppKeys.GitAll),
-			core.FullHint("root git", appctx.AppKeys.RootGit),
-			core.FullHint("focus log", core.Keys.ToggleOutput),
-			core.FullHint("toggle log", core.Keys.Output),
-			core.FullHint("wrap log", core.Keys.Wrap),
-			core.FullHint("clear log", core.Keys.Clear),
-		}
+func NewProjectScreen(sh *core.Shared) *components.RootListScreen {
+	s := &projectState{}
+	opts := appctx.RootListOpts(sh, appctx.SortTitle(projectTitle, s.sort))
+	opts.Help = []key.Binding{
+		core.FullHint("sort", appctx.AppKeys.Sort),
+		core.FullHint("terminal", appctx.AppKeys.Terminal),
+		core.FullHint("term window", appctx.AppKeys.TerminalWindow),
+		core.FullHint("open dir", appctx.AppKeys.OpenDir),
+		core.FullHint("fetch", appctx.AppKeys.Fetch),
+		core.FullHint("git", appctx.AppKeys.Git),
+		core.FullHint("diff", appctx.AppKeys.Diff),
+		core.FullHint("git all", appctx.AppKeys.GitAll),
+		core.FullHint("root git", appctx.AppKeys.RootGit),
+		core.FullHint("focus log", core.Keys.ToggleOutput),
+		core.FullHint("toggle log", core.Keys.Output),
+		core.FullHint("wrap log", core.Keys.Wrap),
+		core.FullHint("clear log", core.Keys.Clear),
 	}
-	return &ProjectScreen{list: l}
+	// Update markers arrive asynchronously; refresh broadcasts can start another check.
+	opts.Init = checkUpdatesCmd
+	opts.OnKey = s.onKey
+	opts.Receive = s.receive
+	s.screen = components.NewRootList(projectListItems(sh, s.sort), opts)
+	return s.screen
 }
 
-// Init kicks off the initial update check so the "update available" markers fill
-// in asynchronously once the release listings come back.
-func (s *ProjectScreen) Init(sh *core.Shared) tea.Cmd { return checkUpdatesCmd(sh) }
-
-func (s *ProjectScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
-
-func (s *ProjectScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	// The tab's own keys, gated behind the filter guard so they don't hijack filter typing.
-	if k, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() {
-		switch {
-		// "s" cycles the sort order (A→Z / Z→A / status), rebuilding the list in place.
-		case core.MatchKey(k.String(), appctx.AppKeys.Sort):
-			appctx.CycleSort(&s.list, &s.sort, projectSortModes, projectTitle,
-				func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })
-			return s, core.Action{}
-		// "f" git-fetches every project checkout so the ahead/behind markers can see new
-		// upstream commits. Network-bound, hence explicit — it never runs on its own.
-		case core.MatchKey(k.String(), appctx.AppKeys.Fetch):
-			if s.fetching {
-				return s, core.SetStatus("fetch already running")
-			}
-			s.fetching = true
-			return s, core.Seq(
-				core.SetStatus("fetching git checkouts…"),
-				core.Async(fetchAllCmd(sh)),
-			)
-		// "V" opens the project-wide Git page (fetch/pull/push across every checkout). "v" is
-		// per-row (an addon's own Git page) and lives in the row's Item.Keys instead.
-		case core.MatchKey(k.String(), appctx.AppKeys.GitAll):
-			return s, core.Push(gitflow.AllRepos(sh))
-		// "ctrl+v" opens the project repo's own Git page — the same RepoMenu an addon row
-		// opens, handed the root. V puts the root in the batch; ctrl+v works it on its own.
-		case core.MatchKey(k.String(), appctx.AppKeys.RootGit):
-			return s, RootGitAction(sh)
+// onKey adds project-wide commands. The component guards filter typing and falls
+// through to each row's own shortcuts when this callback does not handle a key.
+func (s *projectState) onKey(sh *core.Shared, k string, _ list.Item) (core.Action, bool) {
+	switch {
+	case core.MatchKey(k, appctx.AppKeys.Sort):
+		appctx.CycleSort(s.screen.List(), &s.sort, projectSortModes, projectTitle,
+			func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })
+		return core.Action{}, true
+	case core.MatchKey(k, appctx.AppKeys.Fetch):
+		if s.fetching {
+			return core.SetStatus("fetch already running"), true
 		}
+		s.fetching = true
+		return core.Seq(
+			core.SetStatus("fetching git checkouts…"),
+			core.Async(fetchAllCmd(sh)),
+		), true
+	case core.MatchKey(k, appctx.AppKeys.GitAll):
+		return core.Push(gitflow.AllRepos(sh)), true
+	case core.MatchKey(k, appctx.AppKeys.RootGit):
+		return RootGitAction(sh), true
 	}
-	return s, components.RootUpdate(sh, &s.list, msg)
+	return core.Action{}, false
 }
 
 // RootGitAction opens the project repo's own Git page — the ctrl+v key and a header
@@ -111,23 +85,11 @@ func RootGitAction(sh *core.Shared) core.Action {
 	return core.Push(repoui.RepoMenu(sh, *root, root.Name))
 }
 
-// View renders just the addon list; the status line and output box are drawn by
-// the router as shared chrome below every screen.
-func (s *ProjectScreen) View(*core.Shared) string { return core.RenderList(s.list) }
-
-// HelpView renders the decluttered tab-root help (nav · select · tabs · quit ·
-// more); filter, output, and clear-log live only in the full (?) help.
-func (s *ProjectScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
-
-func (s *ProjectScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
-	s.list.SetSize(width, bodyHeight)
-}
-
-// Receive rebuilds the browse list by re-inspecting the manifest on a ProjectDirty
+// receive rebuilds the browse list by re-inspecting the manifest on a ProjectDirty
 // (manifest contents changed) or PathRefresh (the manifest path itself changed, e.g.
 // just created) broadcast, keeping the browse-specific list logic out of the router.
 // The status line and any focus switch are composed at the call site (core.Seq).
-func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
+func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
 		s.reload(sh)
@@ -136,7 +98,7 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 		return core.Async(checkUpdatesCmd(sh))
 	case updateChecksReady:
 		appctx.Of(sh).SetUpdateChecks(p.checks)
-		s.list.SetItems(projectListItems(sh, s.sort))
+		s.screen.SetItems(projectListItems(sh, s.sort))
 	case appctx.GitRefresh:
 		// A git operation (pull/push/commit/single-repo fetch) changed a checkout: recompute
 		// the local git state so the dirty / ahead / behind markers settle. Local-only, so
@@ -157,12 +119,12 @@ func (s *ProjectScreen) Receive(sh *core.Shared, payload any) core.Action {
 	return core.Action{}
 }
 
-// reload re-inspects the manifest and redraws the rows from it. Three of Receive's
+// reload re-inspects the manifest and redraws the rows from it. Three of receive's
 // branches need exactly this pair and the order is load-bearing — the rows are built from
 // the context RefreshProject just repopulated — so it is one call, not two lines each time.
-func (s *ProjectScreen) reload(sh *core.Shared) {
+func (s *projectState) reload(sh *core.Shared) {
 	appctx.Of(sh).RefreshProject()
-	s.list.SetItems(projectListItems(sh, s.sort))
+	s.screen.SetItems(projectListItems(sh, s.sort))
 }
 
 // inspect reads the manifest's current state from the context paths, so the root

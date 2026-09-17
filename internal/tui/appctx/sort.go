@@ -47,7 +47,7 @@ func SortTitle(base string, m SortMode) string {
 func CycleSort(l *list.Model, mode *SortMode, modes []SortMode, base string, items func(SortMode) []list.Item) {
 	sel := SelectedTitle(l)
 	*mode = NextSort(*mode, modes)
-	l.SetItems(items(*mode))
+	components.SetListItems(l, items(*mode))
 	SelectByTitle(l, sel)
 	l.Title = SortTitle(base, *mode)
 }

@@ -22,7 +22,7 @@ func newTestRouter() core.Router {
 	sh := core.NewShared(appctx.New("/tmp/gdaddon-test", "dev"))
 	sh.Chrome = &core.Chrome{Header: core.NewHeaderPane(appctx.Header), Output: components.NewLogPane()}
 	return core.NewRouter(sh, []core.TabEntry{
-		{Title: "Search", New: func(*core.Shared) core.Screen { return NewSearchScreen() }},
+		{Title: "Search", New: func(sh *core.Shared) core.Screen { return NewSearchScreen(sh) }},
 	})
 }
 

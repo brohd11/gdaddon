@@ -77,7 +77,7 @@ func TestGitSubmenuWiring(t *testing.T) {
 	tm := sized(routerAt(gitProject(t)))
 
 	// Sanity: the checkout is the highlighted row (the list holds only addon rows).
-	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
+	if _, ok := tm.(core.Router).Top().(*components.RootListScreen); !ok {
 		t.Fatalf("want the Project root on top, got %T", tm.(core.Router).Top())
 	}
 
@@ -97,7 +97,7 @@ func TestGitSubmenuWiring(t *testing.T) {
 
 	// esc back to the root, then "V" opens the all-repos menu.
 	tm = pump(tm, keyMsg("esc"))
-	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
+	if _, ok := tm.(core.Router).Top().(*components.RootListScreen); !ok {
 		t.Fatalf("esc should return to the Project root, got %T", tm.(core.Router).Top())
 	}
 	tm = pump(tm, keyMsg("V"))
@@ -132,7 +132,7 @@ func TestRootGitKeyWiring(t *testing.T) {
 
 	// esc back to the Project root.
 	tm = pump(tm, keyMsg("esc"))
-	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
+	if _, ok := tm.(core.Router).Top().(*components.RootListScreen); !ok {
 		t.Fatalf("esc should return to the Project root, got %T", tm.(core.Router).Top())
 	}
 }
@@ -144,7 +144,7 @@ func TestRootGitKeyNotACheckout(t *testing.T) {
 	tm := sized(routerAt(gitProject(t))) // project root is not a checkout
 	tm, _ = tm.Update(keyMsg("ctrl+v"))
 
-	if _, ok := tm.(core.Router).Top().(*project.ProjectScreen); !ok {
+	if _, ok := tm.(core.Router).Top().(*components.RootListScreen); !ok {
 		t.Fatalf("ctrl+v on a non-checkout root should not navigate, got %T", tm.(core.Router).Top())
 	}
 	if out := view(tm); !strings.Contains(out, "not a git checkout") {

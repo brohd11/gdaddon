@@ -96,7 +96,7 @@ func addonItem(r rowData) components.Item {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
 	// A present row carries its own shortcuts (the framework dispatches Item.Keys for the
-	// highlighted row, see RootUpdate): "t" opens a terminal at the install path (in this
+	// highlighted row, see RootListScreen): "t" opens a terminal at the install path (in this
 	// process; "T" for a window) for any package or checkout; "v" opens the Git page and "d" that checkout's diff list, but both
 	// only for a git checkout — on a package they aren't handled, so the key falls through (as
 	// "t" does on an absent row).
@@ -174,7 +174,7 @@ func rowMarker(r rowData) string {
 
 // projectSortModes is the Project tab's sort cycle: name A→Z, name Z→A, then grouped
 // by install state, then the same status grouping with uninstalled rows hidden. The
-// "i" key advances through it (see ProjectScreen.Update).
+// "i" key advances through it (see projectState.onKey).
 var projectSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse, appctx.SortStatus, appctx.SortStatusInstalled}
 
 // visibleRows drops the rows a mode hides: SortStatusInstalled shows only addons

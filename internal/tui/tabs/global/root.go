@@ -10,8 +10,8 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
-	tea "charm.land/bubbletea/v2"
 )
 
 // globalItem is one entry from the global plugin list, carried into the per-plugin
@@ -41,22 +41,29 @@ const globalTitle = "Global Plugins"
 // install-state grouping here (these rows carry no state).
 var globalSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse}
 
-// GlobalScreen is the Global tab root.
-type GlobalScreen struct {
-	list list.Model
-	sort appctx.SortMode
-}
-
-var _ core.Filterer = (*GlobalScreen)(nil)
-var _ core.Receiver = (*GlobalScreen)(nil)
-var _ core.Crumber = (*GlobalScreen)(nil)
-
-// CrumbLabel anchors the breadcrumb at the Global root.
-func (s *GlobalScreen) CrumbLabel(bool) string { return "Tab" }
-
-func NewGlobalScreen(sh *core.Shared) *GlobalScreen {
-	l := core.NewSelectList(globalItems(sh, appctx.SortAlpha), appctx.SortTitle(globalTitle, appctx.SortAlpha))
-	return &GlobalScreen{list: l}
+// NewGlobalScreen builds the Global tab from domain rows and refresh/sort callbacks.
+func NewGlobalScreen(sh *core.Shared) *components.RootListScreen {
+	mode := appctx.SortAlpha
+	var screen *components.RootListScreen
+	opts := appctx.RootListOpts(sh, appctx.SortTitle(globalTitle, mode))
+	opts.Help = []key.Binding{core.FullHint("sort", appctx.AppKeys.Sort)}
+	opts.OnKey = func(sh *core.Shared, k string, _ list.Item) (core.Action, bool) {
+		if !core.MatchKey(k, appctx.AppKeys.Sort) {
+			return core.Action{}, false
+		}
+		appctx.CycleSort(screen.List(), &mode, globalSortModes, globalTitle,
+			func(mode appctx.SortMode) []list.Item { return globalItems(sh, mode) })
+		return core.Action{}, true
+	}
+	opts.Refresh = func(sh *core.Shared, payload any) ([]list.Item, bool) {
+		if _, ok := payload.(appctx.GlobalDirty); !ok {
+			return nil, false
+		}
+		appctx.Of(sh).RefreshGlobal()
+		return globalItems(sh, mode), true
+	}
+	screen = components.NewRootList(globalItems(sh, mode), opts)
+	return screen
 }
 
 // globalItems reads ~/.gdaddon/plugins.yml as self-dispatching rows, ordered per
@@ -79,35 +86,4 @@ func globalItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	items = components.EnsurePlaceholder(items, "(no global plugins yet)", "add one via Actions → New Plugin → Global")
 	appctx.SortItemsByTitle(items, mode == appctx.SortReverse)
 	return items
-}
-
-func (s *GlobalScreen) Init(*core.Shared) tea.Cmd { return nil }
-
-func (s *GlobalScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
-
-func (s *GlobalScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	if k, ok := msg.(tea.KeyPressMsg); ok && !s.Filtering() && core.MatchKey(k.String(), appctx.AppKeys.Sort) {
-		appctx.CycleSort(&s.list, &s.sort, globalSortModes, globalTitle,
-			func(m appctx.SortMode) []list.Item { return globalItems(sh, m) })
-		return s, core.Action{}
-	}
-	return s, components.RootUpdate(sh, &s.list, msg)
-}
-
-func (s *GlobalScreen) View(*core.Shared) string     { return core.RenderList(s.list) }
-func (s *GlobalScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
-
-// Receive rebuilds the global list from disk on a GlobalDirty broadcast (after an
-// add/remove), so the Global tab reflects the change. The status line and any focus
-// switch are composed at the call site (core.Seq).
-func (s *GlobalScreen) Receive(sh *core.Shared, payload any) core.Action {
-	if _, ok := payload.(appctx.GlobalDirty); ok {
-		appctx.Of(sh).RefreshGlobal()
-		s.list.SetItems(globalItems(sh, s.sort))
-	}
-	return core.Action{}
-}
-
-func (s *GlobalScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
-	s.list.SetSize(width, bodyHeight)
 }

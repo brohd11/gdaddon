@@ -14,23 +14,11 @@ import (
 	"github.com/brohd11/bubblestack/core"
 
 	"charm.land/bubbles/v2/list"
-	tea "charm.land/bubbletea/v2"
 )
 
-// SearchScreen is the Search tab root. As a tab root it quits on q rather than
-// popping.
-type SearchScreen struct {
-	list list.Model
-}
-
-var _ core.Filterer = (*SearchScreen)(nil)
-var _ core.Crumber = (*SearchScreen)(nil)
-
-// CrumbLabel anchors the breadcrumb at the Search root.
-func (s *SearchScreen) CrumbLabel(bool) string { return "Tab" }
-
-func NewSearchScreen() *SearchScreen {
-	return &SearchScreen{list: core.NewSelectList(searchItems(), "Search")}
+// NewSearchScreen builds the Search tab's entry menu.
+func NewSearchScreen(sh *core.Shared) *components.RootListScreen {
+	return components.NewRootList(searchItems(), appctx.RootListOpts(sh, "Search"))
 }
 
 func searchItems() []list.Item {
@@ -58,19 +46,4 @@ func defaultSource() searchpkg.Source {
 		}
 	}
 	return srcs[0]
-}
-
-func (s *SearchScreen) Init(*core.Shared) tea.Cmd { return nil }
-
-func (s *SearchScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
-
-func (s *SearchScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	return s, components.RootUpdate(sh, &s.list, msg)
-}
-
-func (s *SearchScreen) View(*core.Shared) string     { return core.RenderList(s.list) }
-func (s *SearchScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
-
-func (s *SearchScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
-	s.list.SetSize(width, bodyHeight)
 }

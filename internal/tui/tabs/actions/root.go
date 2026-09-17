@@ -1,54 +1,21 @@
 package actions
 
 import (
-	"github.com/brohd11/gdaddon/internal/tui/appctx"
-
+	"charm.land/bubbles/v2/list"
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
-
-	"charm.land/bubbles/v2/list"
-	tea "charm.land/bubbletea/v2"
+	"github.com/brohd11/gdaddon/internal/tui/appctx"
 )
 
-// actionsScreen is the Actions tab (reached with [ / ]): create manifest (when none
-// is loaded), install all, new plugin, theme. As a tab root it quits on q rather than
-// popping.
-type ActionsScreen struct {
-	list list.Model
-}
-
-var _ core.Filterer = (*ActionsScreen)(nil)
-var _ core.Receiver = (*ActionsScreen)(nil)
-var _ core.Crumber = (*ActionsScreen)(nil)
-
-// CrumbLabel anchors the breadcrumb at the Actions root.
-func (s *ActionsScreen) CrumbLabel(bool) string { return "Tab" }
-
-func NewActionsScreen(sh *core.Shared) *ActionsScreen {
-	return &ActionsScreen{list: core.NewSelectList(actionItems(sh), "Actions")}
-}
-
-func (s *ActionsScreen) Init(*core.Shared) tea.Cmd { return nil }
-
-// Receive rebuilds the menu on a PathRefresh so the Create-manifest row appears or
-// disappears with the manifest's presence. It never grabs focus (PathRefresh's focus
-// belongs to the Project tab).
-func (s *ActionsScreen) Receive(sh *core.Shared, payload any) core.Action {
-	if _, ok := payload.(appctx.PathRefresh); ok {
-		s.list.SetItems(actionItems(sh))
+// NewActionsScreen builds the Actions tab. PathRefresh updates the manifest actions
+// without grabbing focus from the Project tab.
+func NewActionsScreen(sh *core.Shared) *components.RootListScreen {
+	opts := appctx.RootListOpts(sh, "Actions")
+	opts.Refresh = func(sh *core.Shared, payload any) ([]list.Item, bool) {
+		if _, ok := payload.(appctx.PathRefresh); ok {
+			return actionItems(sh), true
+		}
+		return nil, false
 	}
-	return core.Action{}
-}
-
-func (s *ActionsScreen) Filtering() bool { return s.list.FilterState() == list.Filtering }
-
-func (s *ActionsScreen) Update(sh *core.Shared, msg tea.Msg) (core.Screen, core.Action) {
-	return s, components.RootUpdate(sh, &s.list, msg)
-}
-
-func (s *ActionsScreen) View(*core.Shared) string     { return core.RenderList(s.list) }
-func (s *ActionsScreen) HelpView(*core.Shared) string { return core.ShortHelp(s.list, core.HelpTabbed) }
-
-func (s *ActionsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
-	s.list.SetSize(width, bodyHeight)
+	return components.NewRootList(actionItems(sh), opts)
 }
