@@ -4,9 +4,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 )
+
+func TestDensityFollowsPushedPickers(t *testing.T) {
+	tm := sized(newTestRouter())
+	root := tm.(core.Router).Top().(*components.RootListScreen)
+	tm = pump(tm, keyMsg(densityKey()))
+	p := components.ThemePicker().(*components.PickerScreen)
+	tm = pump(tm, core.Push(p))
+	if !p.Compact() {
+		t.Fatal("a shared theme picker must inherit the root density")
+	}
+	tm = pump(tm, keyMsg(densityKey()))
+	if p.Compact() || root.Compact() {
+		t.Fatal("a picker toggle must update the root below it")
+	}
+	tm = pump(tm, keyMsg("esc"))
+	if tm.(core.Router).Top() != root || root.Compact() {
+		t.Fatal("back must retain the root and the picker's density choice")
+	}
+}
 
 // densityKey is the chord under test, read off the keymap rather than spelled out, so a
 // rebind moves these tests with it.

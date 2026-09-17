@@ -40,17 +40,9 @@ type Ctx struct {
 	// on a fresh launch. The Search tab reads it to prefill and writes it on submit.
 	LastSearchQuery string
 
-	// Compact is the row density every tab list renders at: false is the default
-	// three-row title/description/spacer, true the one-row form with the description
-	// trailing the title in muted color. Session-only, like LastSearchQuery.
-	//
-	// It lives HERE rather than on each tab root for two reasons. A theme switch
-	// reinstances every root (core.RefreshRoots), so a screen-local flag would silently
-	// reset on a palette change — the way the per-root sort mode already does. And a
-	// density is a reading preference, not a property of one listing: flipping it on the
-	// Project tab and finding Archive still three rows tall would read as a bug. Each root
-	// reconciles its list with this in SetSize, which the router calls before every render,
-	// so a flip on one tab reaches the others with no broadcast.
+	// Compact is the session density shared by standard root lists and pickers
+	// through ListDensity: false is expanded, true is one row per item. The
+	// preference survives screen reconstruction, but is not saved across launches.
 	Compact bool
 
 	// UpdateChecks caches the project list's per-addon update-check results,

@@ -63,7 +63,9 @@ func TestAllRootListsShareDensityAndKeepCallbacks(t *testing.T) {
 					t.Fatalf("toggle did not reach %s", cases[j].name)
 				}
 			}
-			if rebuilt := tc.new(sh); !rebuilt.Compact() {
+			rebuilt := tc.new(sh)
+			rebuilt.SetSize(sh, 80, 24) // first lifecycle call binds the app preference
+			if !rebuilt.Compact() {
 				t.Fatal("root reconstruction must preserve density")
 			}
 			// Each tab starts with at least a placeholder row. Filter to that row,

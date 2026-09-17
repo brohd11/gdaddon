@@ -19,7 +19,7 @@ type appKeyMap struct {
 	Diff           key.Binding // open the highlighted addon's diff list (Project; git checkouts only)
 	GitAll         key.Binding // open the project-wide (all-repos) Git page (Project)
 	RootGit        key.Binding // open the project repo's own Git page (Project)
-	Density        key.Binding // flip every tab list between the three-row and one-row density
+	Density        key.Binding // flip the session density shared by roots and standard pickers
 }
 
 // AppKeys is the active custom keymap. Edit a WithKeys list here to rebind; the
@@ -41,6 +41,6 @@ var AppKeys = appKeyMap{
 	RootGit: key.NewBinding(key.WithKeys("ctrl+v"), key.WithHelp("ctrl+v", "root git")),
 	// D, not the more obvious C: core.Keys.Clear owns "C" and the router consumes it in
 	// globalKey before a screen is offered the keystroke. Every tab root matches this, and
-	// the preference it flips lives on Ctx, so one press re-densities all six.
+	// the preference it flips lives on Ctx and reaches all standard lists through a broadcast.
 	Density: components.DefaultDensityKey,
 }
