@@ -42,7 +42,7 @@ type Ctx struct {
 
 	// Compact is the session density shared by standard root lists and pickers
 	// through ListDensity: false is expanded, true is one row per item. The
-	// preference survives screen reconstruction, but is not saved across launches.
+	// preference is restored and saved by bubblestack.Run in its shared config.
 	Compact bool
 
 	// UpdateChecks caches the project list's per-addon update-check results,

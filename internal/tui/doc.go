@@ -87,9 +87,10 @@
 // the component owns list interaction and tabbed help, while the router owns quit
 // and the output pane. Tabs supply sort, initialization and broadcast callbacks.
 // Ctx.ListDensity exposes Ctx.Compact to both roots and standard pushed pickers.
-// They start expanded, and D broadcasts a presentation-only change across the
-// session, preserving density through navigation and root reconstruction. Custom
-// lists and checklists remain independent.
+// They restore the shared config preference (expanded when unset), and D saves
+// and broadcasts a presentation-only change across the session, preserving density
+// through navigation and root reconstruction. Custom lists and checklists remain
+// independent.
 //
 // Domain values that are *carried* through a flow rather than rendered (e.g.
 // project.versionItem, global.globalItem) stay plain payload structs — they are
