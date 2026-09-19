@@ -100,10 +100,13 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 		appctx.Of(sh).SetUpdateChecks(p.checks)
 		s.screen.SetItems(projectListItems(sh, s.sort))
 	case appctx.GitRefresh:
-		// A git operation (pull/push/commit/single-repo fetch) changed a checkout: recompute
-		// the local git state so the dirty / ahead / behind markers settle. Local-only, so
+		// A batch git operation changed checkouts: recompute the local git state
+		// so the dirty / ahead / behind markers settle. Local-only, so
 		// unlike ProjectDirty it doesn't re-fire the network update check.
 		s.reload(sh)
+	case appctx.GitRepoRefresh:
+		appctx.Of(sh).RefreshRepo(p)
+		s.screen.SetItems(projectListItems(sh, s.sort))
 	case repoui.FetchDoneMsg:
 		// The refs are now current, so re-inspecting recomputes each checkout's ahead/behind
 		// (RefreshProject → refreshGitChecks) and the markers appear. RefreshRoots then
@@ -127,11 +130,7 @@ func (s *projectState) reload(sh *core.Shared) {
 	s.screen.SetItems(projectListItems(sh, s.sort))
 }
 
-// inspect reads the manifest's current state from the context paths, so the root
-// builds (and refreshes) itself from disk rather than being handed statuses. A
-// parse/read error yields no rows (an empty list), matching the global/archive tabs.
+// inspect uses the project's cached inspection so redraws do not query every repo.
 func inspect(sh *core.Shared) []addon.Status {
-	c := appctx.Of(sh)
-	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
-	return statuses
+	return appctx.Of(sh).ProjectStatuses()
 }

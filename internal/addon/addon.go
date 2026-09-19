@@ -227,12 +227,14 @@ func Inspect(manifestPath, baseDir string) ([]Status, error) {
 
 	statuses := make([]Status, 0, len(addons))
 	for _, a := range addons {
-		statuses = append(statuses, statusFor(a, baseDir))
+		statuses = append(statuses, InspectOne(a, baseDir))
 	}
 	return statuses, nil
 }
 
-func statusFor(a Addon, baseDir string) Status {
+// InspectOne computes one cached manifest entry's current local state without
+// parsing the manifest or inspecting any other addon.
+func InspectOne(a Addon, baseDir string) Status {
 	if a.URL == "" {
 		return Status{Addon: a, State: StateInvalid}
 	}

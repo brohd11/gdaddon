@@ -73,9 +73,8 @@ func AllRepos(sh *core.Shared) *components.PickerScreen {
 	}, repoui.RootOptionFor(func(sh *core.Shared) *repo.Repo { return appctx.Of(sh).RootRepo }))
 }
 
-// newScope builds one repoui.Scope: its label and a provider that reads the in-scope repos
-// fresh from the manifest each time it's called (menu build, confirm, run — the tree moves
-// under us). The submodules scope opts out of the include-root toggle (ExcludeRoot): the
+// newScope builds one repoui.Scope from the current project cache.
+// The submodules scope opts out of the include-root toggle (ExcludeRoot): the
 // project root is a top-level clone, so it has no place in a submodules-only batch.
 func newScope(sc scope) repoui.Scope {
 	return repoui.Scope{
@@ -85,14 +84,12 @@ func newScope(sc scope) repoui.Scope {
 	}
 }
 
-// reposFor inspects the manifest and returns the present git checkouts in scope as repo.Repo
-// values, each annotated with the cached divergence (appctx.Ctx.GitSync) the confirm reads to
-// say "N behind". Read fresh rather than captured, since the tree changes between screens. The
-// project root is not a manifest entry, so it isn't here — it's handled by the menu's
-// include-root toggle (see AllRepos).
+// reposFor returns cached present checkouts in scope, annotated with current
+// divergence. Root refresh handlers update this cache before deeper menus receive
+// a broadcast. The project root is supplied separately by the include-root toggle.
 func reposFor(sh *core.Shared, sc scope) []repo.Repo {
 	c := appctx.Of(sh)
-	statuses, _ := addon.Inspect(c.ManifestPath, c.ProjectRoot)
+	statuses := c.ProjectStatuses()
 	var out []repo.Repo
 	for _, s := range statuses {
 		if !s.Addon.IsGitWorkdir() || !s.Present() || !sc.matches(s.Addon) {

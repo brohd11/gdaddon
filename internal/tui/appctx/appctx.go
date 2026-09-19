@@ -35,6 +35,10 @@ type Ctx struct {
 	ArchivedIDs   []string      // cached repo IDs from archive.Repos()
 	ProjectAddons []addon.Addon // cached from the project manifest
 
+	// Shared local inspection used by row rendering and git-menu scopes.
+	projectStatuses []addon.Status
+	projectLoaded   bool
+
 	// LastSearchQuery is the most recent Search tab query. Session-only (not
 	// persisted): it keeps the search form filled across tab navigation but resets
 	// on a fresh launch. The Search tab reads it to prefill and writes it on submit.
@@ -127,6 +131,8 @@ func (c *Ctx) loadArchive() {
 }
 
 func (c *Ctx) loadProject() {
+	c.projectLoaded = true
+	c.projectStatuses = nil
 	// The root repo's state is a local read like GitDirty/GitSync, but it doesn't depend
 	// on the manifest: refresh it even when there is none, so the header's Root line
 	// stays current on New/RefreshProject and after git ops.
@@ -146,14 +152,15 @@ func (c *Ctx) loadProject() {
 	addons, err := addon.Parse(c.ManifestPath)
 	c.noteLoadErr("manifest", err)
 	c.ProjectAddons = addons
-	// Inspect once and share the statuses: both dep-status (which deps are on disk) and
-	// the git-dirty check need the resolved install state, so they don't inspect twice.
-	// Skipped when the parse failed (Inspect re-parses and would just fail again).
+	// Inspect the parsed entries once and share the statuses between caches and
+	// row rendering. A failed parse leaves no statuses to inspect.
 	var statuses []addon.Status
 	if err == nil {
-		statuses, err = addon.Inspect(c.ManifestPath, c.ProjectRoot)
-		c.noteLoadErr("manifest", err)
+		for _, a := range addons {
+			statuses = append(statuses, addon.InspectOne(a, c.ProjectRoot))
+		}
 	}
+	c.projectStatuses = statuses
 	c.refreshDepChecks(statuses)
 	c.OrphanDeps = addon.OrphanDeps(statuses)
 	c.refreshGitChecks(statuses)
@@ -215,6 +222,67 @@ func (c *Ctx) RefreshArchive() { c.loadArchive() }
 
 // RefreshProject reloads the cached project addon list from disk.
 func (c *Ctx) RefreshProject() { c.loadProject() }
+
+// ProjectStatuses returns the cached local inspection, loading it once for hosts
+// that construct Ctx directly. Rows and scope menus must not re-inspect on redraw.
+// Callers must treat the returned slice as read-only.
+func (c *Ctx) ProjectStatuses() []addon.Status {
+	if !c.projectLoaded {
+		c.loadProject()
+	}
+	return c.projectStatuses
+}
+
+// RefreshRepo refreshes a known addon and enclosing checkout markers. Root
+// operations may change the manifest or package layout and retain a full reload.
+func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) {
+	if msg.Targets(c.ProjectRoot) {
+		c.loadProject()
+		return
+	}
+	statuses := c.ProjectStatuses()
+	known := false
+	for _, s := range statuses {
+		known = known || (s.Addon.IsGitWorkdir() && msg.Targets(s.FullPath))
+	}
+	if !known {
+		return
+	}
+	if c.GitDirty == nil {
+		c.GitDirty = make(map[string]bool)
+	}
+	if c.GitSync == nil {
+		c.GitSync = make(map[string]addon.GitSync)
+	}
+	for i, s := range statuses {
+		if !s.Addon.IsGitWorkdir() || !msg.Affects(s.FullPath) {
+			continue
+		}
+		if msg.Targets(s.FullPath) {
+			s = addon.InspectOne(s.Addon, c.ProjectRoot)
+			statuses[i] = s
+		}
+		delete(c.GitDirty, s.Addon.Name)
+		delete(c.GitSync, s.Addon.Name)
+		if s.Present() {
+			if addon.HasUncommittedChanges(s.FullPath) {
+				c.GitDirty[s.Addon.Name] = true
+			}
+			if sync := addon.GitSyncStatus(s.FullPath); sync.Tracking {
+				c.GitSync[s.Addon.Name] = sync
+			}
+		}
+	}
+	if c.RootRepo != nil && msg.Affects(c.RootRepo.Dir) {
+		root, ok := repo.DescribeRoot(c.ProjectRoot)
+		c.RootRepo = nil
+		if ok {
+			c.RootRepo = &root
+		}
+	}
+	c.refreshDepChecks(statuses)
+	c.OrphanDeps = addon.OrphanDeps(statuses)
+}
 
 // noteLoadErr records a load failure for the UI to surface (see DrainLoadErrs). A
 // missing file is a legitimate empty state (no manifest yet, no global list), not an
@@ -355,13 +423,13 @@ type (
 	PathRefresh struct{}
 )
 
-// GitRefresh is broadcast after a git operation (pull/push/commit/single fetch) changes a
-// checkout, so the Project list recomputes its *local* git state — dirty / ahead / behind.
-// Deliberately not ProjectDirty: this touched no manifest and no release, so re-firing the
-// network-bound update check would be wasted work. It is an alias of the shared screens'
-// repoui.RefreshMsg — the git flows (which live in the reusable gitstack/repoui module) raise
-// that value directly, and the Project root recognizes it here under gdaddon's own name.
+// GitRefresh retains the full local reload after batch git operations. It does
+// not trigger the network-bound release update check. Single-checkout tasks use
+// GitRepoRefresh instead.
 type GitRefresh = repoui.RefreshMsg
+
+// GitRepoRefresh identifies the single checkout changed by a git task.
+type GitRepoRefresh = repoui.RepoRefreshMsg
 
 // RefreshPaths re-runs Scan after the paths may have changed (e.g. a manifest was just
 // created). When async it defers the scan into a tea.Cmd that, once it runs, emits the
