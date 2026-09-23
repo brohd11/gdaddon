@@ -10,11 +10,9 @@ import (
 	"gopkg.in/ini.v1"
 )
 
-// pluginCfgNames are the config filenames that mark an installable addon/library
-// and carry its version: plugin.cfg (Godot editor plugins) and version.cfg
-// (libraries that are versioned but intentionally don't appear in the plugin
-// menu). Both use the same INI shape — a [plugin] section with version="…".
-// Centralized here so the recognized set can be changed in one place.
+// pluginCfgNames mark an installable addon and carry its version: plugin.cfg for editor
+// plugins, version.cfg for libraries kept out of the plugin menu. Both use a [plugin]
+// section with version="…".
 var pluginCfgNames = []string{"plugin.cfg", "version.cfg"}
 
 // pluginCfgPath returns the path of the recognized config file in dir (checked in
@@ -32,9 +30,8 @@ func pluginCfgPath(dir string) string {
 // hasPluginCfg reports whether dir is an addon/library folder.
 func hasPluginCfg(dir string) bool { return pluginCfgPath(dir) != "" }
 
-// intendedVersion is the release identity to record for an install: the canonical
-// release tag when set, else the manifest/store version. Used to stamp a synthetic
-// version.cfg for packages that ship no config of their own (see stampVersion).
+// intendedVersion is the version to record for an install: the release tag, else the
+// manifest or store version.
 func intendedVersion(a Addon) string {
 	if a.Tag != "" {
 		return a.Tag
@@ -42,24 +39,16 @@ func intendedVersion(a Addon) string {
 	return a.Version
 }
 
-// stampVersion writes a minimal installer-generated version.cfg into dir recording
-// ver (the installed version, so getLocalPluginVersion can read it back and Inspect
-// can match it — config-less packages like icon packs otherwise read as a perpetual
-// "installed unknown" mismatch) and srcURL (the upstream repo it was installed from,
-// read back by the Scan action via SourceURL). It is a no-op when dir already carries
-// a plugin.cfg/version.cfg (an authored config always wins — never clobber it), when
-// dir is a namespace folder holding other plugin folders (it is a level of the layout,
-// not an addon), or when there's nothing to record (both ver and srcURL empty, e.g.
-// a branch-HEAD install of a store package). Only the keys with a value are emitted. The version
-// normalization matches pinInstall's, so the stamped value equals what the manifest
-// records. Best-effort: a write error is ignored (this tracking is a convenience).
+// stampVersion writes a minimal version.cfg into dir recording ver (so config-less packages
+// can match their version) and srcURL (read back by Scan via SourceURL), emitting only
+// non-empty keys. It does nothing when dir has its own config, is a namespace folder of
+// other plugins, or there is nothing to record. Errors are ignored.
 func stampVersion(dir, ver, srcURL string) {
 	if pluginCfgPath(dir) != "" {
 		return
 	}
-	// The mirror case: a folder with no config of its own that *contains* plugin folders
-	// is a namespace level (addons/addon_lib), not an addon. Stamping it would make
-	// ScanInstalled stop there and never see the real plugin beneath it.
+	// A config-less folder containing plugin folders is a namespace level, not an addon;
+	// stamping it would hide the plugins beneath from ScanInstalled.
 	if len(pluginDirs(dir)) > 0 {
 		return
 	}
@@ -78,11 +67,8 @@ func stampVersion(dir, ver, srcURL string) {
 	_ = os.WriteFile(filepath.Join(dir, "version.cfg"), []byte(body), 0o644)
 }
 
-// readPluginCfgKey reads one key from dir's plugin.cfg/version.cfg [plugin] section,
-// returning the unquoted, space-trimmed value or "" when the file/section/key is
-// absent or unreadable. The silent "" fallback is the behavior every caller relies on
-// (an unversioned or dir-less addon is normal, not an error). Callers that need to
-// distinguish a read error (e.g. Dependencies) load the config themselves.
+// readPluginCfgKey returns one key from dir's config [plugin] section, unquoted, or "" when
+// absent or unreadable. Callers that must see read errors load the config themselves.
 func readPluginCfgKey(dir, key string) string {
 	cfgPath := pluginCfgPath(dir)
 	if cfgPath == "" {
@@ -96,20 +82,10 @@ func readPluginCfgKey(dir, key string) string {
 	return strings.Trim(strings.TrimSpace(raw), `'"`)
 }
 
-// installDir reads the installer-specific install-path key an addon may declare in its
-// plugin.cfg/version.cfg under addonDir — a project-root-relative install path the
-// author can pin (like the custom dependency keys). Either `dir` or `path` names it, `dir`
-// winning when both are present; `path` is accepted because authors reach for the same
-// word the manifest uses (godot-tree-sitter-gd's version.cfg declares
-// path="addons/addon_lib/tree_sitter_gd"). Returns "" when there's no config, neither
-// key, or the value is not a project-root-relative path.
-//
-// That last case is the security-relevant one: this value comes from the *downloaded
-// package*, and its destination is os.RemoveAll'd before being written. An absolute
-// path or one climbing out with ".." is ignored here — for either key — so the install
-// falls back to the normal addons/<name> derivation rather than failing;
-// writePlacement's resolveUnder is the hard backstop for anything that reaches it by
-// another route.
+// installDir reads the install path an addon may pin in its config (`dir`, or `path`,
+// `dir` winning), or "". The value comes from the downloaded package and its destination
+// is deleted before writing, so absolute paths and ".." escapes are ignored (falling back
+// to addons/<name>); resolveUnder is the hard backstop.
 func installDir(addonDir string) string {
 	dir := readPluginCfgKey(addonDir, "dir")
 	if dir == "" {
@@ -124,18 +100,14 @@ func installDir(addonDir string) string {
 	return dir
 }
 
-// SourceURL reads the installer-specific `source` key an addon may declare in its
-// plugin.cfg/version.cfg under addonDir — the upstream repo it was installed from —
-// and returns a canonical repo url, or "" when there's no config, no source key, or
-// the value is unparseable. Stamped by stampVersion on install and read back by the
-// Scan action to prefill the Track form's url (see Installed.SuggestedURL).
+// SourceURL returns the canonical repo url from the config's `source` key (stamped on
+// install), or "". Scan uses it to prefill the Track form.
 func SourceURL(addonDir string) string {
 	return normalizeSource(readPluginCfgKey(addonDir, "source"))
 }
 
-// normalizeSource turns a `source` value into a canonical repo url. It accepts a full
-// url (https://host/owner/repo[.git], validated and normalized) or owner/repo /
-// host/owner/repo shorthand (github.com assumed). Returns "" on anything malformed.
+// normalizeSource turns a `source` value (full url, owner/repo, or host/owner/repo) into a
+// canonical repo url, or "".
 func normalizeSource(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -155,10 +127,8 @@ func normalizeSource(raw string) string {
 	return url
 }
 
-// canonicalRepoURL reduces an install url to its canonical https://host/owner/repo
-// form (dropping any .git/.zip/release-asset path), or "" when rawURL isn't a
-// recognized repo (a store url or local archive path). Used to stamp `source` into a
-// generated version.cfg from the manifest url an addon was installed from.
+// canonicalRepoURL reduces an install url to https://host/owner/repo, or "" for store urls
+// and local archives.
 func canonicalRepoURL(rawURL string) string {
 	id, err := source.RepoID(rawURL)
 	if err != nil {

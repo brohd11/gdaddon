@@ -17,12 +17,9 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 )
 
-// installEndpoint adapts the install confirm into a packages.Endpoint: it captures the
-// selected addon and its installed version, and builds the confirm for whichever
-// release/branch/asset the shared browse flow hands back.
+// installEndpoint builds the install confirm for whatever the browse flow selects.
 func installEndpoint(selected addon.Addon, local string) packages.Endpoint {
 	return func(sel packages.Selection) core.Screen {
 		// Store assets have no git asset/clone/branch variants — confirm the chosen
@@ -35,11 +32,8 @@ func installEndpoint(selected addon.Addon, local string) packages.Endpoint {
 	}
 }
 
-// pinnedInstallScreen reinstalls exactly what the manifest pins for `a` — the same
-// per-entry install InstallAll performs — reusing installEndpoint's confirm builders but
-// sourcing the version/asset from the manifest entry instead of a browsed selection. A
-// clone entry carries pick.clone so newInstallTask git-clones the recorded branch (via
-// cloneInstall) rather than unzipping the .git url as a package.
+// pinnedInstallScreen reinstalls exactly what the manifest pins, as InstallAll would. A
+// clone sets pick.clone so it is cloned rather than unzipped.
 func pinnedInstallScreen(a addon.Addon, local string) core.Screen {
 	if store.IsStoreURL(a.URL) {
 		return newStoreInstallConfirm(a, local, a.Version) // store pins Version
@@ -57,11 +51,9 @@ type latestReleaseMsg struct {
 	ok  bool
 }
 
-// latestInstallScreen fetches the addon's newest release off-thread and drops to the
-// install confirm for it, preferring an author-uploaded asset over the generated source
-// archive (source.AutoAsset). When several uploaded packages make the choice
-// ambiguous it opens an asset picker instead. On no release / fetch error it pops with a
-// status.
+// latestInstallScreen fetches the newest release off the UI thread and opens the install
+// confirm for its asset (source.AutoAsset), or an asset picker when ambiguous. It pops
+// with a status on failure.
 func latestInstallScreen(a addon.Addon, local string) core.Screen {
 	repoID, _ := source.RepoID(a.URL)
 	run := func(ctx context.Context) tea.Cmd {
@@ -93,9 +85,7 @@ func latestInstallScreen(a addon.Addon, local string) core.Screen {
 	return components.NewLoadingScreen(repoID, "resolving latest release…", run, onResult)
 }
 
-// latestAssetPicker lists a release's assets when "Install latest" can't pick one
-// unambiguously (several uploaded packages); selecting one drops to the install confirm.
-// Assets keep their natural order — uploaded first, the generated source archive last.
+// latestAssetPicker lists a release's assets when none can be chosen automatically.
 func latestAssetPicker(a addon.Addon, local, repoID string, rel source.Release) core.Screen {
 	items := make([]list.Item, 0, len(rel.Assets))
 	for _, as := range rel.Assets {
@@ -204,9 +194,8 @@ func newInstallConfirm(selected addon.Addon, local string, pick versionItem) *co
 	})
 }
 
-// effectivePick resolves the source toggle: in archive mode it installs from the local
-// copy (swapping the url and flagging archived so pinInstall keeps the canonical
-// manifest url); the asset name stays the remote one for clean crumbs/labels.
+// effectivePick applies the source toggle: archive mode installs the local copy while
+// pinInstall keeps the canonical url.
 func effectivePick(pick versionItem, mode int) versionItem {
 	if mode == installArchive && pick.archivedAsset.URL != "" {
 		pick.asset.URL = pick.archivedAsset.URL
@@ -226,7 +215,7 @@ func confirmInstallBody(sh *core.Shared, selected addon.Addon, pick versionItem)
 // installSourceOptions renders the two install sources stacked vertically, the active
 // one marked and highlighted (mirrors removeOptions).
 func installSourceOptions(mode int) string {
-	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
+	return widgets.RenderChoices(mode, []widgets.ToggleOpt{
 		{Label: "Download", Desc: "fetch a fresh copy from the remote"},
 		{Label: "Archive", Desc: "install from the local archived copy"},
 	})
@@ -235,7 +224,7 @@ func installSourceOptions(mode int) string {
 // cloneModeOptions renders the branch-install Package/Clone modes stacked
 // vertically, the active one marked and highlighted (mirrors installSourceOptions).
 func cloneModeOptions(mode int) string {
-	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
+	return widgets.RenderChoices(mode, []widgets.ToggleOpt{
 		{Label: "Clone", Desc: "git clone the repo as a live working copy (keeps .git)"},
 		{Label: "Package", Desc: "download & pin the branch's current commit as an unzipped package"},
 	})
@@ -246,26 +235,23 @@ func cloneModeOptions(mode int) string {
 func cloneModeWarning(selected addon.Addon) string {
 	dest, declared := selected.Path, ""
 	if dest == "" {
-		// A path-less entry's destination isn't settled until the clone is on disk: the
-		// repo may declare its own install path, which cloneInstall honors over the
-		// addons/<name> default. Nothing here can read that key yet, so don't promise
-		// a location the install may not use.
+		// A path-less clone may declare its own install path, known only after cloning, so do not
+		// promise a location.
 		dest = addon.DefaultPath(selected.Slug())
 		declared = ",\n    or to the install path the repo declares for itself"
 	}
-	warn := lipgloss.NewStyle().Foreground(core.MutedColor)
+	warn := core.MutedStyle()
 	return warn.Render("  ⚠ clones the whole repo (with .git) to " + dest + declared + ";\n    the repo root must be the addon itself or it won't load in Godot.")
 }
 
-// packageModeWarning cautions that a branch package is a clone without git's
-// utility: a static snapshot pinned to the branch's current HEAD commit (no .git,
-// no auto-update). Re-installing moves the pin; a submodule fits an arbitrary commit.
+// packageModeWarning explains that a branch package is a static snapshot of the branch's
+// HEAD (no .git, no updates).
 func packageModeWarning(pick versionItem) string {
 	pin := "HEAD"
 	if pick.asset.Commit != "" {
 		pin = shortSHA(pick.asset.Commit)
 	}
-	warn := lipgloss.NewStyle().Foreground(core.MutedColor)
+	warn := core.MutedStyle()
 	return warn.Render("  ⚠ a clone without git's utility: installs a snapshot pinned to\n    commit " + pin + " (no .git, no auto-update). Re-install to move the\n    pin; for an arbitrary commit use a submodule.")
 }
 

@@ -1,8 +1,5 @@
-// Package sysopen is gdaddon's thin domain adapter over bubblestack/sysopen (the shared
-// OS-open helpers: file manager, browser, terminal). Path, Terminal and TerminalInline delegate
-// directly; URL adds gdaddon's domain normalization (an addon URL with a file extension
-// is reduced to its repo host via source.RepoURL) before handing off. It names no other
-// domain type, so any tab can reuse it without a cross-tab import.
+// Package sysopen adapts bubblestack/sysopen for gdaddon: URL reduces an asset url to its
+// repo before opening.
 package sysopen
 
 import (
@@ -30,15 +27,14 @@ func TerminalInline(dir string) core.Action {
 	return bsysopen.TerminalInlineFor("gdaddon", dir)
 }
 
-// URL opens target in the default web browser. An addon url that points at a file (a
-// release asset, a source archive) is first reduced to its repo host via source.RepoURL
-// — the browser should land on the repo, not download the asset.
+// URL opens target in the browser, reducing a file url (release asset, archive) to its
+// repo first.
 func URL(target string) core.Action {
 	if target == "" {
 		return core.SetStatusAndLog("no source url")
 	}
 	if path.Ext(target) != "" {
-		host, err := source.RepoURL(target) // think this only handles repos, not asset store
+		host, err := source.RepoURL(target)
 		if err != nil {
 			return core.SetStatusAndLog("could not get host of url: " + target)
 		}

@@ -3,7 +3,6 @@ package addon
 import (
 	"context"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/brohd11/gdaddon/internal/source"
@@ -42,9 +41,8 @@ type UpdateInfo struct {
 	LatestTag string // the latest release's tag, when known
 }
 
-// CheckUpdate reports an update only when a published candidate is semantically
-// newer. An exact asset match proves current release identity; otherwise missing
-// or uncomparable versions report UpdateUnknown rather than guessing from order.
+// CheckUpdate reports an update only for a semantically newer release. An exact asset
+// match proves the current release; missing or uncomparable versions report UpdateUnknown.
 func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	if a.URL == "" {
 		return UpdateInfo{}
@@ -54,15 +52,11 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	if a.IsGitWorkdir() {
 		return UpdateInfo{}
 	}
-	// A commit-pinned package is a frozen snapshot chosen deliberately; a sha has no
-	// semver "latest" to compare, and its recorded plugin.cfg version must not nag
-	// against newer releases. Re-pinning is just re-installing the branch.
+	// A commit-pinned package is a deliberate snapshot with nothing to compare against.
 	if a.Commit != "" {
 		return UpdateInfo{}
 	}
-	// A locked entry is pinned by the user: don't check (or flag) updates for it. Short
-	// circuit before the network fetch and report UpdateLocked — no marker, but
-	// distinguishable from an unresolvable UpdateUnknown.
+	// Locked entries skip the network and report UpdateLocked (distinct from Unknown).
 	if a.IsLocked() {
 		return UpdateInfo{State: UpdateLocked}
 	}
@@ -73,12 +67,9 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	return UpdateInfo{State: state, LatestTag: latest.Tag}
 }
 
-// walkUpdate is the shared release-listing walk behind CheckUpdate and ResolveUpdate:
-// fetch the addon's releases and classify the pinned url against the latest one,
-// handing back that release for the caller's tag/asset use. UpdateUnknown covers
-// every can't-tell case — fetch error, no releases, a branch-tracked url (HEAD has no
-// release tag to compare against), uncomparable versions — so neither caller flags a
-// false update.
+// walkUpdate fetches the releases and classifies the pinned url against the latest,
+// returning that release. Anything undecidable (fetch error, no releases, branch url,
+// uncomparable versions) is UpdateUnknown.
 func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 	// These exclusions apply equally to prompts and bulk update plans.
 	if a.IsGitWorkdir() || a.Commit != "" || a.IsLocked() {
@@ -135,10 +126,8 @@ func releaseForURL(url string, releases []source.Release) (source.Release, bool)
 	return source.Release{}, false
 }
 
-// currentByVersion compares the addon's installed identifier (prefer its tag, else
-// its plugin.cfg version) against latestTag with semver >=. ok is false when neither
-// side is a comparable semantic version (a date stamp, no version, …) so the
-// caller can leave the result unknown rather than flag a false update.
+// currentByVersion compares the installed tag (or config version) with latestTag by
+// semver; ok is false when neither is comparable.
 func currentByVersion(a Addon, latestTag string) (current, ok bool) {
 	installed := a.Tag
 	if installed == "" {
@@ -150,10 +139,8 @@ func currentByVersion(a Addon, latestTag string) (current, ok bool) {
 	return semverGE(installed, latestTag)
 }
 
-// UpdatePlan is a resolved instruction to update one addon: the addon as it
-// stands in the manifest, the version it's on now, and the latest release's tag
-// plus the asset to install for it. Produced by ResolveUpdate, consumed by
-// UpdateAll (and rendered in the update-all confirm).
+// UpdatePlan is one update to perform: the addon, its current version, and the latest tag
+// and asset. Produced by ResolveUpdate, consumed by UpdateAll.
 type UpdatePlan struct {
 	Addon      Addon
 	OldVersion string
@@ -170,13 +157,9 @@ const (
 	ResolveAmbiguous                         // a newer release exists but several uploaded packages make the asset choice ambiguous
 )
 
-// ResolveUpdate fetches the addon's release listing and, when a newer release than the
-// installed one exists, returns the plan to install it. The target asset is chosen by
-// source.AutoAsset (prefer the uploaded package, else the generated source archive) — the
-// same selector as Install latest. It returns ResolveNone when the addon is already on the
-// latest release, is branch-tracked, locked, has no comparable releases, or can't be
-// fetched (so it never plans a no-op update), and ResolveAmbiguous when a newer release
-// exists but has two or more uploaded packages (no user to pick — the caller logs & skips).
+// ResolveUpdate returns a plan when a newer release exists, choosing its asset with
+// source.AutoAsset. ResolveNone covers up to date, branch-tracked, locked, uncomparable and
+// unfetchable; ResolveAmbiguous a newer release with several uploads.
 func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePlan, UpdateResolution) {
 	if a.URL == "" {
 		return UpdatePlan{}, ResolveNone
@@ -201,9 +184,8 @@ func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePla
 	return UpdatePlan{Addon: a, OldVersion: localVersion, NewTag: latest.Tag, Asset: asset}, ResolvePlan
 }
 
-// uploadedCount counts a release's author-uploaded assets (excluding the host's
-// generated source archive) — used to tell an ambiguous release (2+ uploads) from an
-// empty one when source.AutoAsset returns ok=false.
+// uploadedCount counts a release's uploaded assets (not the generated archive), to tell
+// ambiguous from empty.
 func uploadedCount(rel source.Release) int {
 	n := 0
 	for _, a := range rel.Assets {
@@ -214,17 +196,11 @@ func uploadedCount(rel source.Release) int {
 	return n
 }
 
-// maxConcurrentChecks caps how many release-listing fetches forInstalled runs at
-// once, so a large manifest can't fire hundreds of parallel requests (and trip host
-// rate limits). For a typical manifest it's effectively parallel.
+// maxConcurrentChecks caps concurrent release fetches (host rate limits).
 const maxConcurrentChecks = 8
 
-// forInstalled runs fn concurrently over every installed, url-bearing addon in
-// statuses and collects the results fn keeps (ok == true). Not-installed or url-less
-// entries are skipped (nothing to compare). It's the shared fan-out behind
-// CheckUpdates and ResolveUpdatePlans; fn honors ctx (cancel/deadline) itself so a
-// slow host can't stall the caller, and in-flight fetches are capped at
-// maxConcurrentChecks. Result order is unspecified — callers that need determinism sort.
+// forInstalled runs fn concurrently (capped) over installed, url-bearing addons and
+// collects the kept results, in no particular order. fn honors ctx.
 func forInstalled[T any](statuses []Status, fn func(a Addon, local string) (T, bool)) []T {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -250,9 +226,8 @@ func forInstalled[T any](statuses []Status, fn func(a Addon, local string) (T, b
 	return out
 }
 
-// CheckUpdates resolves the update state of every installed, url-bearing addon in
-// statuses concurrently, keyed by addon name. Each entry runs the same CheckUpdate a
-// single addon uses; ctx bounds the whole batch.
+// CheckUpdates returns each installed addon's CheckUpdate result by name; ctx bounds the
+// batch.
 func CheckUpdates(ctx context.Context, statuses []Status) map[string]UpdateInfo {
 	type nameInfo struct {
 		name string
@@ -275,13 +250,9 @@ type SkippedUpdate struct {
 	Tag  string
 }
 
-// ResolveUpdatePlans inspects the manifest and resolves an update plan for every
-// installed addon that has a newer release than the one installed. Not-installed
-// or url-less entries are skipped (nothing to compare). Fetches run concurrently
-// and honor ctx (cancel/deadline) so a slow host can't stall the caller. It also
-// returns the addons that have a newer release but an ambiguous asset choice (2+
-// uploaded packages), so the caller can report them for a manual update. Both slices
-// are name-sorted for deterministic output.
+// ResolveUpdatePlans returns update plans for installed addons with newer releases, plus
+// those whose newer release has an ambiguous asset. Fetches run concurrently under ctx;
+// both lists are sorted by name.
 func ResolveUpdatePlans(ctx context.Context, manifestPath, baseDir string) ([]UpdatePlan, []SkippedUpdate, error) {
 	statuses, err := Inspect(manifestPath, baseDir)
 	if err != nil {
@@ -317,10 +288,8 @@ func ResolveUpdatePlans(ctx context.Context, manifestPath, baseDir string) ([]Up
 	return plans, skipped, nil
 }
 
-// UpdateAll installs each plan's target asset under baseDir and pins the new
-// url/path/version back into the manifest, reporting progress per addon. Plans
-// come from ResolveUpdate; an empty slice is a no-op. A single addon's failure is
-// reported and skipped so the rest still update.
+// UpdateAll installs each plan and pins the result, reporting progress; one failure does
+// not stop the rest.
 func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, baseDir string, report Reporter) ([]InstallOutcome, error) {
 	var outcomes []InstallOutcome
 	for _, p := range plans {
@@ -340,7 +309,7 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 		if res.Path != "" {
 			version := res.Version
 			if version == "" {
-				version = strings.TrimPrefix(p.NewTag, "v")
+				version = TagVersion(p.NewTag)
 			}
 			if err := UpdateEntry(manifestPath, a.Name, p.Asset.URL, res.Path, version, p.NewTag); err != nil {
 				report("[%s] Error pinning manifest: %v", a.Label(), err)
@@ -358,10 +327,8 @@ func UpdateAll(ctx context.Context, manifestPath string, plans []UpdatePlan, bas
 	return outcomes, nil
 }
 
-// LatestRelease picks the highest semantic stable release, falling back to
-// prereleases only when no stable releases exist. Within the eligible group,
-// uncomparable tags are used only when there are no semantic tags; ties retain
-// input order. Provider flags and semantic prerelease suffixes both count.
+// LatestRelease picks the highest semantic stable release, else prereleases. Uncomparable
+// tags count only without semantic ones; ties keep input order.
 func LatestRelease(releases []source.Release) (source.Release, bool) {
 	var best source.Release
 	found := false

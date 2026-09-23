@@ -19,9 +19,8 @@ func SupportsTags(rawURL string) bool {
 	return ok && rule.Tags.URL != "" && rule.SourceArchive.URL != ""
 }
 
-// Tags lists actual Git tags as generated source packages, in provider order.
-// These are deliberately separate from AvailableVersions: unpublished tags must
-// never become automatic update or latest-release candidates.
+// Tags lists git tags as generated source packages, kept apart from AvailableVersions so
+// unpublished tags never become update candidates.
 func Tags(ctx context.Context, rawURL string) ([]Release, error) {
 	ref, err := parseRepoURL(rawURL)
 	if err != nil {
@@ -62,9 +61,9 @@ func Tags(ctx context.Context, rawURL string) ([]Release, error) {
 	return tags, nil
 }
 
-// ResolveTag prefers a published release, including one beyond the first page.
-// Only when no release matches does it resolve a tag's generated source package.
-// An API failure must not silently replace a potentially compiled release with source.
+// ResolveTag prefers a published release (searching past the first page), falling back to
+// the tag's source package only when none matches. An API failure is an error, never a
+// silent switch to source.
 func ResolveTag(ctx context.Context, rawURL, tag string) (Release, error) {
 	if tag == "" {
 		return Release{}, fmt.Errorf("a tag is required")

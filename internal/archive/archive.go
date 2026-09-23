@@ -1,8 +1,6 @@
-// Package archive keeps a local copy of installed package zips so an addon can
-// still be reinstalled after its upstream repo is delisted or deleted. Packages
-// are stored under a configurable directory (default ~/.gdaddon/archive), one
-// folder per repo and a subfolder per version, and surfaced back into the version
-// listing as " (archived)" assets with local-file URLs.
+// Package archive keeps local copies of installed package zips (default
+// ~/.gdaddon/archive, per repo and version) so addons can be reinstalled after the
+// upstream disappears. They reappear in version listings as " (archived)" assets.
 package archive
 
 import (
@@ -24,10 +22,8 @@ import (
 // ArchivedSuffix marks an asset name as coming from the local archive.
 const ArchivedSuffix = " (archived)"
 
-// Logf, when set, receives non-fatal archive problems (a failed index.yml refresh —
-// the index is a human-readable cache, not load-bearing, so it must not fail the
-// store/remove it rode along with, but it shouldn't vanish silently either). The TUI
-// wires it to its log pane; nil in non-TUI use.
+// Logf receives non-fatal archive problems (an index.yml refresh failure); the TUI sends
+// them to its log. nil elsewhere.
 var Logf func(format string, args ...any)
 
 // Dir resolves the archive root: ~/.gdaddon/config/config.yml's archive_dir if set,
@@ -86,9 +82,8 @@ func Archive(ctx context.Context, repoID, tag string, asset source.Asset) error 
 	}
 	defer resp.Body.Close()
 
-	// A commit-pinned branch package has no release tag; fold the sha into the tag
-	// dir (<branch>@<sha>) so distinct commits of the same branch don't overwrite and
-	// listDir can recover the pin. cleanAssetName leaves the filename (the branch name).
+	// A commit-pinned branch package stores under "<branch>@<sha>", so commits do not collide
+	// and listDir can recover the pin.
 	storeTag := tag
 	if asset.Commit != "" {
 		storeTag = tag + "@" + asset.Commit
@@ -103,9 +98,7 @@ func Archive(ctx context.Context, repoID, tag string, asset source.Asset) error 
 // split a commit-pinned branch package's tag dir back into branch + sha.
 var shaTag = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 
-// parseArchiveTag splits a tag-dir name into its release/branch tag and (for a
-// commit-pinned branch package stored as "<branch>@<sha>") the recovered commit sha.
-// A dir without a sha suffix returns (dir, "") unchanged.
+// parseArchiveTag splits "<branch>@<sha>" into tag and commit; other names return (dir, "").
 func parseArchiveTag(dir string) (tag, commit string) {
 	if i := strings.LastIndex(dir, "@"); i != -1 && shaTag.MatchString(dir[i+1:]) {
 		return dir[:i], dir[i+1:]
@@ -120,9 +113,8 @@ func cleanAssetName(name string) string {
 	return filepath.Base(name)
 }
 
-// RemoveRepo deletes all archived packages for a repo (its <root>/<repoDir>
-// folder) and refreshes index.yml. A missing folder is a no-op. Standalone so a
-// future archive-cleaning tool can reuse it.
+// RemoveRepo deletes all archived packages for a repo and refreshes index.yml; missing is a
+// no-op.
 func RemoveRepo(repoID string) error {
 	root, err := Dir()
 	if err != nil {
@@ -135,9 +127,8 @@ func RemoveRepo(repoID string) error {
 	return nil
 }
 
-// List returns the archived packages for a repo as releases (newest tag first),
-// each asset named with the archived suffix and a local-file URL. A missing
-// archive returns (nil, nil).
+// List returns a repo's archived packages as releases (newest first) with local-file urls;
+// (nil, nil) when none.
 func List(repoID string) ([]source.Release, error) {
 	root, err := Dir()
 	if err != nil {
@@ -146,9 +137,7 @@ func List(repoID string) ([]source.Release, error) {
 	return listDir(filepath.Join(root, repoDir(repoID)))
 }
 
-// listDir reads one repo folder (<root>/<repoDir>) into releases, newest tag
-// first; a missing folder returns (nil, nil). Shared by List (keyed by repoID)
-// and Repos (which walks every folder directly).
+// listDir reads one repo folder into releases, newest first; (nil, nil) when missing.
 func listDir(base string) ([]source.Release, error) {
 	tagDirs, err := os.ReadDir(base)
 	if err != nil {
@@ -188,10 +177,8 @@ func listDir(base string) ([]source.Release, error) {
 	return releases, nil
 }
 
-// RepoArchive is one repo's worth of archived packages, as surfaced by Repos.
-// ID is a display label derived from the on-disk folder ('_' -> '/', best-effort
-// and lossy if a repo segment itself contains '_'); it is for display only. The
-// authoritative key for removal is each asset's local path (source.Asset.URL).
+// RepoArchive is one repo's archived packages. ID is a lossy display label from the folder
+// name; asset paths are the real key.
 type RepoArchive struct {
 	ID       string
 	Releases []source.Release
@@ -230,9 +217,8 @@ func Repos() ([]RepoArchive, error) {
 	return repos, nil
 }
 
-// Remove deletes one archived asset by its absolute path (the local URL carried
-// by List/Repos assets), then prunes the tag folder and repo folder if they were
-// left empty, and refreshes index.yml. Pruning stops at the archive root.
+// Remove deletes one archived asset by path, prunes empty folders up to the root, and
+// refreshes index.yml.
 func Remove(path string) error {
 	if err := os.Remove(path); err != nil {
 		return err
@@ -256,19 +242,16 @@ func Remove(path string) error {
 	return nil
 }
 
-// refreshIndex regenerates index.yml after a store/remove, reporting a failure
-// through Logf rather than failing the (already successful) operation — the index
-// is a human-readable cache, not load-bearing (List reads the directory tree).
+// refreshIndex rewrites index.yml, reporting failures through Logf: the index is only a
+// readable cache.
 func refreshIndex(root string) {
 	if err := writeIndex(root); err != nil && Logf != nil {
 		Logf("archive: index refresh failed: %v", err)
 	}
 }
 
-// Merge folds archived releases into a GitHub listing: archived assets are
-// appended to a release with a matching tag, otherwise the archived release is
-// added on its own. A nil listing yields an archive-only listing (used when the
-// upstream fetch failed but the archive has packages).
+// Merge adds archived releases to a listing (joining matching tags); a nil listing yields
+// an archive-only one.
 func Merge(listing *source.Listing, archived []source.Release) *source.Listing {
 	if listing == nil {
 		listing = &source.Listing{}

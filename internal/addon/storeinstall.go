@@ -7,14 +7,10 @@ import (
 	"github.com/brohd11/gdaddon/internal/store"
 )
 
-// storeInstall installs an Asset Store entry: resolve the store-hosted release zip
-// for the entry's pinned release (the newest stable when none is pinned) from the
-// canonical url, download and unwrap it (fetchZip handles any url, skipping
-// fetchToStaging's .zip/.git suffix gate), then place it like a normal package. The
-// release is selected by the entry's tag (the store release identity, e.g. "v3.10.2"),
-// falling back to the older version field for manifests predating the tag split. The
-// recorded version comes from the installed plugin.cfg (the "v"-stripped release id
-// when the package ships no config).
+// storeInstall installs an Asset Store entry: resolve the release zip for its tag (else
+// the older version field, else the newest stable), download and unwrap it with fetchZip,
+// and place it like a package. The version comes from the installed config (or the
+// release id without "v").
 func storeInstall(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	id, err := store.AssetID(a.URL)
 	if err != nil {

@@ -1,20 +1,15 @@
 package config
 
-// DefaultConfig is the general config dumped on first run (config.yml): the
-// default archive dir. Add future general knobs here so Ensure picks them up. The
-// provider rules are dumped separately from DefaultSources (sources.yml); the TUI
-// theme lives in the framework-wide ~/.bubblestack/config.yml, not here.
+// DefaultConfig is the config.yml written on first run.
 func DefaultConfig() *Config {
 	return &Config{
 		ArchiveDir: "~/.gdaddon/archive",
 	}
 }
 
-// DefaultSources are the built-in provider rules. They use the same schema as
-// user entries, so the dumped file doubles as a worked example. GitHub carries
-// both a search rule and its github.com vcs rule; Codeberg is vcs-only (no search
-// backend yet). The Asset Store stays a hard-coded Go backend (its HTML scrape
-// can't be expressed here) and is appended by internal/search, not listed here.
+// DefaultSources are the built-in provider rules, in the user schema so the written file
+// is an example. GitHub has search and vcs rules, Codeberg vcs only. The Asset Store is a
+// Go backend added by internal/search.
 func DefaultSources() []SourceConfig {
 	return []SourceConfig{
 		{

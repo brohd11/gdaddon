@@ -13,14 +13,9 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// newScanPicker scans the project for installed plugin folders not tracked in the
-// manifest and lists them; selecting one opens the Track form (path/name prefilled,
-// url suggested when an existing pathless entry matches) to start tracking it.
-// Scanning is filesystem-only, so the picker is built synchronously.
-//
-// The picker is a PopTo boundary (a command hub) and re-scans on ProjectDirty: after
-// tracking a plugin, commitTrack broadcasts ProjectDirty (rebuilding the rows so the
-// just-tracked plugin drops off) then PopTo lands back here, ready to track the rest.
+// newScanPicker lists installed plugin folders the manifest does not track; picking one
+// opens the Track form. It is a PopTo hub that re-scans on ProjectDirty, so tracked
+// plugins drop off and you return here for the rest.
 func newScanPicker(sh *core.Shared) *components.PickerScreen {
 	return components.NewPicker(scanItems(sh), components.PickerOpts{
 		Crumb:   "Scan",

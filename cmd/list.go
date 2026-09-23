@@ -49,15 +49,9 @@ func runListCmd(cmd *cobra.Command, args []string) error {
 	return runList(projectRoot, listJSON, listUpdates)
 }
 
-// runList is the read-only path: discover the manifest, inspect it, and print each
-// addon's local state and version. The flags are parameters rather than package globals
-// so the printers have exactly one source of truth for them.
+// runList inspects the manifest and prints each addon's state and version.
 func runList(projectRoot string, asJSON, withUpdates bool) error {
-	manifest, err := discoverManifest(projectRoot)
-	if err != nil {
-		return err
-	}
-	statuses, err := addon.Inspect(manifest, projectRoot)
+	_, statuses, err := inspectManifest(projectRoot)
 	if err != nil {
 		return err
 	}
@@ -72,10 +66,7 @@ func runList(projectRoot string, asJSON, withUpdates bool) error {
 	return nil
 }
 
-// printListTable renders the human-readable status table. With withUpdates it grows an
-// update= column from the same network check the JSON path uses — the flag used to be
-// silently ignored without --json, which is exactly the kind of surprise this surface
-// is meant to be free of.
+// printListTable renders the status table, with an update= column under --updates.
 func printListTable(statuses []addon.Status, withUpdates bool) {
 	checks := resolveUpdateStates(statuses, withUpdates)
 	for _, s := range statuses {
@@ -121,10 +112,8 @@ type listEntryJSON struct {
 	Orphan        bool   `json:"orphan"`        // an is_dependency entry nothing installed still requires
 	Update        string `json:"update"`        // unknown/current/available
 	LatestTag     string `json:"latest_tag"`
-	// Ahead/Behind are a git checkout's divergence from its upstream (0 for everything
-	// else). They're read locally from the remote-tracking refs, so they cost nothing —
-	// but for the same reason they're only as current as the last `git fetch` in that
-	// checkout; gdaddon never fetches on a list.
+	// Ahead/Behind are a checkout's divergence from upstream (0 otherwise), read locally, so
+	// only as current as the last fetch; list never fetches.
 	Ahead       int           `json:"ahead"`
 	Behind      int           `json:"behind"`
 	MissingDeps []missDepJSON `json:"missing_deps"`
@@ -155,9 +144,8 @@ func resolveUpdateStates(statuses []addon.Status, withUpdates bool) map[string]a
 	return addon.CheckUpdates(context.Background(), statuses)
 }
 
-// updateStateFor is one addon's update state and latest tag. Lock is a local fact (no
-// network), so a locked entry reports "locked" with or without --updates; everything
-// else stays "unknown" until the network check has run.
+// updateStateFor returns one addon's update state and latest tag. Lock needs no network,
+// so locked entries always report "locked"; others are "unknown" without --updates.
 func updateStateFor(s addon.Status, checks map[string]addon.UpdateInfo, withUpdates bool) (state, latestTag string) {
 	switch {
 	case s.Addon.Lock:
@@ -169,9 +157,8 @@ func updateStateFor(s addon.Status, checks map[string]addon.UpdateInfo, withUpda
 	return addon.UpdateUnknown.String(), ""
 }
 
-// printListJSON marshals the inspected statuses as a JSON array to stdout. It's
-// local-only unless withUpdates is set, in which case each addon's update state
-// is resolved over the network. The array is always valid JSON ("[]" when empty).
+// printListJSON prints the statuses as a JSON array ("[]" when empty), checking updates
+// over the network only with --updates.
 func printListJSON(statuses []addon.Status, projectRoot string, withUpdates bool) error {
 	manifestAddons := make([]addon.Addon, 0, len(statuses))
 	for _, s := range statuses {

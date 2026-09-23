@@ -1,12 +1,7 @@
-// Package store is the Godot Asset Store (store.godotengine.org) backend: the
-// canonical-URL helpers and the releases API client shared by the installer
-// (internal/addon), the search backend (internal/search), and the TUI browse flow
-// (internal/tui/flows/packages). A store asset is identified in the manifest by its
-// canonical URL "https://store.godotengine.org/<publisher>/<slug>"; the actual
-// download is resolved from the API at install/browse time. It imports only
-// internal/source (for the shared Listing/Release/Asset shapes), internal/restrule
-// (the shared authenticated JSON GET), and the stdlib, so it sits below the
-// consumers with no cycles.
+// Package store is the Godot Asset Store backend: canonical-url helpers and the releases
+// client used by the installer, search and the TUI. An asset's manifest identity is
+// "https://store.godotengine.org/<publisher>/<slug>"; downloads are resolved at install
+// time.
 package store
 
 import (
@@ -85,10 +80,8 @@ func PickStable(releases []Release) (Release, bool) {
 	return rel, true
 }
 
-// Listing fetches an asset's releases and maps them to the shared source.Listing
-// shape so the standard version picker and archive can consume store versions
-// unchanged. Each release becomes a tagged release with a single synthesized .zip
-// asset pointing at the store download URL.
+// Listing maps an asset's releases to source.Listing (one synthesized .zip asset each), so
+// the version picker and archive work unchanged.
 func Listing(ctx context.Context, rawURL string) (*source.Listing, error) {
 	id, err := AssetID(rawURL)
 	if err != nil {

@@ -1,26 +1,17 @@
-// Package appctx holds gdaddon's domain-specific TUI context: the manifest/project
-// paths the tabs operate on, the persistent header that renders them, the tab titles,
-// and the Dirty notification payloads the tab roots react to. It is the one place that wires
-// the domain to the otherwise agnostic core/components framework — it lives in its
-// own leaf package so both the tui package (which imports the tabs) and the tabs
-// can read the context without an import cycle.
+// Package appctx is gdaddon's TUI context: project paths, the header, tab titles and the
+// Dirty payloads. A leaf package, so the tui package and the tabs can both use it.
 package appctx
 
 import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/archive"
 
-	tea "charm.land/bubbletea/v2"
-	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
-	bsupdate "github.com/brohd11/bubblestack/selfupdate"
 	"github.com/brohd11/gitstack/repo"
-	"github.com/brohd11/gitstack/repoui"
 )
 
 // Ctx is the consumer context stored on core.Shared.App. Tabs recover it with Of.
@@ -39,64 +30,38 @@ type Ctx struct {
 	projectStatuses []addon.Status
 	projectLoaded   bool
 
-	// LastSearchQuery is the most recent Search tab query. Session-only (not
-	// persisted): it keeps the search form filled across tab navigation but resets
-	// on a fresh launch. The Search tab reads it to prefill and writes it on submit.
+	// LastSearchQuery keeps the search form filled across navigation (session only).
 	LastSearchQuery string
 
-	// Compact is the session density shared by standard root lists and pickers
-	// through ListDensity: false is expanded, true is one row per item. The
-	// preference is restored and saved by bubblestack.Run in its shared config.
+	// Compact is the session list density shared through ListDensity (true is one row per
+	// item), saved by bubblestack.Run.
 	Compact bool
 
-	// UpdateChecks caches the project list's per-addon update-check results,
-	// keyed by addon name. It's populated asynchronously (network) by the Project
-	// tab and refreshed after a ProjectDirty/PathRefresh; the list reads it back
-	// to draw the "update available" marker. A missing key reads as a zero
-	// UpdateInfo (UpdateUnknown), i.e. no marker.
+	// UpdateChecks caches per-addon update results by name, filled asynchronously and read by
+	// the Project list's marker. Missing keys mean UpdateUnknown.
 	UpdateChecks map[string]addon.UpdateInfo
 
-	// DepStatuses caches every dependency each project addon declares, keyed by addon
-	// name (only addons that declare deps appear), each with its install state. Unlike
-	// UpdateChecks it's local-only (compares declared addon-config dependencies against the
-	// inspected project), so it's recomputed synchronously in loadProject on every
-	// refresh. The list reads the "needs attention" subset (unsuppressed && not
-	// installed) to draw the "missing deps" marker; the per-addon submenu gates its
-	// "Dependencies" item on declaring any at all; the Dependencies screen renders the
-	// full per-dep status.
+	// DepStatuses caches each addon's declared dependencies and their state by name
+	// (recomputed locally in loadProject), for the missing-deps marker, the Dependencies row
+	// and screen.
 	DepStatuses map[string][]addon.DepStatus
 
-	// GitDirty marks each clone entry whose git working tree has uncommitted
-	// changes, keyed by addon name (only dirty clones appear). Local-only like
-	// DepStatuses, recomputed synchronously in loadProject; the Project list reads it
-	// to draw the "uncommitted changes" marker.
+	// GitDirty marks clone entries with uncommitted changes, by name, recomputed in
+	// loadProject.
 	GitDirty map[string]bool
 
-	// GitSync caches each present git checkout's divergence from its upstream, keyed by
-	// addon name (only checkouts that track an upstream appear). Local-only like GitDirty
-	// — it reads the remote-tracking refs git already has — so it recomputes in every
-	// loadProject. What it can't do is notice new upstream commits: those only land once
-	// the refs are updated, which is what the Project tab's fetch key (AppKeys.Fetch) is
-	// for. Until then the counts are as stale as git's own.
+	// GitSync caches each tracking checkout's divergence, by name, from local refs; new
+	// upstream commits appear only after a fetch.
 	GitSync map[string]addon.GitSync
 
-	// OrphanDeps marks each is_dependency-flagged entry no longer required by anything
-	// installed, keyed by addon name (only orphans appear). Local-only like DepStatuses,
-	// recomputed synchronously in loadProject; the Project list reads it to draw the
-	// "unused dependency" marker.
+	// OrphanDeps marks is_dependency entries nothing installed requires, by name.
 	OrphanDeps map[string]bool
 
-	// RootRepo is the Godot project's own git checkout, when the project root is one.
-	// It isn't a manifest entry, so the per-addon caches above don't cover it: it's
-	// re-described (branch/sync/dirty — all local reads) at the top of every loadProject,
-	// the header's Root line draws its status marker, the Project tab's fetch key always
-	// includes it, and the all-repos menu offers it behind an include-root toggle. Nil
-	// when the project root isn't a checkout.
+	// RootRepo is the project root's own checkout (nil if none), re-described each loadProject
+	// for the header, the fetch key and the batch menu's include-root toggle.
 	RootRepo *repo.Repo
 
-	// loadErrs collects real load failures from the last load pass (a malformed
-	// manifest, an unreadable global list) so the UI can surface them — a missing
-	// file is a legitimate empty state, not an error, and is never recorded.
+	// loadErrs collects real load failures (not missing files) for the UI to show.
 	loadErrs []string
 }
 
@@ -133,9 +98,7 @@ func (c *Ctx) loadArchive() {
 func (c *Ctx) loadProject() {
 	c.projectLoaded = true
 	c.projectStatuses = nil
-	// The root repo's state is a local read like GitDirty/GitSync, but it doesn't depend
-	// on the manifest: refresh it even when there is none, so the header's Root line
-	// stays current on New/RefreshProject and after git ops.
+	// Describe the root repo even without a manifest, so the header stays current.
 	if root, ok := repo.DescribeRoot(c.ProjectRoot); ok {
 		c.RootRepo = &root
 	} else {
@@ -166,31 +129,8 @@ func (c *Ctx) loadProject() {
 	c.refreshGitChecks(statuses)
 }
 
-// refreshGitChecks recomputes, for every present git-checkout entry (clone or submodule),
-// whether its working tree is dirty and how far it has diverged from its upstream. Both
-// are local reads (a `git status` and a `git rev-list` per checkout, no network), so they
-// ride loadProject alongside refreshDepChecks, reusing the shared inspected statuses.
-func (c *Ctx) refreshGitChecks(statuses []addon.Status) {
-	dirty := make(map[string]bool)
-	sync := make(map[string]addon.GitSync)
-	for _, s := range statuses {
-		if !s.Addon.IsGitWorkdir() || !s.Present() {
-			continue
-		}
-		if addon.HasUncommittedChanges(s.FullPath) {
-			dirty[s.Addon.Name] = true
-		}
-		if gs := addon.GitSyncStatus(s.FullPath); gs.Tracking {
-			sync[s.Addon.Name] = gs
-		}
-	}
-	c.GitDirty = dirty
-	c.GitSync = sync
-}
-
-// refreshDepChecks recomputes each addon's declared dependencies and their install
-// state against the freshly inspected project. Local-only and cheap (reads small
-// plugin.cfg files), so it rides every loadProject rather than needing its own async pass.
+// refreshDepChecks recomputes each addon's dependency states from the inspection (local
+// and cheap).
 func (c *Ctx) refreshDepChecks(statuses []addon.Status) {
 	checks := make(map[string][]addon.DepStatus)
 	for _, a := range c.ProjectAddons {
@@ -199,19 +139,6 @@ func (c *Ctx) refreshDepChecks(statuses []addon.Status) {
 		}
 	}
 	c.DepStatuses = checks
-}
-
-// RefreshAll broadcasts the four Dirty markers so every cached tab root reloads from
-// disk. The global Refresh key (Keys.Refresh, wired in tui.Run) and Actions ▸ Refresh
-// both return it.
-func RefreshAll() core.Action {
-	return core.Seq(
-		core.PropagateAll(ArchiveDirty{}),
-		core.PropagateAll(ProjectDirty{}),
-		core.PropagateAll(GlobalDirty{}),
-		core.PropagateAll(PathRefresh{}),
-		core.SetStatus("Refreshed"),
-	)
 }
 
 // RefreshGlobal reloads the cached global addon list from disk.
@@ -223,9 +150,7 @@ func (c *Ctx) RefreshArchive() { c.loadArchive() }
 // RefreshProject reloads the cached project addon list from disk.
 func (c *Ctx) RefreshProject() { c.loadProject() }
 
-// ProjectStatuses returns the cached local inspection, loading it once for hosts
-// that construct Ctx directly. Rows and scope menus must not re-inspect on redraw.
-// Callers must treat the returned slice as read-only.
+// ProjectStatuses returns the cached inspection, loading it once. Treat it as read-only.
 func (c *Ctx) ProjectStatuses() []addon.Status {
 	if !c.projectLoaded {
 		c.loadProject()
@@ -233,61 +158,8 @@ func (c *Ctx) ProjectStatuses() []addon.Status {
 	return c.projectStatuses
 }
 
-// RefreshRepo refreshes a known addon and enclosing checkout markers. Root
-// operations may change the manifest or package layout and retain a full reload.
-func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) {
-	if msg.Targets(c.ProjectRoot) {
-		c.loadProject()
-		return
-	}
-	statuses := c.ProjectStatuses()
-	known := false
-	for _, s := range statuses {
-		known = known || (s.Addon.IsGitWorkdir() && msg.Targets(s.FullPath))
-	}
-	if !known {
-		return
-	}
-	if c.GitDirty == nil {
-		c.GitDirty = make(map[string]bool)
-	}
-	if c.GitSync == nil {
-		c.GitSync = make(map[string]addon.GitSync)
-	}
-	for i, s := range statuses {
-		if !s.Addon.IsGitWorkdir() || !msg.Affects(s.FullPath) {
-			continue
-		}
-		if msg.Targets(s.FullPath) {
-			s = addon.InspectOne(s.Addon, c.ProjectRoot)
-			statuses[i] = s
-		}
-		delete(c.GitDirty, s.Addon.Name)
-		delete(c.GitSync, s.Addon.Name)
-		if s.Present() {
-			if addon.HasUncommittedChanges(s.FullPath) {
-				c.GitDirty[s.Addon.Name] = true
-			}
-			if sync := addon.GitSyncStatus(s.FullPath); sync.Tracking {
-				c.GitSync[s.Addon.Name] = sync
-			}
-		}
-	}
-	if c.RootRepo != nil && msg.Affects(c.RootRepo.Dir) {
-		root, ok := repo.DescribeRoot(c.ProjectRoot)
-		c.RootRepo = nil
-		if ok {
-			c.RootRepo = &root
-		}
-	}
-	c.refreshDepChecks(statuses)
-	c.OrphanDeps = addon.OrphanDeps(statuses)
-}
-
-// noteLoadErr records a load failure for the UI to surface (see DrainLoadErrs). A
-// missing file is a legitimate empty state (no manifest yet, no global list), not an
-// error, so it stays silent — anything else (a malformed YAML manifest, an
-// unreadable dir) must not pass for an empty project unnoticed.
+// noteLoadErr records a failure for DrainLoadErrs; a missing file is a valid empty state
+// and is ignored.
 func (c *Ctx) noteLoadErr(what string, err error) {
 	if err == nil || errors.Is(err, os.ErrNotExist) {
 		return
@@ -295,9 +167,8 @@ func (c *Ctx) noteLoadErr(what string, err error) {
 	c.loadErrs = append(c.loadErrs, what+": "+err.Error())
 }
 
-// DrainLoadErrs returns the load failures recorded since the last drain (and clears
-// them). Receive surfaces them on the status/log after every broadcast; the startup
-// hook drains the initial load (New runs before the router exists).
+// DrainLoadErrs returns and clears the recorded failures; Receive and the startup hook
+// show them.
 func (c *Ctx) DrainLoadErrs() []string {
 	errs := c.loadErrs
 	c.loadErrs = nil
@@ -308,11 +179,9 @@ func (c *Ctx) DrainLoadErrs() []string {
 // Project list to render.
 func (c *Ctx) SetUpdateChecks(m map[string]addon.UpdateInfo) { c.UpdateChecks = m }
 
-// Scan resolves the project's paths from the project root: it walks for the addon
-// manifest and derives the display fields (ManifestRel, ProjectName, HasProject). It's
-// the single source of path state, run synchronously at construction (New) and — via
-// RefreshPaths — after the manifest is created or otherwise changes. A missing manifest
-// leaves ManifestPath/ManifestRel empty (the header shows a bootstrap hint).
+// Scan finds the manifest under the project root and derives the display fields, at
+// construction and via RefreshPaths. A missing manifest leaves them empty (the header
+// shows a hint).
 func (c *Ctx) Scan() {
 	path, err := addon.FindManifest(c.ProjectRoot)
 	c.noteLoadErr("manifest search", err)
@@ -334,149 +203,13 @@ func (c *Ctx) Scan() {
 // reach ManifestPath/ProjectRoot.
 func Of(sh *core.Shared) *Ctx { return core.App[Ctx](sh) }
 
-// LockToggle flips the lock on name in the manifest at path and returns the new lock
-// state plus the past-tense verb ("locked"/"unlocked"). A SetLock error is returned
-// as-is (callers wrap it with core.StatusErr); the status line, dirty payload, and
-// rebuilt submenu differ between the project and set lock toggles and stay at the
-// call site.
-func LockToggle(path, name string, cur bool) (newLock bool, verb string, err error) {
-	newLock = !cur
-	if e := addon.SetLock(path, name, newLock); e != nil {
-		return false, "", e
-	}
-	verb = "locked"
-	if !newLock {
-		verb = "unlocked"
-	}
-	return newLock, verb, nil
-}
-
-// selfUpdateRepo is gdaddon's own GitHub repo slug, passed to the shared self-update library.
-const selfUpdateRepo = "brohd11/gdaddon"
-
-// SelfUpdateHooks builds the shared self-update flow's (bubblestack/components) hook set
-// for gdaddon: the app name, the running version, and goutil's self-update library aimed
-// at gdaddon's own repo and the running binary's directory. Built here so the startup
-// check below and the Actions ▸ Update gdaddon screen wire the same operations.
-//
-// The goutil wiring itself lives in bubblestack/selfupdate, which owns the (field-identical
-// by design) conversion between goutil's selfupdate.Info and the flow's app-agnostic
-// SelfUpdateInfo. The update lands wherever the running binary lives, so install.sh owns
-// binary placement and gdaddon has no opinion about it.
-func SelfUpdateHooks(version string) components.SelfUpdateHooks {
-	return bsupdate.Hooks("gdaddon", selfUpdateRepo, version)
-}
-
-// SelfUpdateCheckCmd is the app-level startup command (wired onto bubblestack
-// Config.Init): it checks gdaddon's own repo for a newer release off the UI thread
-// and, only when an update is available, writes an "update available" line to the
-// shared status line and log. Anything else (up to date, dev build, fetch error) is
-// silent. The flow and timeout are the shared ones in bubblestack/components; only
-// the hooks are gdaddon's.
-func SelfUpdateCheckCmd(sh *core.Shared) tea.Cmd {
-	return components.SelfUpdateCheckCmd(SelfUpdateHooks(Of(sh).Version))
-}
-
-// Receive handles App-level broadcasts (the router notifies App on every PropagateAll).
-// A theme change rebuilds the cached tab roots so each re-bakes its delegate/list styles
-// with the new palette (core.OnThemeChange) — gdaddon is fine reinstancing roots (they
-// reflect on-disk state, see RefreshProject/RefreshGlobal/RefreshArchive). Other payloads
-// (the Dirty markers) are handled by the individual tab roots, so App ignores them. Any
-// load failures the reloads just recorded are drained onto the status/log here — App is
-// notified last, after the roots have reloaded.
+// Receive handles App broadcasts: a theme change rebuilds the tab roots
+// (core.OnThemeChange); Dirty markers are left to the roots. Load failures recorded by the
+// reloads are shown here, since App is notified last.
 func (c *Ctx) Receive(sh *core.Shared, payload any) core.Action {
 	acts := []core.Action{core.OnThemeChange(payload)}
 	for _, e := range c.DrainLoadErrs() {
 		acts = append(acts, core.SetStatusAndLog(e))
 	}
 	return core.Seq(acts...)
-}
-
-// Tab titles, shared between the TabEntry wiring (in Run) and the ShowTab callers,
-// so the focus-grab in a Receive never duplicates a raw title literal that a rename
-// could silently desync.
-const (
-	TitleProject = "Project"
-	TitleGlobal  = "Global"
-	TitleSets    = "Sets"
-	TitleArchive = "Archive"
-	TitleActions = "Actions"
-	TitleSearch  = "Search"
-)
-
-// Dirty payloads are broadcast via core.PropagateAll after an out-of-band change.
-// They are pure "reload yourself" markers: the matching tab root recognizes its own
-// payload in Receive and reloads from disk. The visible outcome — the status line and
-// any focus switch — is composed at the call site with core.Seq (SetStatus / ShowTab
-// alongside the PropagateAll), so the payload carries no state.
-type (
-	ProjectDirty struct{}
-	GlobalDirty  struct{}
-	ArchiveDirty struct{}
-	// SetsDirty is broadcast after a set is created or deleted, so the pushed Sets
-	// submenu (Actions ▸ Sets) reloads its list from ~/.gdaddon/sets.
-	SetsDirty struct{}
-	// PathRefresh is broadcast after the manifest/project paths themselves change (e.g.
-	// a manifest was just created). Path-dependent roots — the Project list and the
-	// Actions menu — reload from the updated context; the header needs no notification
-	// (it reads straight from App each render).
-	PathRefresh struct{}
-)
-
-// GitRefresh retains the full local reload after batch git operations. It does
-// not trigger the network-bound release update check. Single-checkout tasks use
-// GitRepoRefresh instead.
-type GitRefresh = repoui.RefreshMsg
-
-// GitRepoRefresh identifies the single checkout changed by a git task.
-type GitRepoRefresh = repoui.RepoRefreshMsg
-
-// RefreshPaths re-runs Scan after the paths may have changed (e.g. a manifest was just
-// created). When async it defers the scan into a tea.Cmd that, once it runs, emits the
-// PathRefresh broadcast — so the scan completes before any Receiver (or the
-// live-reading header) reacts, with no router ordering or chrome plumbing. When sync it
-// just re-scans inline and returns no broadcast, for callers that run before anything
-// needs to reload. The status/focus that used to ride the broadcast are now composed
-// at the call site (core.Seq), so RefreshPaths only carries the reload.
-func RefreshPaths(sh *core.Shared, async bool) tea.Cmd {
-	if async {
-		return func() tea.Msg {
-			Of(sh).Scan()
-			return core.PropagateAll(PathRefresh{})
-		}
-	}
-	Of(sh).Scan()
-	return nil
-}
-
-// Header renders gdaddon's persistent context box (Project / Root / Manifest). It is
-// wired onto core.Chrome.Header in Run, so the agnostic router draws it on every
-// screen without naming any domain type.
-func Header(sh *core.Shared) string {
-	c := Of(sh)
-	name := "No Project File"
-	if c.HasProject {
-		name = c.ProjectName
-		if name == "" {
-			name = "(unnamed project)"
-		}
-	}
-	valWidth := core.HeaderValueWidth(sh.Width(), "Manifest: ")
-	line := func(label, value string) string {
-		return core.Label(label) + core.Value(core.TruncLeft(value, valWidth))
-	}
-	manifest := c.ManifestRel
-	if manifest == "" {
-		manifest = "(none — Actions ▸ Create manifest)"
-	}
-	// The project root's own repo isn't a manifest entry, so its status marker rides
-	// the Root line after the path; RootLineValue shrinks the path's truncation budget by
-	// the marker's rendered width so the line still fits the box.
-	rootValue := repoui.RootLineValue(c.ProjectRoot, c.RootRepo, valWidth)
-	body := strings.Join([]string{
-		core.Label("Project:  ") + core.Value(name),
-		core.Label("Root:     ") + core.Value(rootValue),
-		line("Manifest: ", manifest),
-	}, "\n")
-	return core.HeaderBox(sh.Width(), body)
 }

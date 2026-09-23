@@ -1,8 +1,5 @@
-// Package search is the Search tab: query a Godot asset source, browse results,
-// and hand a chosen asset to the shared New Plugin flow with its repo URL
-// prefilled. The actual querying lives in the source-agnostic internal/search
-// package (imported here as searchpkg); adding a new backend there makes it
-// appear in this tab's source selector with no changes here.
+// Package search is the Search tab: query an asset source and hand a chosen asset to the
+// Add Plugin flow. Backends live in internal/search.
 package search
 
 import (

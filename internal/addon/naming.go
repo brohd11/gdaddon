@@ -8,16 +8,10 @@ import (
 	"github.com/brohd11/gdaddon/internal/store"
 )
 
-// EntryKey is the manifest key a newly recorded entry takes: the addon's canonical
-// identity, "<host>/<owner>/<repo>" — github.com/brohd11/gdaddon, or
-// store.godotengine.org/<publisher>/<slug> for an Asset Store package. The key is what
-// every lookup and write addresses, so making it the identity means re-recording the
-// same repo finds the same entry no matter what the addon calls itself, and renaming a
-// plugin never strands its entry.
-//
-// A url with no parseable identity falls back to DeriveName, which is exactly what
-// every caller recorded before this existed. Nothing migrates: a hand-written or legacy
-// key is a perfectly good key and is never rewritten.
+// EntryKey is a new entry's manifest key: its canonical identity "<host>/<owner>/<repo>"
+// (or store.godotengine.org/<publisher>/<slug>), so re-recording a repo finds the same
+// entry whatever the addon calls itself. Unparseable urls fall back to DeriveName; existing
+// keys are never rewritten.
 func EntryKey(rawURL string) string {
 	if store.IsStoreURL(rawURL) {
 		if id, err := store.AssetID(rawURL); err == nil {
@@ -30,9 +24,8 @@ func EntryKey(rawURL string) string {
 	return DeriveName(rawURL)
 }
 
-// DeriveName extracts a plugin name from a repo URL: the last path segment with
-// any .git/.zip suffix stripped (e.g. github.com/u/Foo.git → "Foo"). Falls back
-// to "plugin" if nothing usable is found.
+// DeriveName returns a url's last path segment without .git/.zip ("Foo" from
+// github.com/u/Foo.git), or "plugin".
 func DeriveName(rawURL string) string {
 	name := rawURL
 	if u, err := url.Parse(rawURL); err == nil && u.Path != "" {
@@ -56,9 +49,14 @@ func DefaultPath(name string) string {
 	return "addons/" + name
 }
 
-// NormalizeRepoURL makes a typed repo URL installable: a bare github repo URL
-// (no .git/.zip suffix) gets ".git" appended so Install-all can clone it and the
-// version picker can still parse it. Explicit .zip/.git URLs pass through.
+// CloneURL is the https .git url a clone install of repoID (host/owner/repo) records.
+func CloneURL(repoID string) string { return "https://" + repoID + ".git" }
+
+// TagVersion is the version a release tag names: the tag without a leading "v".
+func TagVersion(tag string) string { return strings.TrimPrefix(tag, "v") }
+
+// NormalizeRepoURL appends ".git" to a bare repo url so it can be cloned and still parsed;
+// .zip and .git urls pass through.
 func NormalizeRepoURL(rawURL string) string {
 	trimmed := strings.TrimRight(rawURL, "/")
 	if strings.HasSuffix(trimmed, ".git") || strings.HasSuffix(trimmed, ".zip") {

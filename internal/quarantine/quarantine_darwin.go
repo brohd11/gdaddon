@@ -11,15 +11,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Clear removes com.apple.quarantine from every non-hidden entry under root.
-//
-// Hidden directories are pruned rather than walked: an addon's .git holds thousands
-// of mode-0444 objects that never carry the attribute, and removing an xattr needs
-// write permission, so descending into them yields nothing but EACCES noise. The
-// binaries Gatekeeper actually blocks are never inside one.
-//
-// A per-entry failure is counted, not fatal — only an unreadable root aborts the
-// walk. ctx cancellation (the task's esc-abort) stops it promptly.
+// Clear removes com.apple.quarantine from every non-hidden entry under root. Hidden
+// directories (.git) are skipped: their read-only objects only produce errors and never
+// hold blocked binaries. Per-entry failures are counted; only an unreadable root aborts.
+// ctx stops it.
 func Clear(ctx context.Context, root string) (Result, error) {
 	var res Result
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

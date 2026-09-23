@@ -1,8 +1,6 @@
-// Package packages is a shared, domain-aware browsing flow: the navigation chain
-// repo → versions → asset → per-package action, reused by more than one tab. Each
-// caller parameterizes it with a BrowseOpts (where versions are drawn from, whether
-// to offer branch HEADs, and the per-package command menu), so the navigation is
-// shared while the leaf action differs (Archive tab → Remove, Global → Add to archive).
+// Package packages is the shared browse flow repo → versions → asset → action.
+// BrowseOpts sets the version source, HEAD rows and the leaf action (Archive tab: Remove;
+// Global: Add to archive).
 package packages
 
 import (
@@ -35,9 +33,8 @@ const (
 	SourceAll                   // upstream releases + archived, merged
 )
 
-// Selection is the package the user chose, handed to an Endpoint. It carries the repo
-// id, the tag (release tag or branch name), the asset, and flags describing it — enough
-// for any leaf action (archive, install, remove) without the flow knowing which.
+// Selection is the chosen package: repo id, tag (release or branch), asset and flags,
+// enough for any leaf action.
 type Selection struct {
 	RepoID        string
 	Tag           string
@@ -48,23 +45,17 @@ type Selection struct {
 	Archived      bool         // the asset is a local archived copy (local-file URL)
 }
 
-// Endpoint builds the screen the flow pushes for the chosen package — a command submenu
-// (Archive tab → Remove), a confirm (install), etc. Returning core.Screen lets an
-// endpoint drop straight to a confirm rather than always going through a picker.
+// Endpoint builds the screen pushed for the chosen package (a submenu or a confirm).
 type Endpoint func(Selection) core.Screen
 
-// BrowseOpts configures a browse flow. It is threaded through the flow's screens
-// (rather than unpacked into positional args) so new knobs can be added without
-// touching every signature.
+// BrowseOpts configures a browse flow, threaded through its screens.
 type BrowseOpts struct {
 	Source         Source   // where versions come from
 	IncludeHEAD    bool     // also offer a HEAD row (branch tracking); ignored for archive
 	Endpoint       Endpoint // the per-package command menu
 	MarkArchived   bool     // mark already-archived remote versions instead of listing the local copies (archive flows)
 	ArchivedMarker string   // override the text tagging an archived version (defaults to archivedMarker)
-	// LeadItems are prepended (in order) to the versions list above the HEAD row.
-	// The project install flow uses this to offer "reinstall the pinned version" up
-	// top; other callers leave it nil. A slice so more lead rows can be added later.
+	// LeadItems are rows above the HEAD row (the project install's "reinstall pinned").
 	LeadItems []list.Item
 }
 
@@ -76,15 +67,11 @@ func (o BrowseOpts) marker() string {
 	return archivedMarker
 }
 
-// archivedSet indexes a repo's archived packages by tag → asset name → the stored
-// local asset, so a remote listing can mark (and offer to install from) versions that
-// already have a local copy. Keys use the remote asset name (the " (archived)" suffix
-// trimmed) so a remote asset can be looked up directly.
+// archivedSet indexes archived packages by tag and remote asset name (the " (archived)"
+// suffix trimmed), so remote listings can mark and install local copies.
 type archivedSet map[string]map[string]source.Asset
 
-// buildArchivedSet folds arch.List output (assets named "<file> (archived)") into the
-// index. Returns nil when there is nothing archived (so callers can treat nil as "no
-// annotation").
+// buildArchivedSet indexes arch.List output; nil when nothing is archived.
 func buildArchivedSet(archived []source.Release) archivedSet {
 	if len(archived) == 0 {
 		return nil
@@ -143,9 +130,8 @@ type branchesMsg struct {
 
 // ---------- repos-list entry ----------
 
-// ReposScreen browses every archived repo (one row per repo); selecting one opens
-// its versions. It is archive-scoped — remote hosts have no enumerable repo list —
-// so its rows always come from the local archive.
+// ReposScreen browses every archived repo; remote hosts cannot list repos, so it is
+// archive-only.
 type ReposScreen struct {
 	list list.Model
 	opts BrowseOpts
@@ -154,19 +140,7 @@ type ReposScreen struct {
 var _ core.Filterer = (*ReposScreen)(nil)
 var _ core.Receiver = (*ReposScreen)(nil)
 
-// BrowseRepos is the repos-list entry point: an archive-wide browser whose chosen
-// package runs opts.Endpoint. Source/IncludeHEAD are irrelevant here (the list is the
-// local archive) and ignored.
-func BrowseRepos(opts BrowseOpts) *ReposScreen {
-	return &ReposScreen{
-		list: core.NewSelectList(RepoItems(opts), "Archived Packages"),
-		opts: opts,
-	}
-}
-
-// RepoItems reads every archived repo as self-dispatching rows (each opens that
-// repo's versions picker); an empty/missing archive yields one inert hint row.
-// Exported so the Archive tab root builds its rows from the same source.
+// RepoItems builds a row per archived repo (opening its versions), or one hint row.
 func RepoItems(opts BrowseOpts) []list.Item {
 	repos, _ := arch.Repos()
 	var items []list.Item

@@ -8,10 +8,8 @@ import (
 	"github.com/brohd11/gdaddon/internal/restrule"
 )
 
-// configSource is a search.Source driven entirely by a declarative
-// config.SourceConfig — it turns a YAML "rule" into search/detail HTTP calls and
-// dotted-path extraction, so a new JSON-API store needs no Go backend. Only the
-// "json" source type is implemented today.
+// configSource is a Source driven by a config.SourceConfig rule, so a JSON-API store
+// needs no Go code. Only the "json" type exists.
 type configSource struct{ cfg config.SourceConfig }
 
 func (s configSource) Name() string { return s.cfg.Name }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/source"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 
 	"github.com/brohd11/bubblestack/components"
@@ -17,10 +18,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// plannedDep is one dependency the plan will add to the manifest: a resolved
-// install url + tag (tag empty for a tagless repo-only add, or for a clone left on the
-// remote's default branch), plus the kind the entry is recorded as. Resolving (the
-// network asset lookup) happens before the confirm; committing it is pure manifest IO.
+// plannedDep is one dependency the plan will add: resolved url, tag (empty for repo-only
+// or default-branch clones) and kind. Committing it is manifest IO only.
 type plannedDep struct {
 	name string
 	url  string
@@ -28,10 +27,8 @@ type plannedDep struct {
 	kind addon.Kind
 }
 
-// depPlan is the resolved outcome of reading an addon's declared dependencies,
-// computed off the UI thread and shown in the confirm before anything is written.
-// add: entries to be created; satisfied: already present at a sufficient tag;
-// skipped: present-but-stale, ambiguous, or unresolvable — surfaced, never changed.
+// depPlan is the resolved result shown before writing: entries to add, satisfied ones,
+// and skipped ones (stale, ambiguous or unresolvable), which are never changed.
 type depPlan struct {
 	add       []plannedDep
 	satisfied int
@@ -42,11 +39,9 @@ type depPlan struct {
 // suppressKey toggles suppression on the highlighted dependency row.
 var suppressKey = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "suppress"))
 
-// newDepsScreen is the per-addon Dependencies hub: it lists every dependency the addon
-// declares (from the cached, install-aware appctx.DepStatuses) with its status, a lead
-// "Add all missing" row, and per-row add/suppress. It's a Receiver (Refresh) so any
-// add/suppress broadcast rebuilds it in place, and a PopStop boundary so the per-dep
-// sub-actions return here.
+// newDepsScreen is an addon's Dependencies hub: each declared dependency with its status,
+// "Add all missing", and per-row add and suppress. It rebuilds on refresh broadcasts and
+// is a PopStop hub.
 func newDepsScreen(st addon.Status, sh *core.Shared) *components.PickerScreen {
 	return components.NewPicker(depsItems(st, sh), components.PickerOpts{
 		Crumb:   "Dependencies",
@@ -139,9 +134,8 @@ func depRowDesc(ds addon.DepStatus) string {
 	return desc
 }
 
-// newDepActionSubmenu is the per-dep action list: "Add to manifest" (only when the dep
-// is missing and not suppressed) plus a suppress/unsuppress toggle. It is not a PopStop
-// boundary, so its actions PopTo back to the Dependencies screen.
+// newDepActionSubmenu offers "Add to manifest" (when missing and not suppressed) and a
+// suppress toggle, returning to the Dependencies screen.
 func newDepActionSubmenu(st addon.Status, ds addon.DepStatus) *components.PickerScreen {
 	var items []list.Item
 	if ds.State == addon.DepMissing && !ds.Suppressed {
@@ -168,11 +162,8 @@ func newDepActionSubmenu(st addon.Status, ds addon.DepStatus) *components.Picker
 	})
 }
 
-// suppressToggle adds or removes repoID from the declaring addon's suppress_deps list,
-// refreshes the project cache synchronously (so every Receiver reads fresh state), and
-// broadcasts ProjectDirty — the Dependencies screen rebuilds its rows and the project
-// list re-evaluates its missing-deps marker. It carries no navigation, so the `s`
-// keypress stays on the screen while the submenu path adds its own PopTo.
+// suppressToggle adds or removes repoID from the addon's suppress_deps, refreshes the cache
+// and broadcasts ProjectDirty. It does no navigation.
 func suppressToggle(sh *core.Shared, name, repoID string) core.Action {
 	c := appctx.Of(sh)
 	next, added := toggleID(currentSuppress(c, name), repoID)
@@ -222,9 +213,8 @@ type addResult struct {
 	err    error
 }
 
-// newAddOneDepLoading resolves and adds a single dependency to the manifest off the UI
-// thread (a tagged dep needs a network asset lookup), then refreshes and PopTo's back to
-// the Dependencies screen. Mirrors the batch resolveDepsCmd/commitDeps for one dep.
+// newAddOneDepLoading resolves and adds one dependency off the UI thread, then returns to
+// the Dependencies screen.
 func newAddOneDepLoading(st addon.Status, d addon.Dependency, sh *core.Shared) *components.LoadingScreen {
 	manifestPath := appctx.Of(sh).ManifestPath
 	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
@@ -258,10 +248,8 @@ func resolveOneDepCmd(manifestPath string, d addon.Dependency) func(context.Cont
 	}
 }
 
-// newGetDepsLoading reads the addon's declared plugin.cfg dependencies and resolves
-// each (off the UI thread, with the network asset lookups) into a depPlan. It then
-// opens a confirm listing what will be added; nothing is written until confirmed.
-// Install All performs the actual install afterward.
+// newGetDepsLoading resolves the addon's declared dependencies into a depPlan off the UI
+// thread and opens a confirm; nothing is written before it.
 func newGetDepsLoading(st addon.Status, sh *core.Shared) *components.LoadingScreen {
 	c := appctx.Of(sh)
 	manifestPath, name := c.ManifestPath, st.Addon.Name
@@ -284,17 +272,9 @@ func newGetDepsLoading(st addon.Status, sh *core.Shared) *components.LoadingScre
 		resolveDepsCmd(manifestPath, c.ProjectRoot, st.Addon), onResult)
 }
 
-// resolveDepsCmd turns a's declared dependencies into a depPlan, off the UI thread.
-//
-// The classification — which deps are satisfied, absent, or present-but-stale — is
-// addon.PlanDeps', so this flow matches deps the same way the missing-deps marker,
-// `list --json` and the recursive installer do. That shared lookup is what applies the
-// upstream-rename fallback; this function used to index by repo id alone, which meant a
-// dep whose repo had been renamed upstream was planned as an *add* even though it was
-// already recorded, and committing the plan then failed with "already added from …".
-//
-// What is left here is the part PlanDeps deliberately omits because it hits the network:
-// resolving each addable dep to a release asset url.
+// resolveDepsCmd builds a depPlan off the UI thread. Classification is addon.PlanDeps (the
+// shared matching, including the upstream-rename fallback); this adds the network part,
+// resolving each addable dependency's asset.
 func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(context.Context) tea.Cmd {
 	return func(parent context.Context) tea.Cmd {
 		return func() tea.Msg {
@@ -302,10 +282,8 @@ func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(contex
 			if err != nil {
 				return depPlan{err: err}
 			}
-			// Plan against the freshly parsed entry rather than the cached one the row
-			// carried in: it is where SuppressDeps lives, so a dep suppressed a moment ago
-			// is honored on this run instead of the next refresh. An entry that has since
-			// left the manifest falls back to what the caller gave us.
+			// Plan against the freshly parsed entry, which has the latest SuppressDeps; fall back to
+			// the given one if it left the manifest.
 			target := a
 			if fresh, ok := addon.IndexByName(entries)[a.Name]; ok {
 				target = fresh
@@ -324,35 +302,18 @@ func resolveDepsCmd(manifestPath, projectRoot string, a addon.Addon) func(contex
 					fmt.Sprintf("%s has %s, needs %s", s.Dep.RepoID, tagOrNone(s.Recorded), s.Dep.Tag))
 			}
 			for _, d := range classified.Add {
-				// A clone checks out a branch, so there is no release to resolve; the
-				// entry it becomes is CloneEntry's, the same one the CLI and the
-				// recursive installer record.
-				if d.IsClone() {
-					e := addon.CloneEntry(d, addon.EntryKey(d.RepoURL), true)
-					plan.add = append(plan.add, plannedDep{name: e.Name, url: e.URL, tag: e.Tag, kind: e.Kind})
-					continue
+				// Only a tagged package has a release asset to resolve. d is reassigned:
+				// an `@latest` spec resolves to the tag the confirm shows and commitDeps writes.
+				var asset source.Asset
+				if d.Tag != "" && !d.IsClone() {
+					var ok bool
+					if d, asset, ok = addon.ResolveDepAsset(ctx, d); !ok {
+						plan.skipped = append(plan.skipped, d.RepoID+" (no asset for "+d.Tag+")")
+						continue
+					}
 				}
-				// Tagless: add the repo version-less (Install All clones it; the user can
-				// pin later), so there is no asset to look up.
-				if d.Tag == "" {
-					plan.add = append(plan.add, plannedDep{
-						name: addon.EntryKey(d.RepoURL),
-						url:  addon.NormalizeRepoURL(d.RepoURL),
-					})
-					continue
-				}
-				// d is reassigned: an `@latest` spec resolves here, and the tag it landed
-				// on is what the confirm shows and what commitDeps writes.
-				d, asset, ok := addon.ResolveDepAsset(ctx, d)
-				if !ok {
-					plan.skipped = append(plan.skipped, d.RepoID+" (no asset for "+d.Tag+")")
-					continue
-				}
-				plan.add = append(plan.add, plannedDep{
-					name: addon.EntryKey(d.RepoURL),
-					url:  asset.URL,
-					tag:  d.Tag,
-				})
+				e := addon.DepEntry(d, asset, true)
+				plan.add = append(plan.add, plannedDep{name: e.Name, url: e.URL, tag: e.Tag, kind: e.Kind})
 			}
 			return plan
 		}
@@ -367,9 +328,8 @@ func (p depPlan) nothingToAdd(name string) string {
 	return fmt.Sprintf("%s deps: nothing to add (%d satisfied, %d skipped)", name, p.satisfied, len(p.skipped))
 }
 
-// newGetDepsConfirm lists the dependencies that will be added (and notes how many
-// are already satisfied / skipped), committing them only on confirm (OnYesLambda defers
-// the manifest writes to the Yes press).
+// newGetDepsConfirm lists what will be added (and how many are satisfied or skipped),
+// writing only on confirm.
 func newGetDepsConfirm(name, manifestPath string, plan depPlan) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb:       "Add Dependencies",
@@ -397,10 +357,8 @@ func depsConfirmBody(name string, plan depPlan) string {
 	return b.String()
 }
 
-// commitDeps writes the planned entries to the manifest (pure IO — the assets were
-// resolved before the confirm), refreshes the project cache, and broadcasts ProjectDirty
-// so both the Dependencies screen (rebuilt via its Refresh) and the project list marker
-// update, then PopTo's back to the Dependencies screen to show the new statuses.
+// commitDeps writes the planned entries, refreshes the cache, broadcasts ProjectDirty and
+// returns to the Dependencies screen.
 func commitDeps(sh *core.Shared, name, manifestPath string, plan depPlan) core.Action {
 	added, failed := 0, 0
 	for _, p := range plan.add {

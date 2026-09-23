@@ -1,8 +1,6 @@
-// Package restrule holds the dependency-free primitives that drive gdaddon's
-// declarative REST rules: an auth-aware JSON GET, a dotted-path walker over
-// decoded JSON, and {placeholder} URL templating. Both internal/search (asset
-// stores) and internal/source (VCS version resolution) build their config-driven
-// providers on top of these, so the logic lives in one neutral place.
+// Package restrule holds the primitives behind gdaddon's declarative REST rules: an
+// authenticated JSON GET, a dotted-path walker over decoded JSON, and {placeholder} URL
+// templating. internal/search and internal/source both build on them.
 package restrule
 
 import (
@@ -20,12 +18,9 @@ import (
 	"github.com/brohd11/gdaddon/internal/gitcred"
 )
 
-// GetJSON performs a GET and decodes the JSON body into out, with a shared
-// timeout and User-Agent. It adds a Bearer token whenever gitcred can resolve one
-// for the host (GITHUB_TOKEN, else the user's git credential helper — see gitcred),
-// which raises the API rate limit and reaches private repos; hosts with no stored
-// credential are fetched anonymously. The body is decoded with UseNumber so numeric
-// ids and pagination fields coerce cleanly when out is an any.
+// GetJSON GETs endpoint and decodes JSON into out (UseNumber), with the shared timeout and
+// User-Agent and a gitcred Bearer token when one exists (higher rate limits, private
+// repos).
 func GetJSON(ctx context.Context, endpoint string, out any) error {
 	_, err := GetJSONPage(ctx, endpoint, out)
 	return err
@@ -70,20 +65,16 @@ func GetJSONPage(ctx context.Context, endpoint string, out any) (string, error) 
 	return "", nil
 }
 
-// Get performs an authenticated GET and returns the response for the caller to
-// stream and close. It sets the shared User-Agent and, for a host gitcred knows,
-// a Bearer token (raising rate limits / reaching private repos). Unlike GetJSON
-// there's no internal timeout — downloads can be large, so cancellation is left to
-// the caller's ctx. Non-2xx responses (and 403/429 rate-limits) return an error
-// with the body already closed, so callers don't re-check the status.
+// Get is an authenticated GET returning the response for the caller to stream and close.
+// No timeout (downloads can be large; ctx decides). Non-2xx is an error with the body
+// closed.
 func Get(ctx context.Context, url string) (*http.Response, error) {
 	return authedGet(ctx, url, "", gitcred.TokenForURL(ctx, url))
 }
 
-// authedGet builds a GET with the shared User-Agent, an optional Accept header, and
-// (when tok != "") a Bearer token, sends it, and returns the response only for a
-// 2xx status — closing the body and erroring on a 403/429 rate-limit or any other
-// non-2xx, so callers don't re-check. It's the shared core of Get and GetJSON.
+// authedGet sends a GET with the User-Agent, optional Accept and Bearer token, returning
+// only 2xx responses (rate limits and other failures are errors). Shared by Get and
+// GetJSON.
 func authedGet(ctx context.Context, url, accept, tok string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -131,9 +122,8 @@ func Download(ctx context.Context, url, dst string) error {
 	return out.Close()
 }
 
-// GetPath walks dot-separated keys over JSON decoded into any (map[string]any /
-// []any / scalars). A numeric segment indexes into an array (e.g. "items.0.name").
-// An empty path returns v unchanged. Any miss returns (nil, false).
+// GetPath walks dot-separated keys over decoded JSON; numeric segments index arrays
+// ("items.0.name"). An empty path returns v; a miss returns (nil, false).
 func GetPath(v any, path string) (any, bool) {
 	if path == "" {
 		return v, true

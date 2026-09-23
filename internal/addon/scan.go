@@ -12,15 +12,10 @@ import (
 // for plugin folders (root is depth 0, addons/<name> is depth 2).
 const scanMaxDepth = 4
 
-// Installed is a plugin folder found on disk by ScanInstalled: its project-root-
-// relative path, a display name (the config's name key, else the folder basename),
-// and the version read from its plugin.cfg/version.cfg. SuggestedURL is the derived
-// url to prefill when tracking it, in precedence: a git checkout's origin remote,
-// else an author-declared `source=` cfg key (both read by ScanInstalled), else a
-// pathless manifest entry that looks like this folder (filled by UntrackedInstalls).
-// Kind/Branch are set when the folder is its own git checkout: Kind (clone or
-// submodule) defaults the Track form's kind picker, Branch is the checked-out branch
-// recorded as the entry's tag.
+// Installed is a plugin folder ScanInstalled found: its project-relative path, a display
+// name (config name, else folder name) and version. SuggestedURL prefills tracking: the
+// git origin, else a `source=` key, else a matching path-less manifest entry (from
+// UntrackedInstalls). Kind and Branch are set for a folder that is its own checkout.
 type Installed struct {
 	Path         string
 	Name         string
@@ -30,10 +25,8 @@ type Installed struct {
 	Branch       string
 }
 
-// ScanInstalled walks the project root (up to scanMaxDepth, skipping dotfolders like
-// .godot/.git) and returns each top-level plugin folder — a directory holding a
-// plugin.cfg/version.cfg. It stops descending into a plugin folder once found, so a
-// nested sub-addon is reported as part of its parent, not on its own.
+// ScanInstalled walks root (to scanMaxDepth, skipping dot-folders) and returns each
+// top-level plugin folder, not descending into one once found.
 func ScanInstalled(root string) ([]Installed, error) {
 	var out []Installed
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -47,8 +40,6 @@ func ScanInstalled(root string) ([]Installed, error) {
 		if strings.HasPrefix(base, ".") {
 			return filepath.SkipDir
 		}
-		// rel is needed below for the reported Path; the depth arithmetic that used to
-		// be spelled out here is strutil.Depth.
 		rel, relErr := filepath.Rel(root, path)
 		if relErr != nil {
 			return filepath.SkipDir
@@ -86,12 +77,9 @@ func ScanInstalled(root string) ([]Installed, error) {
 	return out, err
 }
 
-// UntrackedInstalls returns the installed plugin folders under root that no manifest
-// entry already tracks by path. For each without an author-declared `source=` url
-// (already set by ScanInstalled), when a manifest entry exists with an empty path
-// whose name matches the folder basename (the cogito case — tracked by url but never
-// pinned), SuggestedURL is prefilled with that entry's url so capturing it backfills
-// the path rather than adding a duplicate.
+// UntrackedInstalls returns installed folders no entry tracks by path. For those without a
+// source url, a path-less entry whose name matches the folder prefills SuggestedURL, so
+// tracking fills in its path instead of duplicating it.
 func UntrackedInstalls(manifestPath, root string) ([]Installed, error) {
 	installed, err := ScanInstalled(root)
 	if err != nil {

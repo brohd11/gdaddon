@@ -20,9 +20,7 @@ var removeConfirmHelp = []key.Binding{
 	core.Hint("cancel", core.Keys.No),
 }
 
-// newPackageSubmenu is the per-package command menu (a packages.Endpoint). Today it
-// offers only Remove (keyed off the asset's local path); it stays a submenu so future
-// archive actions slot in as more rows.
+// newPackageSubmenu is an archived package's command menu (currently just Remove).
 func newPackageSubmenu(sel pck.Selection) core.Screen {
 	items := []list.Item{
 		components.Item{
@@ -37,7 +35,6 @@ func newPackageSubmenu(sel pck.Selection) core.Screen {
 // newRemoveConfirm confirms deleting one archived package, then refreshes the tab.
 func newRemoveConfirm(repoID string, asset source.Asset) *components.DialogScreen {
 	return &components.DialogScreen{
-		// Crumb: repoID + " — Remove",
 		Crumb: "Remove",
 		Render: func(sh *core.Shared) string {
 			return sh.Box(fmt.Sprintf("Remove from archive\n\n  %s\n\n  %s", asset.Name, asset.URL))

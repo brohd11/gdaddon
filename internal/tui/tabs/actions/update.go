@@ -19,22 +19,16 @@ import (
 // the update plan, so a slow or unreachable host can't hang the loading screen.
 const updateResolveTimeout = 60 * time.Second
 
-// updatePlansMsg carries the resolved update plans (and the addons skipped as
-// ambiguous) from the background fetch to the loading screen's result handler.
-// A failed resolution (e.g. an unreadable manifest) rides along as err — dropping
-// it would misreport the failure as "all installed addons are up to date".
+// updatePlansMsg carries the update plans, ambiguous skips, and any error (which must not
+// read as "up to date").
 type updatePlansMsg struct {
 	plans   []addon.UpdatePlan
 	skipped []addon.SkippedUpdate
 	err     error
 }
 
-// newUpdateAllLoading captures the manifest paths, then fetches every installed
-// addon's latest release off the UI thread (resolveUpdatePlansCmd). When the
-// listings come back it logs any addon skipped for having multiple packages, then
-// either reports "up to date" and pops, or opens the confirm listing each
-// "name old → new". It's the entry point of the Actions ▸ Update all flow:
-// loading → confirm → task.
+// newUpdateAllLoading fetches release listings off the UI thread, logs ambiguous skips,
+// then reports "up to date" or opens the confirm listing "name old → new".
 func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 	c := appctx.Of(sh)
 	cmd := resolveUpdatePlansCmd(c.ManifestPath, c.ProjectRoot)
@@ -64,10 +58,8 @@ func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 	return components.NewLoadingScreen("Update All", "checking for updates…", cmd, onResult)
 }
 
-// resolveUpdatePlansCmd resolves the update plans off the UI thread via
-// addon.ResolveUpdatePlans, capping the whole batch of release-listing fetches
-// with updateResolveTimeout so a slow or unreachable host can't hang the loading
-// screen.
+// resolveUpdatePlansCmd resolves the plans off the UI thread, bounded by
+// updateResolveTimeout.
 func resolveUpdatePlansCmd(manifestPath, projectRoot string) func(context.Context) tea.Cmd {
 	return func(parent context.Context) tea.Cmd {
 		return func() tea.Msg {
@@ -108,9 +100,7 @@ func updateAllBody(plans []addon.UpdatePlan, skipped []addon.SkippedUpdate) stri
 	return strings.Join(lines, "\n")
 }
 
-// newUpdateAllTask installs each plan's target asset, then lands on the Project tab
-// (a ProjectDirty reloads it from the updated manifest), mirroring the install-all
-// task's completion.
+// newUpdateAllTask installs each plan, then shows the Project tab.
 func newUpdateAllTask(plans []addon.UpdatePlan) *components.TaskScreen {
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		c := appctx.Of(sh)

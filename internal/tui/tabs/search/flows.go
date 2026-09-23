@@ -34,16 +34,9 @@ type detailMsg struct {
 
 // ---------- query screen ----------
 
-// newQueryScreen builds the search entry form (a generic components.FormScreen): a
-// Source row whose Enter drops a menu open under it (a PickField/Activator), the
-// query text field, and a muted note showing the Godot version filter. The chosen
-// source is held in a captured variable that the menu mutates and the
-// PickField/OnSubmit read back.
-//
-// The form is declared before it's built because the Source row's handler needs it —
-// sourceMenu anchors to the form's own rendered geometry — and the field has to exist
-// first to be handed to NewForm. The closure only runs on a keystroke, long after the
-// assignment below.
+// newQueryScreen builds the search form: a Source row (Enter opens a menu), the query field
+// and a note with the Godot version filter. The form variable is declared first because
+// the Source row's handler anchors the menu to it.
 func newQueryScreen(src searchpkg.Source, godotVer, lastQuery string) *components.FormScreen {
 	cur := src
 	var form *components.FormScreen
@@ -84,11 +77,8 @@ func newQueryScreen(src searchpkg.Source, godotVer, lastQuery string) *component
 
 // ---------- source menu ----------
 
-// sourceMenu drops the registered asset sources open as a floating menu under the
-// form's Source row, rather than pushing a full-screen picker over the very form the
-// choice is about. Selection writes back through dst — the same captured-variable
-// threading the picker used, which the PickField re-reads on the next render — and
-// pops the menu itself, the menu's callback-owns-the-dismissal convention.
+// sourceMenu opens the sources as a dropdown under the Source row; the choice is written
+// through dst and the menu pops itself.
 func sourceMenu(sh *core.Shared, form *components.FormScreen, dst *searchpkg.Source) *components.MenuScreen {
 	srcs := searchpkg.Sources()
 	items := make([]components.MenuItem, 0, len(srcs))
@@ -197,9 +187,7 @@ func resultDesc(r searchpkg.Summary) string {
 
 // ---------- asset detail → New Plugin handoff ----------
 
-// newDetailLoading fetches the chosen asset's detail (the search list omits the
-// repo/download URLs) and opens an install submenu built from whichever URLs the
-// detail resolved.
+// newDetailLoading fetches the asset's detail (for its urls) and opens the install menu.
 func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen {
 	cmd := func(ctx context.Context) tea.Cmd {
 		return func() tea.Msg {
@@ -220,11 +208,8 @@ func newDetailLoading(src searchpkg.Source, id string) *components.LoadingScreen
 	return components.NewLoadingScreen("Asset", "fetching asset…", cmd, onResult)
 }
 
-// newInstallMenu builds the install submenu for a resolved asset. Rows are
-// conditional on what the detail and source offer: "Add repository" when there's a
-// repo URL, and — for a store source (AssetURLer) with a release — "Add store
-// asset", which pins the canonical store URL + version (installed via the normal
-// flow). With neither, there's nothing installable — report and pop back.
+// newInstallMenu offers "Add repository" when there is a repo url, and "Add store asset"
+// for a store source with a release; with neither, it reports and pops.
 func newInstallMenu(src searchpkg.Source, d *searchpkg.Detail) core.Action {
 	var items []list.Item
 	if d.BrowseURL != "" {

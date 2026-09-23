@@ -3,46 +3,37 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/brohd11/gitstack/repo"
 )
 
-// resolveRoot resolves the Godot project root from the optional [project_root] arg,
-// auto-detecting the git toplevel when omitted. It may prompt on stdin if the git root
-// cannot be found; this runs before any TUI starts. The manifest itself is no longer
-// resolved here — the TUI context scans for it under the root (see appctx.Ctx.Scan).
-func resolveRoot(args []string) (projectRoot string, err error) {
+// resolveRoot resolves the Godot project root for the TUI: the optional [project_root]
+// arg, else the git toplevel, else (after asking on stdin) the current directory. An
+// empty root with a nil error means the user declined.
+func resolveRoot(args []string) (string, error) {
+	if len(args) == 1 {
+		return filepath.Abs(args[0])
+	}
+	if root, ok := repo.RepoRoot("."); ok {
+		return root, nil
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("could not get current working directory: %w", err)
 	}
-
-	if len(args) == 1 {
-		projectRoot = args[0]
-	} else {
-		projectRoot = getGitDirectory()
+	fmt.Printf("Could not get git directory, use current dir instead? (%s) [y/N]: ", cwd)
+	var input string
+	fmt.Scan(&input)
+	if strings.ToLower(input) != "y" {
+		fmt.Println("Aborting.")
+		return "", nil
 	}
-
-	if projectRoot == "" {
-		fmt.Printf("Could not get git directory, use current dir instead? (%s) [y/N]: ", cwd)
-		var input string
-		fmt.Scan(&input)
-		if strings.ToLower(input) == "y" {
-			projectRoot = cwd
-		} else {
-			fmt.Println("Aborting.")
-			os.Exit(0)
-		}
-	}
-
-	return projectRoot, nil
+	return cwd, nil
 }
 
-// resolveRootArg resolves the project root from an optional positional [project_root]
-// argument, the shape the root command and the project-scoped subcommands share. It
-// never prompts (see resolveRootQuiet); `install` takes its root as --root instead,
-// because its positional slot holds the repo spec.
+// resolveRootArg is resolveRootQuiet for an optional positional [project_root].
 func resolveRootArg(args []string) (string, error) {
 	override := ""
 	if len(args) == 1 {
@@ -51,16 +42,13 @@ func resolveRootArg(args []string) (string, error) {
 	return resolveRootQuiet(override)
 }
 
-// resolveRootQuiet resolves the project root without ever prompting or exiting: the
-// explicit override when given, else the git toplevel, else the current directory.
-// Where resolveRoot asks the user what to do about a missing git root (fine before a
-// TUI), a scriptable subcommand must just pick something and say what it picked — so
-// callers should report the resolved root.
+// resolveRootQuiet is resolveRoot for scriptable subcommands: it never prompts, falling
+// back to the current directory. Callers should report the root they got.
 func resolveRootQuiet(override string) (string, error) {
 	if override != "" {
 		return filepath.Abs(override)
 	}
-	if root := getGitDirectory(); root != "" {
+	if root, ok := repo.RepoRoot("."); ok {
 		return root, nil
 	}
 	cwd, err := os.Getwd()
@@ -68,13 +56,4 @@ func resolveRootQuiet(override string) (string, error) {
 		return "", fmt.Errorf("could not get current working directory: %w", err)
 	}
 	return cwd, nil
-}
-
-func getGitDirectory() string {
-	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }

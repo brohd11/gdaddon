@@ -85,10 +85,8 @@ func RootGitAction(sh *core.Shared) core.Action {
 	return core.Push(repoui.RepoMenu(sh, *root, root.Name))
 }
 
-// receive rebuilds the browse list by re-inspecting the manifest on a ProjectDirty
-// (manifest contents changed) or PathRefresh (the manifest path itself changed, e.g.
-// just created) broadcast, keeping the browse-specific list logic out of the router.
-// The status line and any focus switch are composed at the call site (core.Seq).
+// receive rebuilds the list on ProjectDirty (contents changed) or PathRefresh (path
+// changed). Status and focus are composed by the caller.
 func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
@@ -100,18 +98,14 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 		appctx.Of(sh).SetUpdateChecks(p.checks)
 		s.screen.SetItems(projectListItems(sh, s.sort))
 	case appctx.GitRefresh:
-		// A batch git operation changed checkouts: recompute the local git state
-		// so the dirty / ahead / behind markers settle. Local-only, so
-		// unlike ProjectDirty it doesn't re-fire the network update check.
+		// A batch git operation finished: recompute the local git state (no network update check).
 		s.reload(sh)
 	case appctx.GitRepoRefresh:
 		appctx.Of(sh).RefreshRepo(p)
 		s.screen.SetItems(projectListItems(sh, s.sort))
 	case repoui.FetchDoneMsg:
-		// The refs are now current, so re-inspecting recomputes each checkout's ahead/behind
-		// (RefreshProject → refreshGitChecks) and the markers appear. RefreshRoots then
-		// rebuilds every tab root from the refreshed state; repoui.LogFetchResults writes the
-		// per-repo lines and returns the summary (log forced open only on a failure).
+		// The refs are current: re-inspect so ahead/behind markers appear, rebuild the roots, and
+		// log the per-repo results.
 		s.fetching = false
 		s.reload(sh)
 		return core.Seq(
@@ -122,9 +116,7 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	return core.Action{}
 }
 
-// reload re-inspects the manifest and redraws the rows from it. Three of receive's
-// branches need exactly this pair and the order is load-bearing — the rows are built from
-// the context RefreshProject just repopulated — so it is one call, not two lines each time.
+// reload re-inspects and rebuilds the rows, in that order.
 func (s *projectState) reload(sh *core.Shared) {
 	appctx.Of(sh).RefreshProject()
 	s.screen.SetItems(projectListItems(sh, s.sort))

@@ -2,15 +2,12 @@ package addon
 
 import "errors"
 
-// ErrDepAborted ends a dependency walk at the user's request. A DepConfirmer returns
-// it to stop the whole closure rather than declining one dependency; the walk
-// propagates it out unchanged so the front-end can report a clean abort instead of a
-// failure.
+// ErrDepAborted ends a dependency walk at the user's request; it propagates unchanged so
+// front-ends can report a clean abort.
 var ErrDepAborted = errors.New("dependency installation aborted")
 
-// DepAction is what a dependency walk is about to do to one declared dependency —
-// the three cases that reach the network and the disk. An already-satisfied dep is
-// not one of them: it is skipped before any DepRequest is built.
+// DepAction is what a walk is about to do to a declared dependency (satisfied ones are
+// skipped before any request).
 type DepAction int
 
 const (
@@ -31,10 +28,8 @@ func (a DepAction) String() string {
 	return "unknown"
 }
 
-// DepRequest is one pending dependency install: fully resolved (the asset lookup has
-// already happened, so AssetURL is the url that would actually be downloaded) but not
-// yet acted on. Nothing has been written to the manifest or to disk when a
-// DepConfirmer sees it.
+// DepRequest is one pending dependency, fully resolved (AssetURL is what would be
+// downloaded) but not yet written anywhere.
 type DepRequest struct {
 	Dep        Dependency // the declared spec — RepoID, Tag and RepoURL
 	DeclaredBy string     // manifest name of the addon whose config declares it
@@ -44,17 +39,9 @@ type DepRequest struct {
 	LocalTag   string // the tag currently recorded, for DepRepin ("" otherwise)
 }
 
-// DepConfirmer decides whether one dependency may be recorded and installed. It is
-// called after the dependency resolves and before anything is written, so declining
-// leaves no trace: no manifest entry, no download, and — because the walk drops a
-// declined dependency from its queue — no visit to whatever *it* declares in turn.
-// Returning an error aborts the entire walk (ErrDepAborted for a deliberate quit).
-//
-// A nil DepConfirmer installs everything, which is what every caller did before this
-// existed — so it is the front-end-agnostic seam Reporter is, not a behavior change
-// for callers that don't opt in. gdaddon's dependency graph is author-declared and
-// transitively followed, so this is the point at which a user can decline code they
-// never named.
+// DepConfirmer decides whether one resolved dependency may be recorded and installed.
+// Declining leaves no trace, and the walk also skips whatever it declares. An error
+// aborts the walk (ErrDepAborted for a deliberate quit). nil accepts everything.
 type DepConfirmer func(DepRequest) (bool, error)
 
 // allowDep applies a (possibly nil) confirmer, defaulting to yes.

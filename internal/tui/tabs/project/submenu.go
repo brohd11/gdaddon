@@ -15,21 +15,17 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// newSubmenuScreen builds the per-addon command submenu (the screen reached by
-// pressing enter on an addon row). Install opens the version-fetch flow; Archive
-// (offered only when the addon is installed) opens the archive submenu; Remove
-// opens the remove confirm. Each row carries its own Pick. A submodule is managed by
-// the parent repo, so its install/update-oriented rows (Install, Archive, Export) are
-// omitted — only the utility actions (Get deps, Open, Edit Manifest, Remove) remain.
+// newSubmenuScreen is an addon's command menu (enter on a row): Install, Archive (when
+// installed), Remove and more. A submodule gets only the utility rows (Get deps, Open,
+// Edit Manifest, Remove).
 func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen {
 	a, local := st.Addon, st.LocalVersion
 	c := appctx.Of(sh)
 	submodule := a.IsSubmodule()
 
 	var items []list.Item
-	// A git checkout on a different branch than the manifest records: offer to re-record
-	// the manifest tag to the live branch (the reconcile action; the checkout is source of
-	// truth and is never overwritten).
+	// Offer to re-record the manifest's branch to the live one (the checkout is never
+	// overwritten).
 	if st.State == addon.StateBranchChanged {
 		items = append(items, components.Item{
 			Name: "⎇ Update branch record",
@@ -37,9 +33,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return updateBranchRecord(sh, st) },
 		})
 	}
-	// A present checkout (clone or submodule) gets the git command hub: status, fetch, pull,
-	// push, commit. A submodule qualifies — it's a real checkout you develop in; only
-	// gdaddon's *install* actions are meaningless for one.
+	// A present checkout, submodules included, gets the Git menu.
 	if a.IsGitWorkdir() && st.Present() {
 		items = append(items, components.Item{
 			Name: "⎇ Git",
@@ -52,10 +46,8 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Name: "↧ Install / update",
 			Desc: "pick a version, branch, or asset to install",
 			Pick: func(sh *core.Shared) core.Action {
-				// BrowseRepo lists store releases for a store url and git versions
-				// otherwise; installEndpoint branches on the same to build the right
-				// confirm/task. Gate behind the dirty-checkout confirm since an install
-				// overwrites the clone.
+				// BrowseRepo handles store and git urls alike. Guarded by the dirty-checkout confirm, since
+				// an install overwrites a clone.
 				return guardDirty(sh, st, packages.BrowseRepo(a.URL, packages.BrowseOpts{
 					Source:         packages.SourceAll,
 					IncludeHEAD:    true,
@@ -66,24 +58,11 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			},
 		})
 	}
-	// Lock pins the entry: a later step suppresses its update alerts and makes
-	// Install / update reinstall the pinned version. Offered only for package entries
-	// with a url (the things that carry a version pin); clones/submodules are live git
-	// checkouts with no version to pin.
+	// Lock is offered for packages with a url; checkouts have no version to pin.
 	if !a.IsGitWorkdir() && a.URL != "" {
-		lockName, lockDesc := "🔒 Lock", "pin this version — stop update alerts"
-		if a.IsLocked() {
-			lockName, lockDesc = "🔓 Unlock", "resume update checks"
-		}
-		items = append(items, components.Item{
-			Name: lockName,
-			Desc: lockDesc,
-			Pick: func(sh *core.Shared) core.Action { return toggleLock(sh, st) },
-		})
+		items = append(items, appctx.LockItem(a.IsLocked(), func(sh *core.Shared) core.Action { return toggleLock(sh, st) }))
 	}
-	// Offered only for an entry auto-added as another plugin's dependency: clear the
-	// is_dependency flag so the user adopts it as their own and it stops flagging as an
-	// "unused dependency" once its depender is gone. Mirrors the Lock toggle.
+	// Keep clears the is_dependency flag on an auto-added dependency.
 	if a.Dependency {
 		items = append(items, components.Item{
 			Name: "✓ Keep (not a dependency)",
@@ -91,9 +70,7 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Pick: func(sh *core.Shared) core.Action { return keepAddon(sh, st) },
 		})
 	}
-	// Offered whenever the installed addon declares any dependencies (a stable
-	// inspection point that stays put once they're resolved), opening the Dependencies
-	// screen: per-dep install status, add, and suppress.
+	// Dependencies, when the installed addon declares any.
 	if a.URL != "" && st.Present() && len(c.DepStatuses[a.Name]) > 0 {
 		items = append(items, components.Item{
 			Name: "⛓ Dependencies",
@@ -135,27 +112,21 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 		Pick: func(sh *core.Shared) core.Action { return guardDirty(sh, st, newRemoveConfirm(st)) },
 	})
 
-	// "t" opens a terminal at the install path from the command hub, so it works one level
-	// up from the Git menu too — but only for a present checkout/package (a real on-disk
-	// path); a not-yet-installed entry has none, so the key falls through (DirLocator).
+	// "t" opens a terminal at a present install path; otherwise it falls through.
 	dir := ""
 	if st.Present() {
 		dir = st.FullPath
 	}
 	return components.NewPicker(items, components.PickerOpts{
-		// Crumb:   "Plugin",
 		Title:   a.Label(),
 		Dir:     dir,
 		PopStop: true, // the per-addon command hub: sub-flows PopTo() back here
 	})
 }
 
-// guardDirty interposes a "there are uncommitted changes" confirm before target when the
-// addon is a present git checkout with a dirty working tree (the cached GitDirty flag) —
-// an install overwrites the clone and a remove may delete its files, so we warn first. On
-// Yes the confirm replaces itself with target (so a later back from target returns to the
-// submenu, not the confirm); a clean checkout / package entry pushes target directly. The
-// caller builds target either way (both constructors are pure).
+// guardDirty shows an "uncommitted changes" confirm before target for a dirty checkout
+// (installs overwrite, removes may delete), replacing itself with target on yes.
+// Otherwise target is pushed directly.
 func guardDirty(sh *core.Shared, st addon.Status, target core.Screen) core.Action {
 	if !appctx.Of(sh).GitDirty[st.Addon.Name] {
 		return core.Push(target)
@@ -167,11 +138,8 @@ func guardDirty(sh *core.Shared, st addon.Status, target core.Screen) core.Actio
 	}))
 }
 
-// pinnedInstallItems returns the "install what the manifest pins" lead row for the install
-// versions picker, or nil (no row) otherwise. Returning a slice matches BrowseOpts.LeadItems
-// and leaves room for more lead rows later. A package needs a url and a pinned version/tag;
-// a clone offers to check out its recorded branch, but only when not yet cloned (a present
-// checkout is a live workdir gdaddon never overwrites); a submodule is never installable.
+// pinnedInstallItems returns the "install what the manifest pins" row: for a package with
+// a url and pinned version or tag, or an uncloned clone. Never for submodules.
 func pinnedInstallItems(st addon.Status) []list.Item {
 	a := st.Addon
 	if a.URL == "" || a.IsSubmodule() {
@@ -205,11 +173,8 @@ func pinnedInstallItems(st addon.Status) []list.Item {
 	}}
 }
 
-// latestInstallItems returns the "install the newest release" lead row for the install
-// versions picker, shown only when an update check found a newer release than the pinned
-// one (UpdateAvailable — which already excludes clones/submodules/locked/commit-pinned).
-// On pick it resolves the latest release's asset off-thread and drops to the install
-// confirm, so it reuses the normal install task/pin path.
+// latestInstallItems returns the "install the newest release" row when an update is
+// available; it resolves the asset off the UI thread and opens the install confirm.
 func latestInstallItems(st addon.Status, info addon.UpdateInfo) []list.Item {
 	a := st.Addon
 	if info.State != addon.UpdateAvailable {
@@ -222,10 +187,7 @@ func latestInstallItems(st addon.Status, info addon.UpdateInfo) []list.Item {
 	}}
 }
 
-// newOpenSubmenu builds the Open command submenu: reveal the installed plugin
-// directory in the OS file manager (only when installed) and/or open the source
-// url in the default browser (only when a url is set). Selecting a row fires the
-// open asynchronously and leaves the submenu open.
+// newOpenSubmenu reveals the installed folder and/or opens the source url; it stays open.
 func newOpenSubmenu(st addon.Status) *components.PickerScreen {
 	items := []list.Item{}
 	if st.Present() {
@@ -254,9 +216,7 @@ func newOpenSubmenu(st addon.Status) *components.PickerScreen {
 	})
 }
 
-// toggleLock flips the manifest entry's lock flag (SetLock writes/removes the
-// `lock: true` line), logs it, broadcasts ProjectDirty so the list reloads, and
-// re-renders the submenu so its Lock/Unlock row reflects the new state.
+// toggleLock flips the lock, broadcasts ProjectDirty and redraws the submenu.
 func toggleLock(sh *core.Shared, st addon.Status) core.Action {
 	newLock, verb, err := appctx.LockToggle(appctx.Of(sh).ManifestPath, st.Addon.Name, st.Addon.Lock)
 	if err != nil {
@@ -270,10 +230,8 @@ func toggleLock(sh *core.Shared, st addon.Status) core.Action {
 	)
 }
 
-// keepAddon clears the entry's is_dependency flag (SetIsDependency removes the line),
-// promoting an auto-added dependency to a user-chosen plugin so it no longer flags as an
-// "unused dependency". It logs the change, broadcasts ProjectDirty so the list marker
-// clears, and re-renders the submenu (without its Keep row) to reflect the new state.
+// keepAddon clears is_dependency, broadcasts ProjectDirty and redraws the submenu without
+// its Keep row.
 func keepAddon(sh *core.Shared, st addon.Status) core.Action {
 	if err := addon.SetIsDependency(appctx.Of(sh).ManifestPath, st.Addon.Name, false); err != nil {
 		return core.StatusErr(err)
@@ -286,10 +244,8 @@ func keepAddon(sh *core.Shared, st addon.Status) core.Action {
 	)
 }
 
-// updateBranchRecord re-records the manifest entry's tag to the checkout's live branch
-// (UpdateEntry leaves url/path/version untouched), reconciling detected branch drift. It
-// logs the change and broadcasts ProjectDirty so the list reloads and the branch-changed
-// marker clears, then pops back to the browse list.
+// updateBranchRecord re-records the tag to the live branch, broadcasts ProjectDirty and
+// pops back.
 func updateBranchRecord(sh *core.Shared, st addon.Status) core.Action {
 	c := appctx.Of(sh)
 	if err := addon.UpdateEntry(c.ManifestPath, st.Addon.Name, "", "", "", st.LiveBranch); err != nil {
@@ -302,12 +258,8 @@ func updateBranchRecord(sh *core.Shared, st addon.Status) core.Action {
 	)
 }
 
-// exportToGlobal copies the project addon into the global list, stripping the
-// (often release/archive-pinned) url down to its canonical repo url and carrying
-// the project-relative path along as the global entry's remembered default. It then broadcasts
-// GlobalDirty (Focus false → the Global list reloads silently without leaving the
-// Project tab) and pops the submenu back. The row that triggers this is only shown
-// when the repo isn't already in the global list (addon.InGlobalList).
+// exportToGlobal copies the addon to the global list with its canonical repo url and path,
+// broadcasts GlobalDirty (the Global list reloads without switching tabs) and pops back.
 func exportToGlobal(sh *core.Shared, a addon.Addon) core.Action {
 	url := a.URL
 	if stripped, err := source.RepoURL(a.URL); err == nil {

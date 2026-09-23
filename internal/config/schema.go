@@ -1,10 +1,7 @@
 package config
 
-// SourceConfig is a declarative provider entry. It may carry a search rule
-// (interpreted by internal/search to satisfy search.Source) and/or a vcs rule
-// (interpreted by internal/source to list an addon's versions) — so one entry
-// describes everything gdaddon knows about a provider, and a new store or VCS
-// host can be added in YAML without a Go backend.
+// SourceConfig is a declarative provider: a search rule (internal/search) and/or a vcs
+// rule (internal/source), so a new host can be added in YAML.
 type SourceConfig struct {
 	Name   string      `yaml:"name"`           // display label in the source picker
 	Type   string      `yaml:"type,omitempty"` // "json" for search providers; omitted for vcs-only entries
@@ -13,10 +10,8 @@ type SourceConfig struct {
 	VCS    *VCSRule    `yaml:"vcs,omitempty"`
 }
 
-// VCSRule tells internal/source how to list an addon's versions on one host. It
-// is indexed by Host, so a repo URL (from a manifest entry or a search result)
-// resolves to the rule whose Host matches the URL's domain. Templates use the
-// placeholders {owner} {repo} {tag} {branch} {commit}, substituted verbatim.
+// VCSRule tells internal/source how to list versions on one host, matched by Host.
+// Templates use {owner} {repo} {tag} {branch} {commit}.
 type VCSRule struct {
 	Host             string       `yaml:"host"` // index key, e.g. "github.com"
 	Releases         ReleasesRule `yaml:"releases"`
@@ -35,9 +30,8 @@ type TagsRule struct {
 	NamePath    string `yaml:"name_path"`
 }
 
-// ReleasesRule extracts releases from a host's release-list endpoint. AssetsPath
-// is relative to each release element. AssetSuffix (default ".zip") keeps only
-// matching downloadable assets.
+// ReleasesRule extracts releases from a release-list endpoint. AssetsPath is relative to
+// each release; AssetSuffix (default ".zip") filters assets.
 type ReleasesRule struct {
 	URL            string `yaml:"url"`
 	ResultsPath    string `yaml:"results_path,omitempty"` // "" = top-level array
@@ -49,10 +43,8 @@ type ReleasesRule struct {
 	AssetSuffix    string `yaml:"asset_suffix,omitempty"`
 }
 
-// BranchesRule extracts branch names from a host's branch-list endpoint and maps
-// each to a HEAD archive download. ArchiveURL templates {branch}. CommitPath is a
-// dotted JSON path (within each branch element) to the branch's HEAD commit sha,
-// used with VCSRule.CommitArchiveURL to pin a branch install to that commit.
+// BranchesRule extracts branches and maps each to an archive (ArchiveURL, {branch}).
+// CommitPath locates the HEAD sha, used with CommitArchiveURL to pin a commit.
 type BranchesRule struct {
 	URL         string `yaml:"url"`
 	ResultsPath string `yaml:"results_path,omitempty"`
@@ -68,9 +60,8 @@ type ArchiveSpec struct {
 	URL  string `yaml:"url"`
 }
 
-// SearchRule describes how to fetch and parse a page of results. URL is a
-// template; {query}, {page} and {godot_version} are substituted (see
-// internal/search/template.go). Extraction is by dotted JSON paths.
+// SearchRule fetches and parses a results page. URL is a template ({query}, {page},
+// {godot_version}); extraction uses dotted JSON paths.
 type SearchRule struct {
 	URL         string     `yaml:"url"`
 	PageBase    int        `yaml:"page_base,omitempty"`     // value of {page} for the first page (0 or 1)
@@ -95,9 +86,8 @@ type FieldPaths struct {
 	VersionString string `yaml:"version_string,omitempty"`
 }
 
-// DetailRule describes the per-asset fetch that yields the repo URL. URL is a
-// template with {id} (the Summary.ID from search). BrowseURLPath is the only
-// load-bearing field — it must resolve to a URL the installer accepts.
+// DetailRule fetches an asset's detail ({id}); BrowseURLPath must yield an installable
+// url.
 type DetailRule struct {
 	URL             string `yaml:"url"`
 	BrowseURLPath   string `yaml:"browse_url_path"`

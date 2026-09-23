@@ -8,12 +8,8 @@ import (
 	"github.com/brohd11/gdaddon/internal/source"
 )
 
-// ResolveVersion keeps untagged installs on published releases, while explicit
-// tags may use a source package when no release exists.
-//
-// The reserved LatestTag word resolves the same way an absent tag does — newest
-// non-prerelease — and this is the one place that decides so, which is why the dependency
-// path resolves through here rather than calling source.ResolveTag itself.
+// ResolveVersion keeps untagged installs on published releases; explicit tags may use a
+// source package when no release exists. LatestTag resolves like no tag, decided here only.
 func ResolveVersion(ctx context.Context, repoURL, tag string) (source.Release, error) {
 	if tag != "" && !IsLatestTag(tag) {
 		return source.ResolveTag(ctx, repoURL, tag)
@@ -25,11 +21,8 @@ func ResolveVersion(ctx context.Context, repoURL, tag string) (source.Release, e
 	return SelectRelease(listing.Releases, "")
 }
 
-// AmbiguousAssetError reports a release whose uploaded assets can't be picked without
-// a user: source.AutoAsset only auto-selects when a release ships exactly one uploaded
-// asset (or none, in which case the generated source archive wins). The TUI answers
-// this with a picker; the CLI returns this error so the caller can list the candidates
-// and point at --asset.
+// AmbiguousAssetError reports a release with several uploaded assets (AutoAsset picks only
+// one or none). The TUI shows a picker; the CLI lists them and points at --asset.
 type AmbiguousAssetError struct {
 	Tag    string
 	Assets []string
@@ -40,10 +33,8 @@ func (e *AmbiguousAssetError) Error() string {
 		e.Tag, len(e.Assets), strings.Join(e.Assets, "\n  "))
 }
 
-// SelectRelease picks the release to install: the one whose tag matches (TagEqual, so
-// a leading "v" on either side is tolerated), or — for an empty tag — the latest
-// non-prerelease via LatestRelease. A tag that matches nothing yields an error naming
-// the tags that are available, so a typo is self-correcting from the message.
+// SelectRelease picks the release matching tag (leading "v" tolerated), or the latest
+// non-prerelease for "". No match is an error listing the available tags.
 func SelectRelease(releases []source.Release, tag string) (source.Release, error) {
 	if len(releases) == 0 {
 		return source.Release{}, fmt.Errorf("no releases found")
@@ -61,18 +52,16 @@ func SelectRelease(releases []source.Release, tag string) (source.Release, error
 		}
 	}
 	for _, rel := range releases {
-		if tagEqual(rel.Tag, tag) {
+		if source.TagEqual(rel.Tag, tag) {
 			return rel, nil
 		}
 	}
 	return source.Release{}, fmt.Errorf("no release tagged %s; available: %s", tag, tagList(releases))
 }
 
-// SelectAsset picks the file to download from a release. With a hint it is the unique
-// asset whose name contains it (case-insensitive) — an unmatched or ambiguous hint is
-// an error listing the candidates. Without a hint it defers to source.AutoAsset, the
-// same selector dependency installs and Update All use, and reports an
-// *AmbiguousAssetError when that can't decide.
+// SelectAsset picks the asset to download: the unique name containing hint
+// (case-insensitive), else source.AutoAsset, returning *AmbiguousAssetError when it cannot
+// decide.
 func SelectAsset(rel source.Release, hint string) (source.Asset, error) {
 	if hint == "" {
 		if asset, ok := source.AutoAsset(rel); ok {

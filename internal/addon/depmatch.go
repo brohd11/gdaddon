@@ -6,42 +6,22 @@ import (
 	"github.com/brohd11/gdaddon/internal/source"
 )
 
-// This file holds the one rule the whole dependency system turns on: given a dependency
-// a plugin.cfg declares, which manifest entry (if any) is it, and does that entry satisfy
-// it? Every consumer — the missing-deps warning, `list --json`, the Dependencies screen,
-// the recursive installer, and the TUI's "Get deps" flow — answers those two questions
-// through depIndex and depSatisfied rather than re-deriving them, because they used to
-// each carry their own copy and one of the copies was wrong (see depIndex).
+// The rule every dependency consumer shares: which manifest entry a declared dependency is,
+// and whether it satisfies it (depIndex and depSatisfied).
 
-// depIndex matches declared dependencies against recorded manifest entries.
-//
-// It is the single implementation of the **upstream-rename fallback**: a dep is matched by
-// canonical repo identity first, then by the name it would be recorded under. That second
-// step is load-bearing and easy to forget. A repo renamed upstream keeps serving its
-// release assets under the *new* name, so the manifest records an id that the declared
-// `deps` spec — still naming the old one — no longer parses to. Without the fallback such
-// a dep reads as perpetually missing: the TUI nags forever, `list --json` reports it in
-// missing_deps, and "Add all" / `install --all` fail on it with
-// `already added from <new-id> (as "<name>")`. brohd11/Godot-TreeSitter-Wrapper →
-// godot-tree-sitter-gd is a live instance of this in the wild.
-//
-// Positions are stored rather than entries so a caller holding a richer slice ([]Status)
-// can index back into its own: build the index from the entries, use find's result against
-// the original.
+// depIndex matches declared dependencies against manifest entries, by canonical repo
+// identity first, then by name. The name fallback handles upstream renames: the manifest
+// records the new repo id while plugin.cfg specs still name the old one, which would
+// otherwise read as permanently missing. Positions are stored so callers can index their
+// own richer slices.
 type depIndex struct {
 	byRepo map[string]int
 	byName map[string]int
 }
 
-// newDepIndex indexes entries by canonical repo id and by name. Entries whose url doesn't
-// parse have no repo identity and are reachable by name alone; later duplicates win, which
-// matches the map-building the four call sites did before this existed.
-//
-// "By name" means every name an entry answers to, because a dep spec names a *repo*: the
-// key's slug (which for a legacy key is the whole key, and for an identity key is the repo
-// name the spec would have used) and the addon's own declared name. Indexing the raw key
-// instead would silently retire the rename fallback the moment entries became
-// identity-keyed — "github.com/owner/repo" matches no spec any plugin.cfg ever writes.
+// newDepIndex indexes entries by repo id and by every name they answer to (the key's slug
+// and the declared name), since specs name repos, not identity keys. Unparseable urls are
+// reachable by name only; later duplicates win.
 func newDepIndex(entries []Addon) depIndex {
 	ix := depIndex{
 		byRepo: make(map[string]int, len(entries)),
@@ -80,9 +60,8 @@ func addonsOf(statuses []Status) []Addon {
 	return entries
 }
 
-// declaredDeps reads what a declares from its installed plugin.cfg. An entry with no
-// recorded path isn't installed, so there is no config to read and it declares nothing —
-// the guard every dependency reader needs before touching the disk.
+// declaredDeps reads a's installed plugin.cfg dependencies; an entry with no path declares
+// nothing.
 func declaredDeps(a Addon, projectRoot string) ([]Dependency, error) {
 	if a.Path == "" {
 		return nil, nil
@@ -90,16 +69,10 @@ func declaredDeps(a Addon, projectRoot string) ([]Dependency, error) {
 	return Dependencies(filepath.Join(projectRoot, a.Path))
 }
 
-// depSatisfied reports whether an entry recorded at recordedTag meets d. A tagless dep is
-// satisfied by presence alone, and a tag pair that cannot be compared (a date stamp, a
-// branch checkout with no tag) is *trusted* rather than treated as a miss — deliberate
-// HEAD-tracking is not something to nag about.
-//
-// A clone requirement is satisfied by presence too, whatever kind the recorded entry is:
-// `clone:` says how a *missing* dependency should be added, not that an entry the user
-// pinned to a release on purpose is now wrong. It needs its own line rather than falling
-// through, because its ref is a branch and a branch can be named something that parses as
-// a version ("2.0"), which would otherwise be compared as one.
+// depSatisfied reports whether an entry at recordedTag meets d. Tagless deps are satisfied
+// by presence, and uncomparable tags are trusted rather than nagged about. Clone deps are
+// satisfied by presence of any kind; checked separately because a branch may look like a
+// version.
 func depSatisfied(d Dependency, recordedTag string) bool {
 	if d.Tag == "" || d.IsClone() {
 		return true
@@ -108,33 +81,24 @@ func depSatisfied(d Dependency, recordedTag string) bool {
 	return !verified || sat
 }
 
-// StaleDep is a dependency whose manifest entry exists but is verifiably older than the
-// declared requirement. Recorded is the tag the manifest has, for the message a caller
-// shows ("has v1.0.0, needs v2.0.0"); it is empty when the entry records no tag.
+// StaleDep is a dependency whose entry is verifiably older than required; Recorded is the
+// entry's tag (maybe empty).
 type StaleDep struct {
 	Dep      Dependency
 	Recorded string
 }
 
-// DepPlan is the three-way classification of one addon's declared dependencies against the
-// manifest: already satisfied, absent and addable, or present but verifiably stale. It is
-// manifest-presence only — nothing here reads the disk or the network, so it is cheap
-// enough to recompute on a refresh, and a caller that needs install state wants DepStatuses
-// instead.
+// DepPlan classifies an addon's dependencies against the manifest: satisfied, missing, or
+// stale. Manifest only, no disk or network, so it is cheap to recompute.
 type DepPlan struct {
 	Add       []Dependency // no manifest entry: what "Add all missing" would record
 	Satisfied []Dependency // present at a sufficient (or unverifiable) tag
 	Stale     []StaleDep   // present but older than required
 }
 
-// PlanDeps classifies every dependency a declares (from its installed plugin.cfg under
-// projectRoot) against the manifest. Suppressed deps (a.SuppressDeps) are omitted from all
-// three buckets — the user has said they don't want to hear about them. A not-installed
-// addon (no path, or no plugin.cfg on disk) declares nothing and yields a zero plan.
-//
-// This is the shared classification behind MissingDeps and the TUI's dependency flows; the
-// asset resolution needed to actually *add* an entry is deliberately not here, because it
-// is a network call and this stays local.
+// PlanDeps classifies a's declared dependencies (from its installed plugin.cfg) against
+// the manifest, omitting suppressed ones. An uninstalled addon yields a zero plan. Asset
+// resolution (network) is not done here.
 func PlanDeps(a Addon, projectRoot string, manifest []Addon) (DepPlan, error) {
 	var plan DepPlan
 	deps, err := declaredDeps(a, projectRoot)

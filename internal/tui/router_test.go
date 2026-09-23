@@ -1,12 +1,12 @@
 package tui
 
 import (
-	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/bubblestack/tuitest"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	"github.com/brohd11/gdaddon/internal/tui/flows/docs"
 	"github.com/brohd11/gdaddon/internal/tui/flows/newplugin"
@@ -32,22 +32,7 @@ func sized(tm tea.Model) tea.Model {
 	return tm
 }
 
-// pump delivers msg, then runs the returned command and feeds its (single,
-// non-batch) result back — enough to drive the navigation commands (push/pop).
-func pump(tm tea.Model, msg tea.Msg) tea.Model {
-	tm, cmd := tm.Update(msg)
-	for i := 0; i < 8 && cmd != nil; i++ {
-		out := cmd()
-		if out == nil {
-			break
-		}
-		if _, isBatch := out.(tea.BatchMsg); isBatch {
-			break
-		}
-		tm, cmd = tm.Update(out)
-	}
-	return tm
-}
+var pump = tuitest.Pump
 
 // TestRouterRenders confirms the router renders the framed view (header + body +
 // help) without panicking and includes the persistent header.
@@ -127,9 +112,4 @@ func TestFirstRunDocsFlow(t *testing.T) {
 	}
 }
 
-// view renders the model to the plain text the assertions match against. v2's View
-// returns a tea.View — the frame's content plus the terminal modes it asks for — so this
-// reaches through to the content, and strips it: lipgloss v2 renders styles verbatim
-// where v1's TTY-less Ascii profile dropped them, so a substring like "Docs › Getting
-// started" now has escape sequences between its words.
-func view(tm tea.Model) string { return ansi.Strip(tm.View().Content) }
+var view = tuitest.View

@@ -1,6 +1,4 @@
-// Package sets is the Sets tab: reusable groups of plugins stored as manifest-shaped
-// YAML under ~/.gdaddon/sets. The root lists the saved sets; drilling into one manages
-// its members (add/remove/pin) or imports the whole set into the project manifest.
+// Package sets is the Sets tab: reusable plugin groups stored under ~/.gdaddon/sets.
 package sets
 
 import (
@@ -48,10 +46,8 @@ func NewSetsScreen(sh *core.Shared) *components.RootListScreen {
 	return screen
 }
 
-// setListItems builds the Sets rows: a fixed "+ New set" row on top, then a
-// self-dispatching row per saved set (its description is the plugin count), ordered by
-// mode. Only the set rows are sorted — "+ New set" stays pinned first. Selecting a set
-// opens its options submenu.
+// setListItems builds "+ New set" followed by one row per set (sorted, with its plugin
+// count).
 func setListItems(mode appctx.SortMode) []list.Item {
 	names, _ := addon.ListSets()
 	setRows := make([]list.Item, 0, len(names))
@@ -82,10 +78,8 @@ func setListItems(mode appctx.SortMode) []list.Item {
 
 // ---------- new set ----------
 
-// newSetForm builds the New-set form: a name field plus, when a project manifest is
-// loaded, a Seed toggle (Empty / Current project). On submit it creates
-// <name>.yml under ~/.gdaddon/sets — verbatim-copying the project manifest when
-// seeding — broadcasts SetsDirty so the list reloads, and pops back to it.
+// newSetForm creates a set, optionally seeded from the project manifest, broadcasts
+// SetsDirty and pops back.
 func newSetForm(sh *core.Shared) *components.FormScreen {
 	manifestPath := appctx.Of(sh).ManifestPath
 	nameF := components.NewTextField("name", "Name: ", "my_set")
@@ -150,9 +144,8 @@ func newSetForm(sh *core.Shared) *components.FormScreen {
 
 // ---------- set options (a PopStop command hub) ----------
 
-// newSetOptions is the per-set command submenu. It is a PopStop hub, so the deeper
-// add-entry sub-flow returns here (PopTo) after committing. Import is offered only
-// when a project manifest is loaded.
+// newSetOptions is a set's command hub (PopStop); Import is offered only with a project
+// manifest.
 func newSetOptions(sh *core.Shared, setName string) *components.PickerScreen {
 	items := []list.Item{
 		components.Item{

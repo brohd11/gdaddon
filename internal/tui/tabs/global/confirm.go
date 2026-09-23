@@ -13,9 +13,8 @@ const (
 	removeGlobalArchive        // also delete the archived packages for the repo
 )
 
-// newRemoveConfirm builds the global Remove confirm: a vertical selector between
-// removing just the global-list entry or that plus the repo's archived packages.
-// ↑/↓ move the selection (via the confirm's OnKey), enter commits the chosen mode.
+// newRemoveConfirm chooses between removing the global entry alone or with its archived
+// packages (↑/↓, enter).
 func newRemoveConfirm(g globalItem) *components.DialogScreen {
 	return widgets.NewToggleConfirm(widgets.ToggleConfirm{
 		Crumb:  g.label() + " — Remove",
@@ -34,7 +33,7 @@ func removeConfirmBody(sh *core.Shared, g globalItem, mode int) string {
 // removeOptions renders the two removal modes stacked vertically, the active one
 // marked and highlighted.
 func removeOptions(mode int) string {
-	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
+	return widgets.RenderChoices(mode, []widgets.ToggleOpt{
 		{Label: "Global", Desc: "remove from the global list only"},
 		{Label: "Global + archive", Desc: "also delete the archived packages"},
 	})

@@ -7,16 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/brohd11/goutil/strutil"
 )
 
-// resolveUnder joins rel onto baseDir and refuses a result that escapes baseDir.
-//
-// Install destinations are not all user-supplied: an addon can name its own location
-// with a `dir=` key in the plugin.cfg/version.cfg it ships (see installDir), so the
-// downloaded package chooses where it lands. filepath.Join absorbs a leading "/" but
-// not "..", and the destination is os.RemoveAll'd before it is written — so an
-// unchecked value is an arbitrary recursive delete outside the project. This is the
-// same guarantee unzip enforces on archive members, applied to install paths.
+// resolveUnder joins rel onto baseDir and refuses results outside it. Install paths can
+// come from the downloaded package's own config (installDir), and the destination is
+// deleted before writing, so an unchecked ".." would be a recursive delete outside the
+// project. unzip applies the same guard to archive members.
 func resolveUnder(baseDir, rel string) (string, error) {
 	base, err := filepath.Abs(baseDir)
 	if err != nil {
@@ -26,19 +24,10 @@ func resolveUnder(baseDir, rel string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not resolve path: %w", err)
 	}
-	if !underDir(base, full) {
+	if _, ok := strutil.RelUnder(base, full); !ok {
 		return "", fmt.Errorf("refusing to use %q: it resolves outside the project root", rel)
 	}
 	return full, nil
-}
-
-// underDir reports whether path is base itself or a descendant of it.
-func underDir(base, path string) bool {
-	rel, err := filepath.Rel(base, path)
-	if err != nil {
-		return false
-	}
-	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
 }
 
 func unzip(src, dest string) error {

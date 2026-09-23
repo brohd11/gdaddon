@@ -14,11 +14,8 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// newPathsPicker is a quick navigation helper (Actions ▸ Paths): each row reveals a
-// project-relevant location in the OS file manager. Rows are built from the live
-// context, so missing locations (no manifest yet) are simply omitted. Selecting a row
-// fires the open command asynchronously and leaves the picker open, so several spots
-// can be opened in a row.
+// newPathsPicker (Actions ▸ Paths) reveals project locations in the file manager, omitting
+// missing ones. The picker stays open so several can be opened.
 func newPathsPicker(sh *core.Shared) core.Screen {
 	c := appctx.Of(sh)
 	var items []list.Item

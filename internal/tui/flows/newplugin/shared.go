@@ -1,12 +1,8 @@
 package newplugin
 
-// This file holds the pieces the three add flows (Add Plugin, Store Asset, Track
-// Installed) share: the url/name/path form skeleton, its submit pipeline, the
-// Project/Global confirm dialog, and the add commit. Each flow keeps its own file for
-// what genuinely differs — the store flow preserves the canonical store url and pins
-// the release identity as the tag, the track flow upserts instead of adding — and
-// plugs those deltas into the helpers here, so the shared shape is written once and
-// the differences stay visible at the call site.
+// Pieces shared by the three add flows (Add Plugin, Store Asset, Track Installed): the form
+// skeleton, its submit pipeline, the Project/Global confirm and the add commit. Each flow's
+// file holds only what differs.
 
 import (
 	"fmt"
@@ -23,9 +19,7 @@ import (
 
 // ---------- form ----------
 
-// formSpec is everything the three url/name/path forms differ on; the shared skeleton
-// — heading, the three text fields, the spacer layout, and the
-// field/toggle/next/cancel help row — stays in newAddonForm.
+// formSpec is what the url/name/path forms differ on; newAddonForm builds the rest.
 type formSpec struct {
 	crumb          string                 // router breadcrumb
 	heading        string                 // form heading line
@@ -37,9 +31,8 @@ type formSpec struct {
 	onSubmit       func(*core.Shared, *components.FormScreen) core.Action
 }
 
-// newAddonForm builds the url/name/path form every flow opens on, appending the
-// flow's trailing fields (a target or kind toggle, an optional note) after the shared
-// text fields and pre-filling any values.
+// newAddonForm builds the url/name/path form, appends the flow's extra fields and prefills
+// values.
 func newAddonForm(spec formSpec) *components.FormScreen {
 	fields := []components.FormField{
 		components.NewHeading(spec.heading),
@@ -70,13 +63,9 @@ func newAddonForm(spec formSpec) *components.FormScreen {
 	return form
 }
 
-// submitAddonForm is the shared OnSubmit pipeline: trim the url and refocus its field
-// when it is empty, normalize it (a nil normalize keeps it as typed — the store flow
-// preserves the canonical store url rather than mangling it into a .git url), key a
-// blank name off the final url, and hand the values to the flow's confirm push.
-//
-// A typed name still wins and becomes the entry key, which is how you deliberately
-// track two checkouts of one repo under names of your own.
+// submitAddonForm is the shared OnSubmit: require a url, normalize it (nil keeps it, as the
+// store flow needs), default a blank name from it, and push the flow's confirm. A typed
+// name becomes the key, which lets you track two checkouts of one repo.
 func submitAddonForm(f *components.FormScreen, normalize func(string) string, next func(name, url, path string) core.Action) core.Action {
 	url := strings.TrimSpace(f.Value("url"))
 	if url == "" {
@@ -94,10 +83,8 @@ func submitAddonForm(f *components.FormScreen, normalize func(string) string, ne
 
 // ---------- confirm ----------
 
-// newTargetConfirm builds the confirm dialog the plugin and store flows share: the
-// rendered body plus a Project/Global toggle the Left/Right keys flip before OnYes
-// commits. addTarget seeds the toggle from the form's value; body and onYes receive
-// the (possibly flipped) target.
+// newTargetConfirm is the plugin and store flows' confirm: the body plus a Project/Global
+// toggle (Left/Right) passed to onYes.
 func newTargetConfirm(addTarget int, body func(sh *core.Shared, target int) string, onYes func(sh *core.Shared, target int) core.Action) *components.DialogScreen {
 	target := addTarget // local copy the toggle mutates
 	return &components.DialogScreen{
@@ -113,11 +100,8 @@ func newTargetConfirm(addTarget int, body func(sh *core.Shared, target int) stri
 	}
 }
 
-// confirmBody renders the field block every confirm screen shows: the name, an
-// optional version line, the hard-wrapped url indented under its label, and the path
-// (defaulted when blank). title is the flow's heading; extra is whatever the flow
-// appends after the path (the Project/Global toggle line, the track kind line, or
-// nothing).
+// confirmBody renders the shared confirm fields: name, optional version, wrapped url and
+// path (defaulted when blank), then extra.
 func confirmBody(sh *core.Shared, title, name, version, url, path, extra string) string {
 	urlBlock := core.IndentLines(core.HardWrap(url, sh.ConfirmWidth()-4), "    ")
 	if path == "" {
@@ -139,11 +123,9 @@ func addToLine(target int) string {
 
 // ---------- commit ----------
 
-// commitAdd is the shared commit pipeline of the plugin and store flows: a global add
-// appends to the global list and shows the rebuilt Global tab; a project add runs
-// addEntry against the project manifest (the flows differ only in which manifest
-// operation that is) and shows the Browse tab. Both unwind to the root and flag the
-// affected list dirty.
+// commitAdd writes the entry: to the global list (showing Global), or via addEntry to the
+// project manifest (showing the project list). Both unwind to the root and mark the list
+// dirty.
 func commitAdd(sh *core.Shared, name, url, path string, addTarget int, addEntry func(manifestPath string) error) core.Action {
 	if addTarget == targetGlobal {
 		globalPath, err := addon.GlobalListPath()

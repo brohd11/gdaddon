@@ -13,9 +13,8 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// newArchiveSubmenu builds the Archive command submenu for an installed addon: archive
-// the currently installed version, or browse the repo (all releases + archived, plus
-// HEAD) and archive any version via the shared packages flow.
+// newArchiveSubmenu offers archiving the installed version, or browsing the repo to archive
+// any version.
 func newArchiveSubmenu(st addon.Status, sh *core.Shared) *components.PickerScreen {
 	items := []list.Item{}
 	if st.Present() {
@@ -46,10 +45,7 @@ func newArchiveSubmenu(st addon.Status, sh *core.Shared) *components.PickerScree
 	})
 }
 
-// archiveCurrentVersion archives the installed version by feeding the manifest
-// url + local version through the shared archive confirm (download + store under
-// repo/version). It reuses buildArchiveConfirm so the confirm body, repoID
-// resolution, already-archived check, and task wiring stay in one place.
+// archiveCurrentVersion archives the installed version through buildArchiveConfirm.
 func archiveCurrentVersion(sh *core.Shared, st addon.Status) core.Action {
 	if st.LocalVersion == "" {
 		return core.SetStatusAndLog("cannot archive: installed version unknown")

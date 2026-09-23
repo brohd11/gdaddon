@@ -1,13 +1,7 @@
-// Package editmanifest is the shared "Edit Manifest" flow: a form that lists an
-// entry's raw fields (name, url, path, version, tag, kind) prefilled with their current
-// values and writes them back. It works against any of the flat-shaped manifest
-// files — the project manifest, the global list, or a set — so it lives in the flows
-// layer (core ← components ← flows ← tabs ← tui) and is opened by more than one tab
-// with the matching dirty payload.
-//
-// Blanking a text field clears that field (addon.EditEntry removes the line), the
-// inverse of UpdateEntry's "blank leaves it untouched". kind is a 3-way toggle
-// (package/clone/submodule) and is written separately via addon.SetKind.
+// Package editmanifest is the Edit Manifest flow: a form of an entry's raw fields (name,
+// url, path, version, tag, kind) written back to any flat manifest (project, global list,
+// or set). Blanking a field removes it (addon.EditEntry); kind is written with
+// addon.SetKind.
 package editmanifest
 
 import (
@@ -21,13 +15,9 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// New builds the Edit Manifest form for entry a in the manifest at manifestPath.
-// dirty is broadcast on a successful save (e.g. appctx.ProjectDirty{}) so whichever
-// tab root owns this manifest reloads. The entry's *key* is read-only — it is the
-// entry's identity, and renaming it is not an edit but a different entry — while the
-// name beneath it is the editable label and is shown in global mode too. In global mode
-// only name, url, and path are shown: version, tag, and kind are irrelevant to the
-// global library, so those fields (and the kind write) are omitted.
+// New builds the Edit Manifest form for entry a. dirty is broadcast on save so the owning
+// tab reloads. The key is read-only (it is the entry's identity); the name is the editable
+// label. Global mode shows only name, url and path.
 func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *components.FormScreen {
 	nameF := components.NewTextField("name", "Name:    ", "(blank to clear)")
 	urlF := components.NewTextField("url", "URL:     ", "(blank to clear)")
@@ -94,10 +84,8 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 			return core.Seq(
 				core.SetStatusAndLog(a.Name+": updated"),
 				core.PropagateAll(dirty),
-				// The parent entry submenu was built from the pre-edit Addon and its
-				// closures retain those values. Drop both it and this form after the
-				// owning list refreshes, so reopening the entry reconstructs all
-				// actions (including project path metadata) from the new manifest.
+				// Pop the parent submenu too: its closures hold the pre-edit entry, so reopening rebuilds
+				// it from the new manifest.
 				core.Pop(2),
 			)
 		},

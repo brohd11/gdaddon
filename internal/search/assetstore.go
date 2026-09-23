@@ -17,28 +17,21 @@ const assetStoreBase = "https://store.godotengine.org"
 // /api/v1/search/query/ response); used to derive the page count from the total.
 const storePerPage = 24
 
-// assetStore is the new Godot Asset Store backend.
-//
-// It speaks the store's JSON API (the same one the in-editor AssetLib browser uses,
-// see godot's editor/asset_library/asset_library_editor_plugin.cpp):
-//   - Search:  /api/v1/search/query/ — ranks/filters by query, honors page and the
-//     engine-version filter (compatibility).
-//   - Detail:  /api/v1/assets/<publisher>/<slug>/ — name, description, repo source.
-//   - Release: /api/v1/releases/<publisher>/<slug>/ — the store-hosted .zip + version.
+// assetStore is the Godot Asset Store backend, using the store's JSON API (as the editor's
+// AssetLib does):
+//   - Search:  /api/v1/search/query/ (query, page, engine-version filter)
+//   - Detail:  /api/v1/assets/<publisher>/<slug>/ (name, description, repo)
+//   - Release: /api/v1/releases/<publisher>/<slug>/ (store-hosted .zip and version)
 type assetStore struct{}
 
 func (assetStore) Name() string { return "Asset Store" }
 
-// AssetURL returns the canonical store URL for an asset id ("<publisher>/<slug>"),
-// the stable identity pinned in the manifest for a store install (see
-// store.IsStoreURL). Implementing AssetURLer marks this source as installable as a
-// store asset rather than a git repo.
+// AssetURL returns the canonical store url for "<publisher>/<slug>", pinned in the
+// manifest. Implementing AssetURLer makes results installable as store assets.
 func (assetStore) AssetURL(id string) string { return store.AssetURL(id) }
 
-// Search queries /api/v1/search/query/. type=0 selects addons (1 is templates). The
-// API is 1-based and omits page on the first page, so page (0-indexed from the
-// caller) is sent as page+1 only when paging past the first. godotVersion, when set,
-// becomes the compatibility filter.
+// Search queries /api/v1/search/query/ (type=0: addons). Pages are 1-based and omitted on
+// the first, so page+1 is sent only past it. godotVersion filters compatibility.
 func (assetStore) Search(ctx context.Context, query, godotVersion string, page int) (*Page, error) {
 	endpoint := assetStoreBase + "/api/v1/search/query/?query=" + url.QueryEscape(query) + "&type=0"
 	if page > 0 {
@@ -93,11 +86,8 @@ func (assetStore) Search(ctx context.Context, query, godotVersion string, page i
 	return out, nil
 }
 
-// Detail resolves the asset's repo URL (its source) and latest stable release. id is
-// the "<publisher>/<slug>" produced by Search. BrowseURL may be empty (paid/direct
-// assets with no repo); DownloadURL is the store-hosted release .zip when a release
-// exists. A failed/empty releases fetch is non-fatal — DownloadURL is just left
-// blank. The caller decides what to do when both are empty.
+// Detail resolves an asset's repo url and latest stable release zip. Either may be empty
+// (a paid asset has no repo); a failed releases fetch just leaves DownloadURL empty.
 func (assetStore) Detail(ctx context.Context, id string) (*Detail, error) {
 	var asset struct {
 		Name        string `json:"name"`

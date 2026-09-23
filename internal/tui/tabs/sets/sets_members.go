@@ -14,10 +14,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// setPluginsScreen lists a set's current members (name + pinned version); selecting one
-// opens its per-member submenu. It is a pushed screen (Back pops it) but, unlike a plain
-// picker, owns its Update so it can cycle the sort order (setsSortModes) and self-refresh
-// on a SetsDirty broadcast after a member is added, pinned, or removed.
+// setPluginsScreen lists a set's members, opening a submenu per member. It has its own
+// Update to cycle the sort and refresh on SetsDirty.
 type setPluginsScreen struct {
 	setName string
 	setPath string
@@ -104,17 +102,9 @@ func (s *setPluginsScreen) SetSize(sh *core.Shared, width, bodyHeight int) {
 // newSetEntrySubmenu is a set member's command menu: re-pin a version (Add Version)
 // or drop it from the set (Remove plugin). Both return to the set's command hub.
 func newSetEntrySubmenu(setName, setPath string, e addon.Addon) *components.PickerScreen {
-	lockName, lockDesc := "🔒 Lock", "pin this version — stop update alerts"
-	if e.IsLocked() {
-		lockName, lockDesc = "🔓 Unlock", "resume update checks"
-	}
 	items := []list.Item{
 		setAddVersionItem(setName, setPath, e.Name, e.URL, e.Path),
-		components.Item{
-			Name: lockName,
-			Desc: lockDesc,
-			Pick: func(sh *core.Shared) core.Action { return toggleSetLock(setName, setPath, e) },
-		},
+		appctx.LockItem(e.IsLocked(), func(sh *core.Shared) core.Action { return toggleSetLock(setName, setPath, e) }),
 		components.Item{
 			Name: "✎ Edit Manifest",
 			Desc: "edit this set entry (url, path, version, tag, clone)",

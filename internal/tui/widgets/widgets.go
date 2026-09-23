@@ -1,15 +1,11 @@
-// Package widgets holds small, domain-agnostic render helpers shared by more than
-// one tab. Tabs can't import each other (project/global/archive are siblings), so a
-// rendering snippet used by several of them lives here, one layer down. It names no
-// gdaddon domain type and depends only on bubblestack/core for the shared palette.
+// Package widgets holds render helpers shared by sibling tabs, which cannot import each
+// other.
 package widgets
 
 import (
 	"strings"
 
 	"github.com/brohd11/bubblestack/core"
-
-	"charm.land/lipgloss/v2"
 )
 
 // ToggleOpt is one row of a vertical option selector: a short label and a one-line
@@ -19,12 +15,11 @@ type ToggleOpt struct {
 	Desc  string
 }
 
-// RenderToggle stacks opts vertically as "label — desc" rows, marking index sel with
-// a "▸" caret and the focused color while dimming the rest. It's the shared form of
-// the install-source / clone-mode / remove-mode selectors shown inside confirm boxes.
-func RenderToggle(sel int, opts []ToggleOpt) string {
-	active := lipgloss.NewStyle().Foreground(core.FocusedColor).Bold(true)
-	dim := lipgloss.NewStyle().Foreground(core.MutedColor)
+// RenderChoices stacks opts as "label — desc" rows, marking sel with "▸" and the accent,
+// the rest muted.
+func RenderChoices(sel int, opts []ToggleOpt) string {
+	active := core.AccentStyle()
+	dim := core.MutedStyle()
 	lines := make([]string, len(opts))
 	for i, o := range opts {
 		text := o.Label + " — " + o.Desc

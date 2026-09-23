@@ -10,6 +10,7 @@ import (
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/bubblestack/tuitest"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -26,23 +27,7 @@ func newTestRouter() core.Router {
 	})
 }
 
-// pump delivers msg and feeds back the (single, non-batch) result of the command it
-// returns — enough to drive the push/pop navigation commands. Copied from the tui
-// package's router_test.go, which can't be imported from here.
-func pump(tm tea.Model, msg tea.Msg) tea.Model {
-	tm, cmd := tm.Update(msg)
-	for i := 0; i < 8 && cmd != nil; i++ {
-		out := cmd()
-		if out == nil {
-			break
-		}
-		if _, isBatch := out.(tea.BatchMsg); isBatch {
-			break
-		}
-		tm, cmd = tm.Update(out)
-	}
-	return tm
-}
+var pump = tuitest.Pump
 
 // openSourceMenu walks the real path a user takes to the dropdown: the tab root's row
 // pushes the query form, up moves focus from the query field to the Source row, and
@@ -153,9 +138,4 @@ func TestSourceMenuSelects(t *testing.T) {
 	}
 }
 
-// view renders the model to the plain text the assertions match against. v2's View
-// returns a tea.View — the frame's content plus the terminal modes it asks for — so this
-// reaches through to the content, and strips it: lipgloss v2 renders styles verbatim
-// where v1's TTY-less Ascii profile dropped them, so a substring like "Docs › Getting
-// started" now has escape sequences between its words.
-func view(tm tea.Model) string { return ansi.Strip(tm.View().Content) }
+var view = tuitest.View

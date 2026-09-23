@@ -1,10 +1,6 @@
-// Package source resolves the available versions of an addon from its remote.
-// It is config-driven: each provider entry in ~/.gdaddon/config/sources.yml may carry a
-// vcs rule (config.VCSRule) keyed by host, describing the host's release/branch
-// API and archive-URL patterns. github.com and codeberg.org ship as defaults;
-// any host can be added in YAML. A host with no rule degrades to a single
-// git-clone option so install still works. The Listing/Release/Asset shapes are
-// host-agnostic.
+// Package source lists an addon's available versions from its remote, driven by vcs rules
+// in sources.yml keyed by host (github.com and codeberg.org by default). A host without a
+// rule degrades to a single git-clone option.
 package source
 
 import (
@@ -17,10 +13,8 @@ import (
 	"github.com/brohd11/gdaddon/internal/restrule"
 )
 
-// Asset is one downloadable file (a .zip archive, or a .git clone URL fallback).
-// Generated marks the host's auto-generated source archive (appended to every
-// release in resolveReleases) as opposed to an asset the author uploaded — so
-// callers can prefer the uploaded build without relying on asset ordering.
+// Asset is one downloadable file (a .zip, or a .git clone fallback). Generated marks the
+// host's auto-generated source archive, so callers can prefer uploaded builds.
 type Asset struct {
 	Name      string
 	URL       string
@@ -35,9 +29,8 @@ type Release struct {
 	Assets     []Asset
 }
 
-// Listing is everything selectable for a manifest URL: the repo's releases
-// (semantic versions descending, then other tags) and, when the URL tracked a
-// branch, a branch-HEAD option.
+// Listing is everything selectable for a url: releases (semantic descending, then other
+// tags) and, for a branch url, a branch-HEAD option.
 type Listing struct {
 	Owner    string
 	Repo     string
@@ -45,10 +38,8 @@ type Listing struct {
 	Releases []Release
 }
 
-// ruleForHost returns the vcs rule whose Host matches, scanning the config
-// providers (falling back to the built-in defaults when the file is missing or
-// empty, mirroring search.Sources). The second result is false when no provider
-// claims the host.
+// ruleForHost returns the vcs rule for host from the configured providers (or defaults);
+// false when none claims it.
 func ruleForHost(host string) (*config.VCSRule, bool) {
 	for _, s := range config.Sources() {
 		if s.VCS != nil && strings.EqualFold(s.VCS.Host, host) {
@@ -58,9 +49,8 @@ func ruleForHost(host string) (*config.VCSRule, bool) {
 	return nil, false
 }
 
-// AvailableVersions parses a repo URL and fetches its versions via the matching
-// host rule. A host with no rule yields a single git-clone fallback so install
-// still works.
+// AvailableVersions lists a repo url's versions via its host rule, or a single git-clone
+// fallback.
 func AvailableVersions(ctx context.Context, rawURL string) (*Listing, error) {
 	ref, err := parseRepoURL(rawURL)
 	if err != nil {
@@ -85,9 +75,8 @@ func AvailableVersions(ctx context.Context, rawURL string) (*Listing, error) {
 	return listing, nil
 }
 
-// Branches lists the repo's branches as branch-HEAD archive assets. A host with
-// no branch rule (or no rule at all) returns nil. Fetched lazily (only when the
-// user opens HEAD) to avoid an extra API call on every version listing.
+// Branches lists branches as branch-HEAD archive assets (nil without a rule), fetched only
+// when requested.
 func Branches(ctx context.Context, rawURL string) ([]Asset, error) {
 	ref, err := parseRepoURL(rawURL)
 	if err != nil {
@@ -100,10 +89,8 @@ func Branches(ctx context.Context, rawURL string) ([]Asset, error) {
 	return resolveBranches(ctx, rule, ref.Owner, ref.Repo)
 }
 
-// RepoID is the canonical identity of a repo URL — "<host>/<owner>/<repo>",
-// lowercased — independent of which form the URL took (.git, a release-download
-// asset, or an archive/refs URL). Used to detect that two manifest entries point
-// at the same repository and to name archive folders. Host-agnostic.
+// RepoID is a repo url's canonical identity, "<host>/<owner>/<repo>" lowercased, whatever
+// form the url took. Used to match entries and name archive folders.
 func RepoID(rawURL string) (string, error) {
 	ref, err := parseRepoURL(rawURL)
 	if err != nil {
@@ -112,10 +99,8 @@ func RepoID(rawURL string) (string, error) {
 	return strings.ToLower(ref.Host + "/" + ref.Owner + "/" + ref.Repo), nil
 }
 
-// RepoURL strips any standard git-host URL (a .git clone URL, a release-download
-// asset, an archive/refs URL, …) down to its canonical repo-level form
-// "https://<host>/<owner>/<repo>". Used to record a clean, version-agnostic url in
-// the global list instead of the project entry's pinned release/archive url.
+// RepoURL reduces any git-host url to "https://<host>/<owner>/<repo>", for recording in the
+// global list.
 func RepoURL(rawURL string) (string, error) {
 	ref, err := parseRepoURL(rawURL)
 	if err != nil {
@@ -235,9 +220,8 @@ func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo stri
 			Name: name,
 			URL:  restrule.Render(b.ArchiveURL, vars(owner, repo, "", name)),
 		}
-		// Pin to the branch's HEAD commit when the host supports a commit archive
-		// and we can read the sha — so the install is reproducible. Otherwise fall
-		// back to the floating branch-HEAD archive above (unpinned).
+		// Pin to the branch's HEAD commit when possible, for a reproducible install; otherwise use
+		// the floating branch archive.
 		if sha := restrule.GetPathString(el, b.CommitPath); sha != "" && rule.CommitArchiveURL != "" {
 			v := vars(owner, repo, "", name)
 			v["commit"] = sha
@@ -249,13 +233,9 @@ func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo stri
 	return branches, nil
 }
 
-// AutoAsset picks the asset to install automatically when no user is present to
-// choose — the shared selector behind dependency install, Install latest, and Update
-// All. It asserts the release is unambiguous: exactly one uploaded asset → install it
-// (e.g. a GDExtension addon's precompiled build, where the generated source archive is
-// useless); no uploaded asset → the generated source archive (a pure-GDScript addon);
-// two or more uploaded assets → ambiguous (ok=false), so the caller reports and skips
-// it (or, when a user is present, opens a picker).
+// AutoAsset picks an asset without a user: exactly one uploaded asset is installed (e.g. a
+// precompiled GDExtension), none means the generated source archive, and two or more is
+// ambiguous (ok=false: skip, or show a picker).
 func AutoAsset(rel Release) (Asset, bool) {
 	var uploaded []Asset
 	var generated *Asset

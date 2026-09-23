@@ -1,7 +1,5 @@
-// Package addon holds the UI-agnostic logic for inspecting and installing
-// Godot addons from a YAML manifest. It has no knowledge of cobra or the TUI;
-// progress is surfaced through a Reporter so each front-end can render it
-// however it likes.
+// Package addon inspects and installs Godot addons from a YAML manifest, independent of
+// the CLI and TUI; progress goes through a Reporter.
 package addon
 
 import (
@@ -25,9 +23,8 @@ const (
 	KindSubmodule Kind = "submodule" // a live git working copy the parent repo manages; gdaddon never installs it
 )
 
-// KindOptions is the canonical label order for a kind toggle; index 0 is
-// KindPackage ("package", the empty Kind rendered as a word). KindIndex/ParseKind
-// convert between a Kind and its label.
+// KindOptions is the label order for a kind toggle; index 0 is KindPackage.
+// KindIndex/ParseKind convert.
 var KindOptions = []string{"package", "clone", "submodule"}
 
 // KindIndex returns k's position in KindOptions (KindClone→1, KindSubmodule→2,
@@ -56,56 +53,37 @@ func ParseKind(label string) Kind {
 	}
 }
 
-// Addon is a single manifest entry. Name is the manifest key — the entry's identity,
-// which for a new entry is its canonical repo id (see EntryKey) and for a hand-written
-// or legacy entry is whatever the user typed. Display is the human-facing label; Name
-// is never rendered directly, Label is. Tag records the release tag the entry was
-// installed from (empty for branch-HEAD installs, which have no tag); it's what
-// dependency specs match against, since Version holds the author-controlled plugin.cfg
-// version which can diverge from the tag.
+// Addon is one manifest entry. Name is its key and identity (a canonical repo id for new
+// entries, see EntryKey); Label, not Name, is what gets displayed. Tag is the release tag it
+// was installed from (empty for branch installs) and is what dependency specs match,
+// since Version is the author's plugin.cfg version.
 type Addon struct {
 	Name string `yaml:"-"`
-	// Display is the addon's own name, as its plugin.cfg/version.cfg declares it — read
-	// off disk on install (see AdoptName) or typed into Edit Manifest. It is a label and
-	// nothing else: no lookup, path, or dependency match ever keys on it, so it is free
-	// to hold spaces and punctuation a manifest key could not. Empty falls back to Slug.
+	// Display is the addon's declared name (from plugin.cfg on install, or Edit Manifest). It
+	// is only a label, never a lookup key, so it may contain anything. Empty falls back to
+	// Slug.
 	Display string `yaml:"name"`
 	URL     string `yaml:"url"`
 	Path    string `yaml:"path"`
 	Version string `yaml:"version"`
 	Tag     string `yaml:"tag"`
-	// Commit records the HEAD sha a branch package was pinned to (packages only; the
-	// url is that commit's archive). It gives an otherwise-floating branch snapshot a
-	// durable identity: a pinned entry reads as installed and never nags for updates.
+	// Commit is the HEAD sha a branch package was pinned to (the url is that commit's
+	// archive); a pinned entry reads as installed and never offers updates.
 	Commit string `yaml:"commit"`
-	// Kind marks a live git checkout (clone or submodule) rather than an unzipped
-	// package. For a clone, Install clones the repo with its .git kept and never
-	// overwrites an existing checkout; for a submodule, gdaddon never installs at all
-	// (the parent repo manages it) — both exist only for the utility actions. Tag
-	// holds the checked-out branch.
+	// Kind marks a live git checkout. A clone is cloned with .git kept and never overwritten;
+	// a submodule is never installed (its parent repo manages it). Tag holds the branch.
 	Kind Kind `yaml:"kind"`
-	// Lock pins the entry: when true, gdaddon stops reporting available updates for it
-	// and install/update reinstalls the pinned version rather than offering newer
-	// releases. The user toggles it per-entry; it carries through set import/export.
+	// Lock pins the entry: no update reports, and install reinstalls the pinned version.
 	Lock bool `yaml:"lock"`
-	// SuppressDeps lists (by source.RepoID) the dependencies this addon declares that
-	// the user has chosen to ignore — an optional dep (e.g. a C++-rewritten perf
-	// module) that should never contribute to the missing-deps warning nor be added by
-	// "Add all missing". Stored as an inline flow list on the declaring addon's entry.
+	// SuppressDeps lists (by source.RepoID) declared dependencies the user chose to ignore, so
+	// they never count as missing or get added.
 	SuppressDeps []string `yaml:"suppress_deps"`
-	// Dependency records that this entry was auto-added because another plugin declares
-	// it as a dependency — provenance, not the user's own choice. It lets OrphanDeps flag
-	// the entry as an "unused dependency" once nothing installed still requires it. Set
-	// when a dep is added via the Dependencies flow; cleared by the "Keep" action once the
-	// user adopts it. Carries through set import/export but is dropped on export to global
-	// (an explicit promotion). The user toggles it off, never on.
+	// Dependency marks an entry auto-added as another plugin's dependency, so OrphanDeps can
+	// flag it once nothing requires it. "Keep" clears it; export to global drops it.
 	Dependency bool `yaml:"is_dependency"`
 }
 
-// Label is the entry's human-facing name: the name the addon declares for itself when
-// recorded, else its Slug. Every rendered string — list rows, headings, report lines —
-// goes through here, so an identity-keyed entry reads as "My Plugin" rather than
-// "github.com/owner/my-plugin".
+// Label is the entry's display name: its declared name, else its Slug.
 func (a Addon) Label() string {
 	if a.Display != "" {
 		return a.Display
@@ -113,11 +91,8 @@ func (a Addon) Label() string {
 	return a.Slug()
 }
 
-// Slug is the folder-safe short form of the manifest key: its last path segment. It is
-// what a path derivation or a folder-name match may use, where the full key must not
-// appear (addons/github.com/owner/repo is not a place to install anything). A legacy
-// key has no separator and is its own slug, so this is a no-op for every entry written
-// before identity keys.
+// Slug is the last path segment of the key, safe for paths and folder matches (a legacy
+// key is its own slug).
 func (a Addon) Slug() string {
 	return path.Base(a.Name)
 }
@@ -133,9 +108,8 @@ func (a Addon) IsClone() bool { return a.Kind == KindClone }
 // gdaddon must never install or update.
 func (a Addon) IsSubmodule() bool { return a.Kind == KindSubmodule }
 
-// IsGitWorkdir reports whether the entry is a live git checkout (clone or
-// submodule) — a present folder gdaddon never overwrites, carrying a branch and a
-// dirty-state check rather than a pinned version.
+// IsGitWorkdir reports a live git checkout (clone or submodule), which is never
+// overwritten and has a branch rather than a version.
 func (a Addon) IsGitWorkdir() bool { return a.Kind == KindClone || a.Kind == KindSubmodule }
 
 // State describes an addon's local install relative to the manifest.
@@ -174,9 +148,8 @@ type Status struct {
 	State        State
 	LocalVersion string
 	FullPath     string
-	// LiveBranch is the branch currently checked out for a git workdir (clone/submodule),
-	// read at inspect time; "" for non-git entries or an unreadable/detached checkout. When
-	// it differs from the recorded Addon.Tag the State is StateBranchChanged.
+	// LiveBranch is a git workdir's checked-out branch at inspect time ("" otherwise); differing
+	// from Addon.Tag makes the state StateBranchChanged.
 	LiveBranch string
 }
 
@@ -259,11 +232,9 @@ func InspectOne(a Addon, baseDir string) Status {
 	local := getLocalPluginVersion(fullPath)
 	s.LocalVersion = local
 
-	// A live git checkout (clone or submodule) is never overwritten once present, so it
-	// carries no version match. Instead compare its live branch against the branch the
-	// manifest records (Addon.Tag): a known, differing branch is drift worth surfacing
-	// (StateBranchChanged); otherwise it stays unversioned (which InstallAll skips). A
-	// detached HEAD or unreadable repo yields "" and reads as unversioned, no false drift.
+	// A present git checkout is never overwritten, so compare branches instead of versions: a
+	// known, different branch is StateBranchChanged; otherwise unversioned. A detached or
+	// unreadable repo reads as unversioned.
 	if a.IsGitWorkdir() {
 		s.LiveBranch = CurrentBranch(fullPath)
 		if s.LiveBranch != "" && s.LiveBranch != a.Tag {
@@ -289,25 +260,19 @@ func InspectOne(a Addon, baseDir string) Status {
 	return s
 }
 
-// getLocalPluginVersion reports the version recorded in an installed addon's
-// plugin.cfg/version.cfg under addonPath, or "" if absent. Used after an
-// install/update to pin the real installed version.
+// getLocalPluginVersion returns the version in addonPath's plugin.cfg/version.cfg, or "".
 func getLocalPluginVersion(addonPath string) string {
 	return readPluginCfgKey(addonPath, "version")
 }
 
-// getLocalPluginName reports the name an installed addon declares for itself in its
-// plugin.cfg/version.cfg under addonPath, or "" if absent. The one reader of that key:
-// ScanInstalled names a found folder with it, and an install records it on the entry
-// (see AdoptName), so both learn an addon's name the same way.
+// getLocalPluginName returns the name addonPath's plugin.cfg/version.cfg declares, or "".
+// ScanInstalled and AdoptName both use it.
 func getLocalPluginName(addonPath string) string {
 	return readPluginCfgKey(addonPath, "name")
 }
 
-// ProjectName reads config/name from a Godot project.godot at root. exists
-// reports whether project.godot is present; name may be "" if present but
-// unnamed. A plain line scan is used since project.godot's full syntax (arrays,
-// resource refs) trips strict INI parsers.
+// ProjectName reads config/name from project.godot at root; exists reports whether the
+// file is there. A line scan, since project.godot trips strict INI parsers.
 func ProjectName(root string) (name string, exists bool) {
 	data, err := os.ReadFile(filepath.Join(root, "project.godot"))
 	if err != nil {

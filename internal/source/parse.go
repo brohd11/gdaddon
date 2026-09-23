@@ -14,11 +14,9 @@ type repoRef struct {
 	Branch string // non-empty if the URL was a refs/heads archive
 }
 
-// parseRepoURL extracts host/owner/repo (and a tracked branch) from any standard
-// git-host URL — a .git clone URL, a plain host/owner/repo, a release-download
-// asset, or an archive/refs URL. It does not restrict the host; whether a host is
-// supported for version listing is decided by ruleForHost. Nested-group hosts
-// (e.g. GitLab subgroups) are out of scope and would mis-parse owner/repo.
+// parseRepoURL extracts host/owner/repo (and a tracked branch) from any standard git-host
+// url: .git, plain, release asset or archive. ruleForHost decides whether the host is
+// supported. Nested groups (GitLab subgroups) are not handled.
 func parseRepoURL(rawURL string) (repoRef, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {

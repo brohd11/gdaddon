@@ -12,30 +12,24 @@ import (
 // defaultDepHost is assumed when a dependency item names only owner/repo.
 const defaultDepHost = "github.com"
 
-// LatestTag is the reserved ref word meaning "the newest published non-prerelease",
-// resolved when the entry is recorded rather than stored literally. A repo that ships a
-// real rolling tag called `latest` cannot be pinned to it by name; the reserved meaning
-// always wins, which is the price of having the word at all.
+// LatestTag is the reserved ref for the newest non-prerelease, resolved when the entry is
+// recorded. A real tag named `latest` cannot be pinned by name.
 const LatestTag = "latest"
 
 // IsLatestTag reports whether ref is the reserved LatestTag word, case-insensitively —
 // the single definition shared by the spec parser and ResolveVersion.
 func IsLatestTag(ref string) bool { return strings.EqualFold(ref, LatestTag) }
 
-// Dependency is one parsed entry of an addon's plugin.cfg dependency list. A spec is
-// `[<kind>:]owner/repo[@<ref>]`, where the repo half may lead with a host (github.com is
-// assumed otherwise):
+// Dependency is one parsed plugin.cfg dependency. A spec is
+// `[<kind>:]owner/repo[@<ref>]` (host optional, github.com by default):
+//   - `owner/repo@v1.0.0` pins that tag;
+//   - `owner/repo@latest` pins the newest non-prerelease when recorded;
+//   - `owner/repo` pins nothing (added version-less);
+//   - `clone:owner/repo@main` requires a live checkout, Tag being a branch (none means
+//     the remote default).
 //
-//   - `owner/repo@v1.0.0` pins that release tag;
-//   - `owner/repo@latest` asks for the newest non-prerelease, resolved and pinned when the
-//     entry is recorded — LatestTag is a reserved word, never matched as a literal tag;
-//   - `owner/repo` pins nothing, so the repo is added version-less;
-//   - `clone:owner/repo@main` requires a live git checkout (Kind KindClone), where Tag
-//     holds a *branch* and an absent one means the remote's default branch.
-//
-// RepoURL is the canonical repo url used to list versions and resolve an asset; RepoID
-// is its source.RepoID form (host/owner/repo, lowercased) for matching against installed
-// manifest entries. Every field is comparable, which callers and tests rely on.
+// RepoURL is the canonical url; RepoID its host/owner/repo form for matching entries.
+// Every field is comparable.
 type Dependency struct {
 	Host    string
 	Owner   string
@@ -50,15 +44,11 @@ type Dependency struct {
 // mirroring Addon.IsClone. For one of these Tag names a branch, not a release.
 func (d Dependency) IsClone() bool { return d.Kind == KindClone }
 
-// WantsLatest reports whether the spec's ref is the reserved `latest` word — "the newest
-// non-prerelease, whatever it is right now", resolved to a concrete tag before anything
-// is recorded (see ResolveDepAsset).
+// WantsLatest reports whether the ref is the reserved `latest` (see ResolveDepAsset).
 func (d Dependency) WantsLatest() bool { return IsLatestTag(d.Tag) }
 
-// Dependencies reads the dependencies an installed addon declares in its
-// plugin.cfg/version.cfg under addonDir. A missing config or absent/empty
-// dependency key yields nil with no error. `require` is an alias for `deps` and
-// wins when both keys are present, including when it is explicitly empty.
+// Dependencies reads what an installed addon's config declares. Missing config or an empty
+// key yields nil. `require` aliases `deps` and wins when both are present, even if empty.
 func Dependencies(addonDir string) ([]Dependency, error) {
 	cfgPath := pluginCfgPath(addonDir)
 	if cfgPath == "" {
@@ -77,10 +67,8 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 	return parseDependencyList(raw), nil
 }
 
-// parseDependencyList parses a Godot-style bracketed, comma-separated,
-// optionally-quoted list of dependency specs (see Dependency for the shapes). Malformed
-// items — a missing owner/repo, an unknown `<kind>:` prefix, `clone:` with `@latest` —
-// are skipped rather than failing the whole parse.
+// parseDependencyList parses a Godot bracketed, comma-separated, optionally quoted list of
+// specs, skipping malformed items (no owner/repo, unknown kind, clone with @latest).
 func parseDependencyList(raw string) []Dependency {
 	raw = strings.TrimSpace(raw)
 	raw = strings.TrimPrefix(raw, "[")
@@ -101,13 +89,9 @@ func parseDependencyList(raw string) []Dependency {
 	return deps
 }
 
-// ParseRepoSpec parses a `[<kind>:]owner/repo[@<ref>]` (or `host/owner/repo`) spec into
-// the same Dependency a plugin.cfg `deps`/`require` item yields — the host defaults to
-// github.com and RepoURL/RepoID come out canonical. Exported for the CLI's
-// `gdaddon install <spec>` argument, which deliberately shares this parser so a
-// hand-typed spec and a declared dependency can never diverge. That sharing is why the
-// grammar is made of keywords rather than sigils: the same text gets typed into a shell,
-// where `&` and `#` mean something else entirely.
+// ParseRepoSpec parses a `[<kind>:]owner/repo[@<ref>]` spec into the Dependency a plugin.cfg
+// item yields. The CLI's install argument shares it so typed and declared specs agree;
+// hence keywords rather than shell-hostile sigils.
 func ParseRepoSpec(spec string) (Dependency, bool) {
 	return parseDependency(strings.TrimSpace(spec))
 }
@@ -139,17 +123,9 @@ func parseDependency(item string) (Dependency, bool) {
 	return Dependency{Host: host, Owner: owner, Repo: repo, Tag: tag, Kind: kind, RepoURL: repoURL, RepoID: id}, true
 }
 
-// splitDepKind strips an optional `<kind>:` prefix off a spec, returning the rest and the
-// Kind it asked for. Two kinds can be asked for: `clone:`, and `package:` as the explicit
-// spelling of the default. `submodule:` is rejected outright — a submodule is managed by
-// the parent repo and gdaddon never installs one, so requiring it is a spec that cannot
-// be honoured rather than one to quietly fall back from.
-//
-// A candidate keyword only exists before the first "/", and only exact matches are
-// claimed. Everything else is handed back untouched for parseRepoShorthand to judge as it
-// did before prefixes existed — which is what keeps a host carrying a port
-// (`127.0.0.1:8080/owner/repo`, the shape the dependency tests' local server produces)
-// parsing as the host it is rather than as an unknown kind.
+// splitDepKind strips an optional `clone:` or `package:` prefix. `submodule:` is rejected
+// (gdaddon never installs submodules). Only exact keywords before the first "/" count, so
+// a host with a port (127.0.0.1:8080/owner/repo) still parses as a host.
 func splitDepKind(item string) (rest string, kind Kind, ok bool) {
 	colon := strings.Index(item, ":")
 	slash := strings.Index(item, "/")
@@ -167,9 +143,8 @@ func splitDepKind(item string) (rest string, kind Kind, ok bool) {
 	return item, KindPackage, true
 }
 
-// parseRepoShorthand splits owner/repo or host/owner/repo shorthand, defaulting the
-// host to defaultDepHost (github.com) for the 2-part form, and returns the canonical
-// https url. ok is false for any other shape or an empty owner/repo.
+// parseRepoShorthand splits owner/repo (github.com assumed) or host/owner/repo and returns
+// the canonical https url; ok is false otherwise.
 func parseRepoShorthand(s string) (host, owner, repo, url string, ok bool) {
 	switch parts := strings.Split(strings.Trim(s, "/"), "/"); len(parts) {
 	case 2:
@@ -185,25 +160,11 @@ func parseRepoShorthand(s string) (host, owner, repo, url string, ok bool) {
 	return host, owner, repo, fmt.Sprintf("https://%s/%s/%s", host, owner, repo), true
 }
 
-// MissingDeps returns the dependencies addon a declares (in its installed
-// plugin.cfg under projectRoot) that the manifest does not yet contain: a dep whose
-// repo has no manifest entry, or a tagged dep whose existing entry's tag is
-// verifiably older — the set "Add all missing" would add. A tagless dep is satisfied
-// by any present entry, and a present entry with a non-comparable tag (a date stamp,
-// or a branch-HEAD install with no tag) is left alone — "can't verify", not flagged —
-// so deliberate HEAD-tracking isn't nagged. Deps the user has suppressed (a.SuppressDeps)
-// are excluded. A not-installed addon (no path / no plugin.cfg) declares nothing.
-// It is local-only (no network), so it's cheap enough to recompute on every refresh.
-//
-// Note this is manifest-presence only (not on-disk state); DepStatuses is the
-// install-aware form used by the Dependencies screen and the missing-deps warning.
-//
-// It is the "needs recording" half of PlanDeps' classification — no entry at all, or an
-// entry verifiably behind — but it walks the deps itself rather than concatenating that
-// function's buckets, because the result is returned in *declaration* order and
-// `list --json` publishes it as an ordered array. Matching and the tag rule are still the
-// shared ones (depIndex, depSatisfied — see depmatch.go), which is what keeps this in step
-// with the other readers; only the grouping differs.
+// MissingDeps returns, in declaration order, a's declared dependencies that the manifest
+// lacks or holds at a verifiably older tag: what "Add all missing" adds. Tagless deps are
+// satisfied by any entry, uncomparable tags are trusted, suppressed deps are excluded. It
+// is manifest-only and cheap; DepStatuses is the install-aware form. It uses the shared
+// depIndex and depSatisfied, but keeps declaration order (published by `list --json`).
 func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, error) {
 	deps, err := declaredDeps(a, projectRoot)
 	if err != nil || len(deps) == 0 {
@@ -225,15 +186,9 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 	return missing, nil
 }
 
-// OrphanDeps reports which is_dependency-flagged manifest entries are no longer required
-// by any installed plugin — the "unused dependency" markers. It builds the union of every
-// non-suppressed dependency RepoID declared by a present plugin's plugin.cfg, then flags
-// each entry with Dependency==true whose own RepoID is absent from that union. Keyed by
-// addon Name; only orphans appear (a missing key reads as not-orphaned).
-//
-// The graph is read from installed plugins only (an uninstalled plugin's plugin.cfg isn't
-// on disk), so removing/uninstalling a depender flags its dep here — intended, and a
-// stateless self-healing recompute. Local-only, so it rides every refresh like DepStatuses.
+// OrphanDeps reports is_dependency entries no installed plugin requires any more, keyed by
+// Name (only orphans present). The requirement graph comes from installed plugins' configs,
+// so uninstalling a depender flags its dependency. Local-only.
 func OrphanDeps(statuses []Status) map[string]bool {
 	needed := make(map[string]bool)
 	for _, s := range statuses {
@@ -288,14 +243,9 @@ type DepStatus struct {
 	LocalTag   string // the matched manifest entry's tag, for display ("" when none)
 }
 
-// DepStatuses returns the install state of every dependency addon a declares, matched
-// against the freshly inspected project statuses (so it knows what is actually on disk,
-// unlike MissingDeps which is manifest-presence only). It backs the Dependencies screen
-// and — via the "needs attention" subset (unsuppressed && not DepInstalled) — the
-// missing-deps warning. Local-only. A not-installed addon declares nothing.
-// Matching is depIndex's (see depmatch.go) — the same lookup MissingDeps uses, so the
-// screen and the "Add all missing" set can never disagree about what is present — over the
-// statuses' own entries, so a hit indexes straight back into statuses for the on-disk half.
+// DepStatuses returns the install state of each dependency a declares, matched (via
+// depIndex, like MissingDeps) against the inspected statuses so it reflects what is on
+// disk. It backs the Dependencies screen and the missing-deps warning. Local-only.
 func DepStatuses(a Addon, projectRoot string, statuses []Status) ([]DepStatus, error) {
 	deps, err := declaredDeps(a, projectRoot)
 	if err != nil || len(deps) == 0 {

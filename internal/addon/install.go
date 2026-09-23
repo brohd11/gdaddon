@@ -10,16 +10,12 @@ import (
 	"github.com/brohd11/gdaddon/internal/store"
 )
 
-// InstallOutcome records one addon that was actually installed in a batch run, so a
-// caller can follow up per addon (the TUI's post-install location form). PriorPath is
-// the entry's manifest path before the install (empty for a path-less first install),
-// Path/Version the resolved result, URL the entry's source url. Only single-folder
-// installs (a pinnable Path) produce an outcome.
+// InstallOutcome is one addon installed in a batch run to a single folder, for per-addon
+// follow-up (the TUI's location form). PriorPath is the manifest path before install.
 type InstallOutcome struct {
 	Name string
-	// Display is the entry's label at the end of the install: the name it already
-	// recorded, else the one the package just declared. Carried so a follow-up screen
-	// renders what the manifest now holds without re-reading it.
+	// Display is the entry's label after install: its recorded name, else the one the package
+	// declared.
 	Display   string
 	URL       string
 	PriorPath string
@@ -33,9 +29,8 @@ func (o InstallOutcome) Label() string {
 	return Addon{Name: o.Name, Display: o.Display}.Label()
 }
 
-// displayOf is the label an install's outcome carries: the name already on the entry,
-// else the one the package just declared. The in-memory entry predates AdoptName's
-// write, so the fresh result is what fills the gap.
+// displayOf is an outcome's label: the entry's name, else the freshly declared one (the
+// in-memory entry predates AdoptName's write).
 func displayOf(a Addon, res InstallResult) string {
 	if a.Display != "" {
 		return a.Display
@@ -43,11 +38,9 @@ func displayOf(a Addon, res InstallResult) string {
 	return sanitizeDisplay(res.Name)
 }
 
-// InstallAll applies the manifest's skip/update policy: already-installed and
-// unversioned-present entries are skipped, mismatches are updated. After a
-// successful install it pins the resolved path + version back into the manifest
-// (entries start url-only; this records where they landed). It returns one
-// InstallOutcome per addon actually installed (to a single, pinnable folder).
+// InstallAll applies the manifest's policy: skip installed and unversioned-present entries,
+// update mismatches, and pin each result's path and version. It returns an outcome per
+// single-folder install.
 func InstallAll(ctx context.Context, manifestPath string, statuses []Status, baseDir string, report Reporter) ([]InstallOutcome, error) {
 	var outcomes []InstallOutcome
 	for _, s := range statuses {
@@ -63,9 +56,8 @@ func InstallAll(ctx context.Context, manifestPath string, statuses []Status, bas
 			report("[%s] already exists at %s (no version specified). Skipping...", a.Label(), a.Path)
 			continue
 		case StateBranchChanged:
-			// A git checkout on a different branch than the manifest records: a present git
-			// workdir is never touched by a batch install. Report the drift and skip;
-			// reconcile (re-record the tag) is the explicit per-addon "Update branch record".
+			// A git checkout on a different branch is never touched by a batch install; report it
+			// ("Update branch record" re-records the branch).
 			report("[%s] branch changed (recorded %s, on %s). Skipping...", a.Label(), a.Tag, s.LiveBranch)
 			continue
 		case StateMismatch:
@@ -82,40 +74,30 @@ func InstallAll(ctx context.Context, manifestPath string, statuses []Status, bas
 			continue
 		}
 		if res.Path != "" {
-			if err := AdoptName(manifestPath, a, res); err != nil {
+			_, outcome, err := recordInstall(manifestPath, baseDir, a, res, func(err error) {
 				report("[%s] Could not record the declared name: %v", a.Label(), err)
-			}
-			// pinInstalled, not a bare UpdateEntry: a clone records no version and has its
-			// checked-out branch written back, and this is the third site that installs
-			// then pins (with InstallOne and ensureDep).
-			if _, err := pinInstalled(manifestPath, baseDir, a, res); err != nil {
+			})
+			if err != nil {
 				report("[%s] Error pinning manifest: %v", a.Label(), err)
 				continue
 			}
-			outcomes = append(outcomes, InstallOutcome{
-				Name: a.Name, Display: displayOf(a, res), URL: a.URL,
-				PriorPath: a.Path, Path: res.Path, Version: res.Version,
-			})
+			outcomes = append(outcomes, outcome)
 		}
 	}
 	return outcomes, nil
 }
 
-// InstallResult reports what a single addon install produced, so the manifest entry can
-// be pinned from it. Path is the project-root-relative install path, Version and Name are
-// read back out of the installed plugin.cfg; all three are empty when the install can't
-// be tracked to a single folder (a package that ships several top-level addons). Name is
-// the addon's own declared name and is empty when its config doesn't carry one.
+// InstallResult is what an install produced: the project-relative Path, and Version and
+// Name read from the installed config. All empty when the package installs several
+// folders; Name empty when none is declared.
 type InstallResult struct {
 	Path    string
 	Version string
 	Name    string
 }
 
-// installedAt reports what landed at dest (absolute) for the entry path destRel
-// (project-root-relative). Every install path ends here, so each one comes back with the
-// same data read the same way, rather than each branch assembling its own result and
-// picking up whichever fields it happened to remember.
+// installedAt reads what landed at dest for entry path destRel; every install path ends
+// here, so results are read the same way.
 func installedAt(destRel, dest string) InstallResult {
 	return InstallResult{
 		Path:    destRel,
@@ -124,16 +106,9 @@ func installedAt(destRel, dest string) InstallResult {
 	}
 }
 
-// AdoptName records the name an installed package declares for itself — on its manifest
-// entry, and on the matching global-list entry — for whichever of the two has no name of
-// its own yet. It never renames a key and never overwrites a name already recorded, be it
-// one the user typed or one an earlier install adopted, so every install path can call it
-// unconditionally: it is a no-op for an already-named entry and for a package whose
-// config declares no name.
-//
-// This is the one place an install's result becomes the entry's label. The pin sites call
-// it instead of each deciding for itself what an addon is called, which is how the CLI,
-// the TUI, the dependency walker, and update-all all end up recording the same thing.
+// AdoptName records a package's declared name on its manifest entry and matching global
+// entry, only where neither has a name yet. It never renames keys or overwrites names, so
+// every install path can call it; it is the one place an install sets an entry's label.
 func AdoptName(manifestPath string, a Addon, res InstallResult) error {
 	display := sanitizeDisplay(res.Name)
 	if display == "" {
@@ -146,9 +121,7 @@ func AdoptName(manifestPath string, a Addon, res InstallResult) error {
 	return SetDisplayName(manifestPath, a.Name, display)
 }
 
-// sanitizeDisplay trims a declared name and rejects one carrying control characters
-// (which no INI value should hold, and which a manifest line cannot represent). Returns
-// "" for anything unusable, which every caller reads as "declares no name".
+// sanitizeDisplay trims a declared name, returning "" for names with control characters.
 func sanitizeDisplay(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" || strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
@@ -157,10 +130,8 @@ func sanitizeDisplay(name string) string {
 	return name
 }
 
-// Install fetches a single addon and installs it under baseDir. The destination
-// is the entry's explicit path when set, otherwise it's derived from the
-// package's plugin.cfg layout (see resolveInstall). Existing folders at each
-// destination are replaced.
+// Install fetches one addon and installs it under baseDir, at the entry's path or one
+// derived from the package layout (resolveInstall), replacing existing folders.
 func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	if a.URL == "" {
 		return InstallResult{}, fmt.Errorf("missing 'url'")
@@ -191,14 +162,10 @@ func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (Ins
 	return installStaged(stagingRoot, pkgName, a, baseDir, report)
 }
 
-// installStaged places staged content under baseDir, derived from the package
-// layout (resolveInstall, unless the entry pins an explicit path). A single-folder
-// install overwrites its destination and is pinned to a path/version. A package that
-// unpacks to several plugin folders (a bundle, e.g. cogito shipping other addons) is
-// handled carefully: only the primary folder (the one matching the entry) is
-// overwritten and pinned; every other folder is written only when absent, so a
-// bundled copy never clobbers a plugin the user manages separately. Shared by the
-// generic and store install branches.
+// installStaged places staged content under baseDir. A single folder is overwritten and
+// pinned. For a bundle of several plugin folders, only the entry's own folder is
+// overwritten and pinned; the others are written only if absent, so a bundled copy never
+// replaces a separately managed plugin.
 func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	placements := resolveInstall(stagingRoot, a.Slug(), a.Path, pkgName)
 
@@ -236,10 +203,8 @@ func installStaged(stagingRoot, pkgName string, a Addon, baseDir string, report 
 	return res, nil
 }
 
-// writePlacement replaces the folder at p.destRel (under baseDir) with p.src. It is the
-// choke point every install path passes through, so it is where the project-root
-// containment check lives — the destination is removed before it is written, and part
-// of it can come from the downloaded package's own config (see resolveUnder).
+// writePlacement replaces the folder at p.destRel with p.src. Every install passes
+// through here, so it enforces project-root containment (see resolveUnder).
 func writePlacement(p placement, baseDir string, report Reporter) error {
 	dest, err := resolveUnder(baseDir, p.destRel)
 	if err != nil {
@@ -256,11 +221,9 @@ func writePlacement(p placement, baseDir string, report Reporter) error {
 	return nil
 }
 
-// primaryPlacement returns the index of the placement that is the entry's own addon
-// (so a bundle's other folders can be treated as extras), matched by the install
-// folder's basename against the entry's name or its pinned path. Returns -1 when no
-// placement matches — a genuinely ambiguous multi-addon package, where nothing is
-// pinned and every folder is written only if absent.
+// primaryPlacement returns the placement that is the entry's own addon (folder name
+// matching its name or path), or -1 when ambiguous (nothing pinned, all written only if
+// absent).
 func primaryPlacement(placements []placement, a Addon) int {
 	want := map[string]bool{}
 	// The entry's slug, not its key: an identity-keyed entry
@@ -279,11 +242,8 @@ func primaryPlacement(placements []placement, a Addon) int {
 	return -1
 }
 
-// cloneInstall installs a clone entry: it git-clones the repo (full history, the
-// branch named in a.Tag, .git kept) to the entry's path so it's a live working
-// copy. The whole repo is placed at the path, so it suits repos whose root is the
-// addon itself. An already-present checkout is left untouched — never overwritten —
-// so uncommitted development work is safe across re-runs.
+// cloneInstall clones the repo (full history, branch a.Tag, .git kept) to the entry's path
+// as a working copy. An existing checkout is never overwritten.
 func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	destRel := a.Path
 	if destRel == "" {
@@ -296,19 +256,15 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 
 	if _, err := os.Stat(dest); err == nil {
 		if isGitCheckout(dest) {
-			// Nothing to clone — but the checkout can still be in the wrong place: an
-			// entry pinning no path only learns the addon's declared one from the
-			// checkout itself, which an install made before that was consulted never
-			// applied. Settling here relocates it once instead of stranding it forever.
+			// No clone needed, but a path-less entry may still sit at the wrong place: settle it
+			// against the checkout's declared path once.
 			if a.Path == "" {
 				destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Label(), false, report)
 			}
 			report("[%s] Already cloned at %s. Skipping (manage updates with git).", a.Label(), destRel)
 			return installedAt(destRel, dest), nil
 		}
-		// A non-git folder here (e.g. a prior package install being converted to a
-		// clone): replace it so the clone can take its place. Package folders are
-		// freely overwritten elsewhere and hold no uncommitted git work.
+		// Replace a non-git folder (a former package install) with the clone.
 		report("[%s] Replacing non-git folder at %s with a fresh clone.", a.Label(), destRel)
 		if err := os.RemoveAll(dest); err != nil {
 			return InstallResult{}, fmt.Errorf("could not remove existing folder %s: %w", destRel, err)
@@ -320,31 +276,19 @@ func cloneInstall(ctx context.Context, a Addon, baseDir string, report Reporter)
 	}
 	report("  -> Successfully cloned to %s", destRel)
 
-	// A clone can only declare its own install path once it is on disk, so a derived
-	// dest is provisional — settle it against the config the clone brought with it.
-	// Only when the entry pins no path of its own, which keeps the precedence
-	// installStaged applies to a package (manifest path > the addon's declared
-	// dir=/path= key > addons/<name>); a clone just resolves the middle term after the
-	// clone rather than before it.
+	// A clone's declared install path is only readable after cloning, so settle a derived
+	// destination afterwards, keeping the precedence: manifest path, declared dir/path,
+	// addons/<name>.
 	if a.Path == "" {
 		destRel, dest = settleDeclaredPath(destRel, dest, baseDir, a.Label(), true, report)
 	}
 	return installedAt(destRel, dest), nil
 }
 
-// settleDeclaredPath moves a cloned checkout from its derived location to the install
-// path the clone declares in its own plugin.cfg/version.cfg (see installDir),
-// returning where it ended up (project-relative and absolute). It mirrors
-// cloneInstall's handling of an occupied destination: a checkout already at the
-// declared path is a live working copy that is never overwritten, a non-git folder
-// there is replaced. The checkout is already installed and usable at fromRel, so a
-// move that cannot be made is reported and the derived location kept rather than
-// failing an install that otherwise succeeded.
-//
-// fresh says whether the checkout at fromRel was just cloned by this install. Only
-// then may it be discarded to resolve a clash with a checkout already at the declared
-// path — one that was already there is the user's working copy, uncommitted work and
-// all, and is left exactly where it is.
+// settleDeclaredPath moves a fresh clone to the path its config declares, returning where
+// it ended up. An existing checkout at the target is never overwritten; a non-git folder
+// there is replaced. Failures are reported and the current location kept. fresh reports
+// whether the checkout was just cloned: only a fresh clone may be discarded on a clash.
 func settleDeclaredPath(fromRel, from, baseDir, name string, fresh bool, report Reporter) (string, string) {
 	declared := installDir(from)
 	if declared == "" {
@@ -386,12 +330,8 @@ func settleDeclaredPath(fromRel, from, baseDir, name string, fresh bool, report 
 	return declared, to
 }
 
-// Relocate moves an installed addon directory from fromRel to toRel (both
-// project-root-relative), creating the destination's parent. It fails if the
-// destination already exists — the caller decides what to do about a clash rather
-// than silently overwriting. Used by the post-install "confirm location" form to
-// honor a corrected path without re-downloading; a plain os.Rename moves a normal
-// install or a clone (.git and all) alike.
+// Relocate moves an installed addon from fromRel to toRel (project-relative), creating the
+// parent and failing if the target exists. Used by the post-install location form.
 func Relocate(root, fromRel, toRel string) error {
 	from, err := resolveUnder(root, fromRel)
 	if err != nil {
@@ -413,11 +353,8 @@ func Relocate(root, fromRel, toRel string) error {
 	return os.Rename(from, to)
 }
 
-// Uninstall deletes an addon's installed files under baseDir, symmetric with
-// Install. The location is the entry's recorded path; it is lenient — an empty
-// path (nothing recorded) or an already-absent directory is a no-op — so a
-// "remove + delete files" action is safe even when the addon isn't installed. The
-// manifest entry is removed separately via RemoveEntry.
+// Uninstall deletes an addon's files at its recorded path; an empty path or missing
+// directory is a no-op. RemoveEntry removes the manifest entry.
 func Uninstall(a Addon, baseDir string) error {
 	if a.Path == "" {
 		return nil

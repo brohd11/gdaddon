@@ -71,15 +71,13 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 	// PopStop: this submenu is the per-plugin command hub, so the archive sub-flow
 	// returns here (PopTo) after it finishes.
 	return components.NewPicker(items, components.PickerOpts{
-		// Crumb: "Plugin", // looks better with name
 		Title:   g.label(),
 		PopStop: true,
 	})
 }
 
-// importToProject copies the global entry into the project manifest, then broadcasts
-// ProjectDirty (Focus false, so the Project list reloads silently without leaving the
-// Global tab) and pops the submenu back to the Global list — handy for importing several.
+// importToProject copies the entry into the project manifest, broadcasts ProjectDirty (the
+// project list reloads without switching tabs) and pops back, so several can be imported.
 func importToProject(sh *core.Shared, g globalItem) core.Action {
 	a := g.entry()
 	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, a); err != nil {

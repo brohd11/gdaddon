@@ -12,14 +12,10 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// newVersionsPicker lists a repo's versions (newest first). When opts.IncludeHEAD a
-// HEAD row is prepended (lazily fetches branches). A version with a single asset drops
-// straight to its endpoint menu; multiple assets open an asset picker first (mirrors
-// the project versions.go release rule).
-// A release with a local copy is tagged opts.marker(): for marking/install flows that's
-// a release whose assets are all in `archived`, plus (SourceAll only) archive-only rows
-// whose assets are themselves local. A SourceAll release with a local twin also carries
-// it on the Selection (releaseSelection) so the install confirm can offer a source toggle.
+// newVersionsPicker lists a repo's versions newest first, with a lazily fetched HEAD row
+// when IncludeHEAD. A single-asset version goes straight to its endpoint; several open an
+// asset picker. Versions with a local copy get opts.marker(), and a SourceAll release with
+// a local twin carries it on the Selection for the install's source toggle.
 func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []source.Release, archived archivedSet) *components.PickerScreen {
 	// Sort the complete remote/archive union without changing a cached listing.
 	releases = append([]source.Release(nil), releases...)
@@ -45,7 +41,6 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 		desc := fmt.Sprintf("%d asset(s)", len(rel.Assets))
 		if len(rel.Assets) == 1 {
 			desc = "1 asset - " + rel.Assets[0].Name
-			// desc = stripSuffix(desc) // not sure about this
 		}
 		if rel.IsPrerelease() {
 			desc += " · prerelease"
@@ -71,17 +66,13 @@ func newVersionsPicker(repoID, repoURL string, opts BrowseOpts, releases []sourc
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Repo", Title: repoID})
 }
 
-// NewVersionsPicker lists an archived repo's versions; a thin wrapper over
-// newVersionsPicker kept for the Archive tab, which already holds a RepoArchive (no
-// HEAD — the local archive has no fetchable branches; nothing to mark).
+// NewVersionsPicker lists an archived repo's versions, for the Archive tab (no HEAD).
 func NewVersionsPicker(repo arch.RepoArchive, opts BrowseOpts) *components.PickerScreen {
 	opts.IncludeHEAD = false
 	return newVersionsPicker(repo.ID, "", opts, repo.Releases, nil)
 }
 
-// newAssetPicker lists the assets of a multi-asset release; selecting one opens its
-// endpoint menu. An asset with a local copy is tagged opts.marker() — either a remote
-// asset present in `archived`, or (SourceAll only) an asset that is itself local.
+// newAssetPicker lists a multi-asset release's assets; local copies are marked.
 func newAssetPicker(repoID string, rel source.Release, opts BrowseOpts, archived archivedSet) *components.PickerScreen {
 	items := make([]list.Item, 0, len(rel.Assets))
 	for _, a := range rel.Assets {
@@ -114,9 +105,8 @@ func allLocal(rel source.Release) bool {
 	return true
 }
 
-// releaseSelection builds the Selection for a chosen release asset. When the chosen
-// asset is remote and a local archived copy of it exists, ArchivedAsset carries that
-// copy so an install confirm can offer a Download/Archive source toggle.
+// releaseSelection builds a release asset's Selection, attaching a local archived copy
+// (ArchivedAsset) when one exists for the install's source toggle.
 func releaseSelection(repoID string, rel source.Release, a source.Asset, archived archivedSet) Selection {
 	sel := Selection{
 		RepoID:     repoID,

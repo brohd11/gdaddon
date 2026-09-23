@@ -2,20 +2,15 @@ package project
 
 import (
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
-	"strings"
 
 	"github.com/brohd11/bubblestack/core"
 
 	"github.com/brohd11/gdaddon/internal/addon"
 )
 
-// pinInstall writes the freshly installed entry's url/path/version/tag (+clone
-// flag) into the manifest and returns a human status line. It takes the whole
-// addon.InstallResult so every field the install resolved — path, version, and the
-// name the package declares for itself — is pinned from one value; the
-// url/version/tag derivation is shared with the silent finish path. A manifest
-// write failure is an error — the install itself succeeded, but claiming the pin
-// landed when it didn't would desync the manifest from disk silently.
+// pinInstall writes the installed entry's url, path, version and tag (and kind and commit)
+// from the InstallResult, returning a status line. A failed manifest write is an error
+// even though the install succeeded.
 func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, res addon.InstallResult) (string, error) {
 	name, url := selected.Name, pick.asset.URL
 	path, instVersion := res.Path, res.Version
@@ -24,9 +19,8 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, res
 	if pick.archived {
 		url = ""
 	}
-	// A commit-pinned package (fresh branch Package install, or an archived copy of
-	// one — which reads back as a release row but carries the sha on the asset) records
-	// only its sha; it has no release tag/version. Treat a carried commit as the signal.
+	// A commit-pinned package (a branch install, or an archived copy of one) records only its
+	// sha.
 	commit := ""
 	if pick.asset.Commit != "" && !pick.clone {
 		commit = pick.asset.Commit
@@ -34,22 +28,19 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, res
 	pinned := commit != ""
 
 	version := instVersion
-	// Fall back to the picked tag as the version only for release installs; a clone
-	// tracks a branch and a branch/commit package carries the branch name in pick.tag
-	// (not a version), so leave version empty for those rather than recording it.
+	// Use the picked tag as the version only for release installs; clones and branch packages
+	// carry a branch name there.
 	if version == "" && !pick.clone && !pick.branch && !pinned {
-		version = strings.TrimPrefix(pick.tag, "v")
+		version = addon.TagVersion(pick.tag)
 	}
-	// Branch-HEAD / commit-pinned installs carry the branch name in pick.tag but have no
-	// release tag; don't record a bogus tag. A clone install is the exception: it keeps
-	// the branch as tag and records the canonical .git url so a re-clone targets the
-	// right branch.
+	// Branch and commit-pinned installs record no tag. Clones keep the branch as tag and
+	// record the canonical .git url.
 	tag := pick.tag
 	if (pick.branch || pinned) && !pick.clone {
 		tag = ""
 	}
 	if pick.clone {
-		url = "https://" + pick.repoID + ".git"
+		url = addon.CloneURL(pick.repoID)
 	}
 
 	if err := addon.UpdateEntry(manifestPath, name, url, path, version, tag); err != nil {
@@ -83,10 +74,8 @@ func pinInstall(manifestPath string, selected addon.Addon, pick versionItem, res
 	return "updated " + label + " → " + version, nil
 }
 
-// commitRemove removes the addon from the project according to the chosen mode:
-// "local" deletes the installed files but keeps the manifest entry, "project"
-// removes the manifest entry only, "project + local" does both. On success it
-// broadcasts ProjectDirty, which reloads the browse list from the manifest and focuses it.
+// commitRemove removes per mode: "local" deletes the files, "project" the entry,
+// "project + local" both. It broadcasts ProjectDirty.
 func commitRemove(sh *core.Shared, st addon.Status, mode int) core.Action {
 	c := appctx.Of(sh)
 	if mode == removeLocal || mode == removeProjectLocal {

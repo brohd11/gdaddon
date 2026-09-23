@@ -35,9 +35,8 @@ func newSetAddEntryPicker(setName string) core.Screen {
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Add entry", Title: setName})
 }
 
-// newSetPluginSubmenu is a chosen global plugin's add menu: "Add Plugin" (url only,
-// no version) and "Add Version" (browse the repo's upstream versions and pin one).
-// Candidates are pre-filtered to non-members, so Add Plugin always applies.
+// newSetPluginSubmenu offers "Add Plugin" (url only) and "Add Version" (pin a browsed
+// version) for a global plugin not yet in the set.
 func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.PickerScreen {
 	items := []list.Item{
 		components.Item{
@@ -59,10 +58,8 @@ func newSetPluginSubmenu(setName, setPath string, g addon.Addon) *components.Pic
 	return components.NewPicker(items, components.PickerOpts{Crumb: "Plugins", Title: g.Name})
 }
 
-// setAddVersionItem is the shared "Add Version" row: it browses url's upstream
-// versions (the packages flow) and pins the chosen one into the set via
-// setVersionEndpoint. Reused by the add-entry candidate submenu and the per-member
-// submenu.
+// setAddVersionItem is the shared "Add Version" row: browse url's versions and pin one
+// into the set.
 func setAddVersionItem(setName, setPath, name, url, path string) components.Item {
 	return components.Item{
 		Name: "◷ Add Version",
@@ -77,9 +74,8 @@ func setAddVersionItem(setName, setPath, name, url, path string) components.Item
 	}
 }
 
-// setVersionEndpoint is the packages-flow leaf for Add Version: it confirms the
-// chosen version, then pins it (url = the asset's download URL, version = the tag)
-// into the set and returns to the set's command hub (PopTo).
+// setVersionEndpoint confirms and pins the chosen version into the set, then returns to the
+// set's hub.
 func setVersionEndpoint(setName, setPath, pluginName, path string) pck.Endpoint {
 	return func(sel pck.Selection) core.Screen {
 		items := []list.Item{

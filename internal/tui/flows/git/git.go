@@ -1,16 +1,8 @@
-// Package git wires gdaddon's manifest to the domain-neutral all-repos git menu
-// (repoui.AllReposMenu), shared with the standalone repo-viewer tooling. It is a flow rather
-// than a tab package because two tabs reach it: Actions ▸ Git and "V" on the Project list.
-//
-// All the menu/confirm/batch machinery lives in repoui; this package only supplies the
-// scopes — which manifest checkouts each operation acts on. The scope concept (clones vs
-// submodules vs all) is gdaddon's: a clone is a repo you develop, a submodule is
-// parent-managed (pulling one dirties the parent's recorded pointer), so acting on
-// submodules is an opt-in the cycling scope makes explicit.
-//
-// The project root's own repo is no manifest entry; it rides along behind the shared menu's
-// include-root toggle. But it's a top-level clone, so the submodules scope marks itself
-// ExcludeRoot — the toggle won't add (or even offer) the root there, only under clones and all.
+// Package git supplies the scopes for the shared all-repos git menu (repoui.AllReposMenu),
+// reached from Actions ▸ Git and "V" on the Project list. Scopes are gdaddon's: clones are
+// repos you develop; submodules are parent-managed (pulling one dirties the parent), so
+// acting on them is opt-in. The project root rides the include-root toggle, excluded from
+// the submodules scope.
 package git
 
 import (
@@ -23,9 +15,7 @@ import (
 	"github.com/brohd11/gitstack/repoui"
 )
 
-// scope selects which git checkouts the all-repos operations act on. Default (first in the
-// cycle) is clones — the repos you develop. Submodules are parent-managed, so acting on them
-// is an opt-in step, not the default.
+// scope selects which checkouts the batch operations act on; clones by default.
 type scope int
 
 const (
@@ -58,13 +48,8 @@ func (s scope) matches(a addon.Addon) bool {
 	}
 }
 
-// AllRepos is the project-wide git menu: fetch, pull, or push every checkout in the manifest,
-// narrowed by a cycling scope. Opened from Actions ▸ Git and "V" on the Project list. The
-// three scopes are handed to the shared repoui menu, which owns the cycling, confirm, and
-// batch execution. The project root's own repo rides along as an include-root toggle (it isn't
-// a manifest entry, so no scope covers it): appctx.Ctx.RootRepo supplies it, and the menu
-// appends it to the targets while the toggle is on — except under the submodules scope, which
-// is ExcludeRoot (the root is a clone, not a submodule).
+// AllRepos is the project-wide git menu: fetch, pull or push every checkout in the chosen
+// scope, with the project root as an include-root toggle (not under submodules).
 func AllRepos(sh *core.Shared) *components.PickerScreen {
 	return repoui.AllReposMenu(sh, []repoui.Scope{
 		newScope(scopeClones),
@@ -73,9 +58,8 @@ func AllRepos(sh *core.Shared) *components.PickerScreen {
 	}, repoui.RootOptionFor(func(sh *core.Shared) *repo.Repo { return appctx.Of(sh).RootRepo }))
 }
 
-// newScope builds one repoui.Scope from the current project cache.
-// The submodules scope opts out of the include-root toggle (ExcludeRoot): the
-// project root is a top-level clone, so it has no place in a submodules-only batch.
+// newScope builds one repoui.Scope from the project cache; the submodules scope excludes
+// the root.
 func newScope(sc scope) repoui.Scope {
 	return repoui.Scope{
 		Label:       sc.label(),
@@ -84,9 +68,8 @@ func newScope(sc scope) repoui.Scope {
 	}
 }
 
-// reposFor returns cached present checkouts in scope, annotated with current
-// divergence. Root refresh handlers update this cache before deeper menus receive
-// a broadcast. The project root is supplied separately by the include-root toggle.
+// reposFor returns the cached checkouts present in scope with current divergence (the
+// root comes from the toggle).
 func reposFor(sh *core.Shared, sc scope) []repo.Repo {
 	c := appctx.Of(sh)
 	statuses := c.ProjectStatuses()

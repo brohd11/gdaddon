@@ -14,11 +14,8 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// actionItems builds the Actions menu rows. Each row is a self-dispatching
-// components.Item carrying its own Pick, so the tab root just runs the selected
-// row's closure — no kind enum, no switch. The Create-manifest row is prepended only
-// while no manifest is loaded (the bootstrap case); the row is rebuilt on a
-// PathRefresh broadcast, so it disappears once a manifest exists.
+// actionItems builds the Actions rows. Create manifest is prepended only while no manifest
+// is loaded; the rows rebuild on PathRefresh.
 func actionItems(sh *core.Shared) []list.Item {
 	var items []list.Item
 	if appctx.Of(sh).ManifestPath == "" {

@@ -6,37 +6,21 @@ import (
 	"strings"
 )
 
-// UpdateEntry rewrites a single manifest entry's url, path, version, and tag in
-// place. It edits only those lines (inserting them if absent), leaving every other
-// line — blank lines, comments, indentation, quoting — byte-for-byte intact. An
-// empty value for any field leaves its existing line untouched (e.g. after
-// install/update we pin the resolved path + version + tag but keep the user's
-// original source url; adding a dependency pins url + tag with no version yet).
-// It assumes the flat manifest shape: top-level entry keys at column 0 with
-// indented url/path/version/tag fields beneath them.
+// UpdateEntry rewrites one entry's url, path, version and tag lines in place (inserting
+// missing ones), leaving every other line byte-for-byte intact. Empty values leave their
+// line untouched. It assumes the flat shape: keys at column 0, fields indented beneath.
 func UpdateEntry(manifestPath, name, url, path, version, tag string) error {
 	return writeEntryFields(manifestPath, name, url, path, version, tag, false)
 }
 
-// EditEntry rewrites a single manifest entry's url, path, version, and tag in place
-// with set-or-clear semantics: a non-empty value sets/inserts the line (like
-// UpdateEntry — url/path unquoted, version/tag quoted), while an empty value REMOVES
-// that field's line if present. This is the opposite of UpdateEntry's "empty leaves
-// the line untouched" rule, and is what the Edit Manifest form needs (a blanked
-// field means the user wants the field gone). Every other line — blank lines,
-// comments, the kind line, indentation — is left byte-for-byte intact. kind is an
-// enum and stays out of here; use SetKind for it.
+// EditEntry is UpdateEntry with set-or-clear semantics: an empty value removes the line,
+// as the Edit Manifest form needs. Kind is set with SetKind.
 func EditEntry(manifestPath, name, url, path, version, tag string) error {
 	return writeEntryFields(manifestPath, name, url, path, version, tag, true)
 }
 
-// writeEntryFields is the shared body behind UpdateEntry and EditEntry: it rewrites a
-// single manifest entry's url, path, version, and tag in place — updating present
-// field lines, inserting absent ones (non-empty values only) after the key line, and
-// leaving every other line byte-for-byte intact. The two callers differ only in what
-// an empty value does to an existing field line: removeEmpty == false leaves the line
-// untouched (UpdateEntry's pin-only-what-changed rule), removeEmpty == true removes it
-// (EditEntry's blank-means-clear rule).
+// writeEntryFields is the shared body of UpdateEntry and EditEntry; removeEmpty decides
+// whether an empty value removes its line or leaves it.
 func writeEntryFields(manifestPath, name, url, path, version, tag string, removeEmpty bool) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -134,14 +118,10 @@ func writeEntryFields(manifestPath, name, url, path, version, tag string, remove
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
-// AddEntryFull appends a manifest entry from a fully-specified Addon (deduped by
-// repo identity, creating the file if absent): AddEntry writes the url/path, a name:
-// line records the addon's own name when it has one, then version and/or tag lines are
-// pinned on when non-empty, and a kind: line is added for a non-package Kind. It composes the existing writers so every "add a complete
-// entry" path (importing a set entry or a global entry, a set "Add Version", adding a
-// tagged dependency) carries the same fields without a second manifest shape — and
-// scales as the Addon struct grows. Empty version/tag and a package Kind behave
-// exactly like AddEntry.
+// AddEntryFull appends an entry from a full Addon (deduplicated by repo, creating the file
+// if needed): url and path, then a name line when it has one, version and tag lines when
+// set, and a kind line for non-package kinds. Every "add a complete entry" path uses it,
+// so they share one shape.
 func AddEntryFull(manifestPath string, a Addon) error {
 	if err := AddEntry(manifestPath, a.Name, a.URL, a.Path); err != nil {
 		return err
@@ -172,11 +152,9 @@ func AddEntryFull(manifestPath string, a Addon) error {
 	return nil
 }
 
-// setScalarField sets, updates, or removes a single scalar field line (identified by
-// key) on the entry named name, in place — the shared body behind SetKind/SetLock/
-// SetCommit. keep == true inserts-after-the-key-line or updates in place with
-// `<indent>field` (field is the already-rendered "key: value" text); keep == false
-// removes any existing key line. Every other line stays byte-for-byte intact.
+// setScalarField inserts, updates (keep true, field is the rendered "key: value") or
+// removes (keep false) one scalar line on entry name, in place. Backs SetKind, SetLock
+// and SetCommit.
 func setScalarField(manifestPath, name, key, field string, keep bool) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -218,39 +196,26 @@ func setScalarField(manifestPath, name, key, field string, keep bool) error {
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
-// SetKind sets (or clears) the `kind:` line on an entry, in place. For
-// KindClone/KindSubmodule it inserts/updates `kind: <value>`; for KindPackage it
-// removes any existing kind line. Kept separate from UpdateEntry so its string-field
-// "empty means leave untouched" convention isn't muddied by this enum's "empty means
-// package".
+// SetKind sets `kind:` for clones and submodules and removes it for packages. Separate from
+// UpdateEntry, whose "empty means untouched" rule would clash with "empty means package".
 func SetKind(manifestPath, name string, kind Kind) error {
 	return setScalarField(manifestPath, name, "kind", "kind: "+string(kind), kind != KindPackage)
 }
 
-// SetLock sets (or clears) the `lock:` line on an entry, in place. For lock=true it
-// inserts/updates `lock: true`; for lock=false it removes any existing lock line (an
-// absent line reads as unlocked, so the manifest stays minimal). Kept separate from
-// EditEntry's string-field semantics since this is a bool whose absence is the zero value.
+// SetLock writes `lock: true`, or removes the line (absent means unlocked).
 func SetLock(manifestPath, name string, lock bool) error {
 	return setScalarField(manifestPath, name, "lock", "lock: true", lock)
 }
 
-// SetCommit sets (or clears) the `commit:` line on an entry, in place. A non-empty sha
-// inserts/updates `commit: "<sha>"`; an empty sha removes any existing commit line. Kept
-// separate from UpdateEntry so a branch package's pin isn't muddled with the tag/version
-// fields (a sha is deliberately not stored in tag, which deps compare via semver).
+// SetCommit writes `commit: "<sha>"` or removes it for "". Kept out of tag, which deps
+// compare as semver.
 func SetCommit(manifestPath, name, commit string) error {
 	return setScalarField(manifestPath, name, "commit", `commit: "`+commit+`"`, commit != "")
 }
 
-// SetDisplayName sets (or clears) the `name:` line on an entry, in place. A non-empty
-// display inserts/updates `name: "<display>"`; an empty one removes the line (an absent
-// name falls back to the key's slug, so the manifest stays minimal).
-//
-// The value is always quoted, unlike the bare url/path lines and unlike the unescaped
-// version/tag quoting: this is the only field whose content is the addon author's free
-// text rather than something gdaddon derived, so it is the only one that could otherwise
-// change the shape of the YAML around it.
+// SetDisplayName writes `name: "<display>"` or removes it for "" (falling back to the
+// slug). Always quoted: it is the author's free text, the only field that could otherwise
+// break the YAML.
 func SetDisplayName(manifestPath, name, display string) error {
 	return setScalarField(manifestPath, name, "name", "name: "+quoteYAML(display), display != "")
 }
@@ -261,18 +226,14 @@ func quoteYAML(s string) string {
 	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
-// SetIsDependency sets (or clears) the `is_dependency:` line on an entry, in place. For
-// isDep=true it inserts/updates `is_dependency: true`; for isDep=false it removes any
-// existing line (an absent line reads as user-chosen, so the manifest stays minimal).
-// Mirrors SetLock — a bool whose absence is the zero value.
+// SetIsDependency writes `is_dependency: true`, or removes the line (absent means
+// user-chosen).
 func SetIsDependency(manifestPath, name string, isDep bool) error {
 	return setScalarField(manifestPath, name, "is_dependency", "is_dependency: true", isDep)
 }
 
-// SetSuppressDeps sets (or clears) the `suppress_deps:` line on an entry, in place. A
-// non-empty id list inserts/updates an inline flow list `suppress_deps: ["a/b", "c/d"]`;
-// an empty list removes any existing line (the minimal, absent-means-none default). Ids
-// are canonical source.RepoID values (the same identity MissingDeps/DepStatuses match on).
+// SetSuppressDeps writes `suppress_deps: ["a/b", "c/d"]` (source.RepoID values), or removes
+// the line for an empty list.
 func SetSuppressDeps(manifestPath, name string, ids []string) error {
 	quoted := make([]string, len(ids))
 	for i, id := range ids {
@@ -282,10 +243,8 @@ func SetSuppressDeps(manifestPath, name string, ids []string) error {
 	return setScalarField(manifestPath, name, "suppress_deps", field, len(ids) > 0)
 }
 
-// RemoveEntry deletes a manifest entry — its key line and the indented block
-// beneath it — in place, leaving every other entry byte-for-byte intact. It uses
-// the same flat-shape block detection as UpdateEntry, so it works on the project
-// manifest and the global list alike. Returns an error if the entry isn't found.
+// RemoveEntry deletes an entry's key line and block in place, for the project manifest or
+// the global list. Missing entries are an error.
 func RemoveEntry(manifestPath, name string) error {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -303,10 +262,8 @@ func RemoveEntry(manifestPath, name string) error {
 	return os.WriteFile(manifestPath, []byte(strings.Join(lines, "\n")), 0o644)
 }
 
-// findEntryBlock locates the entry named name in the flat manifest shape: it returns
-// the index of the column-0 key line and the exclusive end of the indented block
-// beneath it (the next column-0 content line, or len(lines)). ok is false when name
-// isn't present as a column-0 entry key. Shared by every in-place entry writer.
+// findEntryBlock returns the column-0 key line of entry name and the exclusive end of its
+// indented block; ok is false when absent. Every in-place writer uses it.
 func findEntryBlock(lines []string, name string) (keyIdx, end int, ok bool) {
 	keyIdx = -1
 	for i, ln := range lines {

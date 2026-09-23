@@ -13,14 +13,9 @@ import (
 	"github.com/mattn/go-isatty"
 )
 
-// depPrompter is the CLI's addon.DepConfirmer. A plugin's dependencies are declared by
-// its author and followed transitively, so `gdaddon install <repo>` can pull in repos
-// the user never named; this asks about each one before it is recorded or downloaded.
-//
-// Off a terminal there is nobody to ask, so every dependency is declined and reported
-// rather than silently installed — an unattended run never pulls unreviewed code.
-// `--trust-deps` skips the prompter entirely (a nil confirmer) for a package the user
-// already trusts.
+// depPrompter is the CLI's addon.DepConfirmer. Dependencies are author-declared and
+// followed transitively, so install asks before recording or downloading each. Off a
+// terminal every dependency is declined and reported; --trust-deps skips asking.
 type depPrompter struct {
 	in      *bufio.Reader
 	out     io.Writer
@@ -75,19 +70,15 @@ func (p *depPrompter) confirm(req addon.DepRequest) (bool, error) {
 	}
 }
 
-// depBanner describes one pending dependency: who declared it, what it is, and the url
-// that would actually be downloaded — the asset, not the repo, since a release can
-// point anywhere.
-//
-// A clone is named as one rather than shown as a bare `@ref`: agreeing to it means a live
-// checkout with its own .git that tracks a branch, which is a different thing to accept
-// than a snapshot pinned to a release, and the ref alone doesn't say which you are getting.
+// depBanner describes one pending dependency: who declared it, what it is, and the asset
+// URL that would be downloaded. A clone is named as one, since a live checkout tracking a
+// branch is a different thing to accept than a pinned release.
 func depBanner(req addon.DepRequest) string {
 	declarer := req.DeclaredBy
 	if declarer == "" {
 		declarer = "this project"
 	}
-	version := "(no version)"
+	version := addon.DepLabel(addon.KindPackage, "")
 	switch {
 	case req.Dep.IsClone():
 		version = addon.DepLabel(addon.KindClone, req.Dep.Tag)
@@ -103,18 +94,11 @@ func depBanner(req addon.DepRequest) string {
 	}
 	switch req.Action {
 	case addon.DepRepin:
-		fmt.Fprintf(&b, "    re-pins the existing %q entry from %s\n", req.EntryName, orNone(req.LocalTag))
+		fmt.Fprintf(&b, "    re-pins the existing %q entry from %s\n", req.EntryName, addon.DepLabel(addon.KindPackage, req.LocalTag))
 	case addon.DepReinstall:
 		fmt.Fprintf(&b, "    re-installs the existing %q entry (recorded, but not on disk)\n", req.EntryName)
 	}
 	return b.String()
-}
-
-func orNone(tag string) string {
-	if tag == "" {
-		return "(no version)"
-	}
-	return tag
 }
 
 // reportSkipped prints the dependencies that were not installed, and how to install
@@ -139,11 +123,8 @@ func (p *depPrompter) reportSkipped(w io.Writer) {
 	fmt.Fprintln(w, "pass --trust-deps to install them")
 }
 
-// depConfirmer builds the confirmer the install flows vet dependencies with, plus the
-// prompter behind it for the end-of-run summary. Both are nil when there is nothing to
-// vet — --trust-deps (install the closure unattended, gdaddon's behavior before this
-// existed) or --no-deps (no closure at all) — and addon treats a nil DepConfirmer as
-// unconditional yes.
+// depConfirmer builds the confirmer and its prompter (for the end-of-run summary). Both
+// are nil with --trust-deps or --no-deps; a nil DepConfirmer accepts everything.
 func depConfirmer() (*depPrompter, addon.DepConfirmer) {
 	if addonInstallTrustDeps || addonInstallNoDeps {
 		return nil, nil

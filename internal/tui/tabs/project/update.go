@@ -12,10 +12,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// updateChecksReady carries freshly computed per-addon update-check results back
-// to the Project root via a PropagateAll broadcast, where they're cached on the
-// context and the list is rebuilt so the "update available" markers appear. It
-// reaches the cached root even when another tab is active.
+// updateChecksReady carries update-check results to the Project root as a broadcast, so the
+// markers appear even from another tab.
 type updateChecksReady struct {
 	checks map[string]addon.UpdateInfo
 }
@@ -24,12 +22,8 @@ type updateChecksReady struct {
 // unreachable host can't leave the check pending forever.
 const updateCheckTimeout = 30 * time.Second
 
-// checkUpdatesCmd fetches each installed addon's release listing off the UI
-// thread and reports, per addon, whether a newer release than the pinned one
-// exists. The manifest paths are captured up front; the inspect + network work
-// runs inside the cmd so the list never blocks. Results ride back on a
-// PropagateAll the root caches and renders. Not-installed or url-less entries are
-// skipped (nothing to compare).
+// checkUpdatesCmd checks each installed addon for a newer release off the UI thread and
+// broadcasts the results.
 func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 	c := appctx.Of(sh)
 	manifestPath, projectRoot := c.ManifestPath, c.ProjectRoot

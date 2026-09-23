@@ -9,11 +9,8 @@ import (
 	"github.com/brohd11/bubblestack/core"
 )
 
-// commitRemove removes the plugin from the global list, plus its archived packages
-// when the chosen mode is "global + archive". On success it broadcasts GlobalDirty so
-// the removed row disappears (and focuses Global); when it also deleted archive files
-// it broadcasts ArchiveDirty so the Archive tab reloads too — silently, since focus
-// stays on Global.
+// commitRemove removes the plugin from the global list (and, in that mode, its archived
+// packages), broadcasting GlobalDirty and, when archive files were deleted, ArchiveDirty.
 func commitRemove(sh *core.Shared, g globalItem, mode int) core.Action {
 	archiveRemoved := false
 	if mode == removeGlobalArchive {

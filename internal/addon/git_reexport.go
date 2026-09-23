@@ -6,15 +6,11 @@ import (
 	"github.com/brohd11/gitstack/repo"
 )
 
-// The domain-neutral git engine lives in github.com/brohd11/gitstack/repo, shared with the
-// standalone repo-viewer tooling. gdaddon re-exports its types and functions here under the
-// addon package so the many existing callers (cmd/repos.go, the TUI, appctx) keep referring
-// to addon.GitFetch/GitSync/… unchanged. FetchAll stays a gdaddon function — the one piece
-// that knows the manifest — adapting []Status onto the engine's []repo.Repo.
+// The git engine lives in gitstack/repo; its types and functions are re-exported here for
+// gdaddon's callers. FetchAll stays here because it knows the manifest.
 
-// Reporter is a sink for human-readable progress lines. The CLI prints them to stdout; the
-// TUI funnels them into bubbletea messages. Aliased from the engine so the install/update
-// flows and the git flows name the same type.
+// Reporter receives progress lines; aliased from the engine so install and git flows share
+// it.
 type Reporter = repo.Reporter
 
 // Git status/result types, aliased from the engine.
@@ -41,12 +37,8 @@ var (
 	FetchSummary          = repo.FetchSummary
 )
 
-// FetchRepos is the manifest→engine adapter: it filters statuses to the git checkouts
-// (clone or submodule) actually on disk — the only things that can be fetched — and maps
-// each to a repo.Repo the engine understands. Non-git and not-installed entries are skipped.
-// It's the piece that knows the manifest, split out so the TUI can hand the repo set to the
-// shared repoui.FetchAllCmd (which runs the fan-out) while FetchAll below stays available for
-// any non-TUI caller.
+// FetchRepos maps the git checkouts present on disk to repo.Repo values for the engine (for
+// repoui.FetchAllCmd), skipping everything else.
 func FetchRepos(statuses []Status) []repo.Repo {
 	repos := make([]repo.Repo, 0, len(statuses))
 	for _, s := range statuses {

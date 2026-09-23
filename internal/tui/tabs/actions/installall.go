@@ -12,9 +12,7 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// newInstallUpdatePicker is the Actions ▸ Install/Update All submenu: plain install,
-// install with recursive dependency resolution, or update-all. Each row pushes its
-// existing flow, so the submenu is just a grouping.
+// newInstallUpdatePicker groups install, install with dependencies, and update-all.
 func newInstallUpdatePicker(sh *core.Shared) core.Screen {
 	items := []list.Item{
 		components.Item{
@@ -44,17 +42,12 @@ func newInstallAllDepsConfirm(sh *core.Shared) *components.DialogScreen {
 	})
 }
 
-// newInstallAllDepsTask runs the recursive install (install all → import declared
-// dependencies → install → repeat until nothing new), then lands on the Project tab
-// like the plain install-all task.
+// newInstallAllDepsTask runs the recursive install, then shows the Project tab.
 func newInstallAllDepsTask() *components.TaskScreen {
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		c := appctx.Of(sh)
-		// InstallAllDeps can fail outright (a manifest re-Inspect between rounds);
-		// without this the user would see "install complete" on an aborted run.
-		// nil confirmer: this screen's up-front confirm already covers the whole run,
-		// and a per-dependency prompt would have to block this task goroutine on a
-		// dialog. The CLI is where dependencies are vetted one at a time.
+		// Check the error so an aborted run is not reported as complete. No per-dependency
+		// confirmer: the confirm before this task covers the run (the CLI vets one by one).
 		outcomes, err := addon.InstallAllDeps(ctx, c.ManifestPath, c.ProjectRoot, nil, report)
 		if err != nil {
 			report("error: %v", err)

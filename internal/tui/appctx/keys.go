@@ -5,10 +5,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 )
 
-// appKeyMap collects gdaddon-specific key bindings that aren't part of
-// bubblestack's framework keymap (core.Keys in bubblestack/core/keybinds.go).
-// Keeping the custom keys in one typed struct — mirroring core.Keys — means a
-// rebind is a single edit here rather than hunting string literals across tabs.
+// appKeyMap holds gdaddon's own key bindings, in one struct like core.Keys.
 type appKeyMap struct {
 	Sort           key.Binding // cycle a data list's sort order (Project/Global/Archive)
 	Terminal       key.Binding // open a terminal in this process at an installed addon's install path (Project)
@@ -32,15 +29,12 @@ var AppKeys = appKeyMap{
 	TerminalWindow: key.NewBinding(key.WithKeys("T"), key.WithHelp("T", "term window")),
 	OpenDir:        key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "open dir")),
 	Fetch:          key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fetch")),
-	// v/V rather than g/G: bubbles binds g/G to jump-to-top/bottom on every list, and we keep
-	// that consistent across tabs rather than making one list behave differently. v = version
-	// control. ctrl+v is the project repo itself — V puts it in the batch, ctrl+v works it alone.
+	// v/V rather than g/G, which lists use for top/bottom. V adds to the batch; ctrl+v acts on
+	// the project repo alone.
 	Git:     key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "git")),
 	Diff:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "diff")),
 	GitAll:  key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "git all")),
 	RootGit: key.NewBinding(key.WithKeys("ctrl+v"), key.WithHelp("ctrl+v", "root git")),
-	// D, not the more obvious C: core.Keys.Clear owns "C" and the router consumes it in
-	// globalKey before a screen is offered the keystroke. Every tab root matches this, and
-	// the preference it flips lives on Ctx and reaches all standard lists through a broadcast.
+	// D, because the router consumes C (core.Keys.Clear) first.
 	Density: components.DefaultDensityKey,
 }

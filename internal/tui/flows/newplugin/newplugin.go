@@ -1,10 +1,5 @@
-// Package newplugin is the shared "Add Plugin" flow: the url/name/path form, its
-// confirm screen, and the commit that writes the entry to the project manifest or
-// the global list. It lives outside any single tab because more than one tab opens
-// it — the Actions tab ("New Plugin") and the Search tab (with the URL prefilled
-// from a chosen asset). It sits in the flows layer between components and tabs
-// (core ← components ← flows ← tabs ← tui), so tabs compose it without importing
-// each other.
+// Package newplugin is the Add Plugin flow (form, confirm, and the write to the project
+// manifest or global list), opened from Actions and from Search with a prefilled url.
 package newplugin
 
 import (
@@ -28,10 +23,8 @@ var targetOptions = []string{"Project", "Global"}
 // NewNewPluginForm builds an empty Add Plugin form (focus on the URL field).
 func NewNewPluginForm() *components.FormScreen { return NewWithURL("") }
 
-// NewWithURL builds the Add Plugin form (a generic components.FormScreen) with the
-// URL prefilled (focus jumps to the Name field, since the URL is already known). An
-// empty url behaves like NewNewPluginForm. The Search tab uses this to hand off a
-// chosen asset's repo URL.
+// NewWithURL builds the Add Plugin form with url prefilled and focus on Name; empty url
+// behaves like NewNewPluginForm.
 func NewWithURL(url string) *components.FormScreen {
 	target := components.NewToggleField("target", "Add to:  ", targetOptions, "|")
 

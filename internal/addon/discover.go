@@ -9,18 +9,15 @@ import (
 	"github.com/brohd11/goutil/strutil"
 )
 
-// MaxManifestDepth limits how deep FindManifest descends from the start dir, and
-// bounds where a freshly-created manifest may live so it stays discoverable from the
-// project root.
+// MaxManifestDepth bounds FindManifest's search and where a new manifest may be created, so
+// it stays discoverable from the root.
 const MaxManifestDepth = 5
 
 // manifestNames are the filenames FindManifest looks for.
 var manifestNames = map[string]bool{"addon_manifest.yml": true, "addon_manifest.yaml": true}
 
-// FindManifest walks the tree rooted at start (up to MaxManifestDepth dirs deep,
-// including hidden dirs but skipping ".godot") for an addon manifest, returning the
-// first match in a shallow-first traversal. A miss is ("", nil) — only an actual walk
-// failure is an error — so the TUI can launch without a manifest and bootstrap one.
+// FindManifest searches start (to MaxManifestDepth, hidden dirs included, ".godot" skipped)
+// shallow-first for a manifest. A miss is ("", nil), so the TUI can start without one.
 func FindManifest(start string) (string, error) {
 	var found string
 	err := filepath.WalkDir(start, func(path string, d os.DirEntry, err error) error {
@@ -48,10 +45,8 @@ func FindManifest(start string) (string, error) {
 	return found, nil
 }
 
-// WithinManifestDepth reports whether dir is the project root or a descendant of it no
-// deeper than MaxManifestDepth — i.e. a place where a created manifest would still be
-// found by FindManifest from the root. It guards the Create-manifest form against
-// writing an unreachable manifest.
+// WithinManifestDepth reports whether dir is root or within MaxManifestDepth below it,
+// where FindManifest would still find a manifest created there.
 func WithinManifestDepth(root, dir string) bool {
 	rel, err := filepath.Rel(root, dir)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {

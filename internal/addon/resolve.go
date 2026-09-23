@@ -3,7 +3,6 @@ package addon
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/brohd11/goutil/strutil"
 )
@@ -15,9 +14,8 @@ type placement struct {
 	destRel string
 }
 
-// pluginDirs returns every directory under root that holds an addon config file
-// (see hasPluginCfg), pruned so a match nested inside another match is dropped (a
-// sub-addon is managed by its parent addon, not installed on its own).
+// pluginDirs returns every directory under root holding an addon config, dropping matches
+// nested in another (a sub-addon belongs to its parent).
 func pluginDirs(root string) []string {
 	var dirs []string
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -46,52 +44,39 @@ func pluginDirs(root string) []string {
 	return pruned
 }
 
-// isUnder reports whether path is a descendant of base.
+// isUnder reports whether path is a strict descendant of base.
 func isUnder(path, base string) bool {
-	rel, err := filepath.Rel(base, path)
-	if err != nil {
-		return false
-	}
-	return rel != "." && !strings.HasPrefix(rel, "..")
+	rel, ok := strutil.RelUnder(base, path)
+	return ok && rel != "."
 }
 
-// resolveInstall decides where the staged content should land, relative to the
-// project root. The manifest path is authoritative only for a *submodule-style*
-// package — one whose plugin.cfg sits at the staging root, so the whole tree is the
-// addon ("path is king"). Otherwise the package is a container of one or more plugin
-// folders and destinations are *derived*: a pinned path still applies to a single
-// folder (so a relocation is honored), but it can no longer collapse a multi-folder
-// bundle into one folder (which previously dumped the entire tree into the pinned
-// path). Precedence stays definedPath > a dir= override (destFor) > addons/<name>.
+// resolveInstall decides where staged content lands, relative to the project root. The
+// manifest path is authoritative only when the config is at the staging root (the whole
+// tree is the addon); otherwise destinations are derived, and a pinned path applies to a
+// single folder but never collapses a bundle. Precedence: definedPath, a dir= override
+// (destFor), addons/<name>.
 //
 // Derivation order:
-//  1. submodule-style (plugin.cfg at the staging root) — the whole tree is the addon.
-//  2. an addons/ folder anywhere in the tree — the canonical Godot layout: mirror its
-//     child folders into the project's addons/, descending into a child that is only a
-//     namespace level (see addonsTargets). This handles packages with loose files beside
-//     the plugin folder(s) and packages with no plugin.cfg at all (icon packs, asset
-//     libraries), which the config search alone would mis-derive.
-//  3. otherwise locate plugin folders by their plugin.cfg/version.cfg and derive.
+//  1. config at the staging root: the whole tree is the addon;
+//  2. an addons/ folder anywhere: mirror its children into addons/ (descending into
+//     namespace levels, see addonsTargets), which also handles config-less packages;
+//  3. otherwise find plugin folders by their configs.
 func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement {
-	// rootName is the install dir basename when the package is installed whole (no
-	// config, or its config is at the staging root): the author's package folder
-	// name when known, else the manifest name.
+	// rootName is the folder name for a whole-tree install: the author's package folder when
+	// known, else the manifest name.
 	rootName := name
 	if pkgName != "" {
 		rootName = pkgName
 	}
 
-	// Submodule-style: the package root itself is the addon. Install the whole tree
-	// to the pinned path, else addons/<name> (honoring a dir= override). Kept first:
-	// a root config unambiguously means the repo *is* the addon, so any addons/
-	// subfolder it bundles must ride along inside it rather than be extracted alone.
+	// The root itself is the addon: install the whole tree (to the pinned path, else
+	// addons/<name>), including any addons/ it bundles.
 	if hasPluginCfg(stagingRoot) {
 		return []placement{{src: stagingRoot, destRel: pathOr(definedPath, destFor(stagingRoot, DefaultPath(rootName)))}}
 	}
 
-	// An addons/ folder in the tree is the canonical layout: its immediate child
-	// folders are the plugins. Derive from those, ignoring sibling junk (docs/,
-	// .github/, README) and the GitHub wrapper name.
+	// Derive from the addons/ folder's children, ignoring siblings like docs/ and the wrapper
+	// name.
 	if addonsDir := findAddonsDir(stagingRoot); addonsDir != "" {
 		if ps := placementsForDirs(addonsDir, addonsTargets(addonsDir), definedPath); len(ps) > 0 {
 			return ps
@@ -103,18 +88,14 @@ func resolveInstall(stagingRoot, name, definedPath, pkgName string) []placement 
 		// No config anywhere: install the whole tree (pinned path, else addons/<name>).
 		return []placement{{src: stagingRoot, destRel: pathOr(definedPath, DefaultPath(rootName))}}
 	}
-	// No addons/ folder: the package root *is* the addons folder, so a plugin folder's
-	// path relative to it is its path under addons/ (addon_lib/my_addon keeps its
-	// addon_lib namespace).
+	// No addons/ folder: the package root is the addons folder, so namespaces like addon_lib/
+	// are kept.
 	return placementsForDirs(stagingRoot, dirs, definedPath)
 }
 
-// placementsForDirs maps a set of plugin folders to their install destinations with
-// the derive precedence definedPath > a dir= override (destFor) > addons/<folder's path
-// under base>. A single folder honors a pinned/relocated definedPath; a bundle of
-// folders each derives its own destination (the pinned path can't collapse them —
-// installStaged overwrites only the entry's own folder and leaves bundled siblings, see
-// primaryPlacement). Returns nil for an empty set.
+// placementsForDirs maps plugin folders to destinations (definedPath, dir= override,
+// addons/<path under base>). A single folder honors definedPath; a bundle derives each
+// folder's own (see primaryPlacement). nil for none.
 func placementsForDirs(base string, dirs []string, definedPath string) []placement {
 	switch len(dirs) {
 	case 0:
@@ -130,24 +111,19 @@ func placementsForDirs(base string, dirs []string, definedPath string) []placeme
 	}
 }
 
-// defaultPathUnder is a staged plugin folder's derived install path: addons/ + the
-// folder's path relative to base, so directory levels between the two survive
-// (base=<root>, dir=<root>/addon_lib/my_addon → addons/addon_lib/my_addon). Callers
-// pick base to express where the addons/ anchor is: the package's own addons/ folder
-// when it ships one, else the package root. Falls back to the leaf name when dir is
-// not under base.
+// defaultPathUnder is addons/ plus dir's path relative to base, keeping intermediate
+// levels (addon_lib/my_addon). base is the package's addons/ folder or its root; falls
+// back to the leaf name.
 func defaultPathUnder(base, dir string) string {
-	rel, err := filepath.Rel(base, dir)
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+	rel, ok := strutil.RelUnder(base, dir)
+	if !ok || rel == "." {
 		return DefaultPath(filepath.Base(dir))
 	}
 	return DefaultPath(filepath.ToSlash(rel))
 }
 
-// findAddonsDir returns the shallowest directory named "addons" anywhere under root,
-// or "" when there is none. Shallowest wins so a submodule that bundles its own
-// addons/ (e.g. addons/foo/addons/bar) resolves to the top-level addons/, not the
-// nested one — and a found addons/ is not descended into for that reason.
+// findAddonsDir returns the shallowest "addons" directory under root (not descending into
+// it), so a bundled nested addons/ is ignored; "" if none.
 func findAddonsDir(root string) string {
 	best, bestDepth := "", -1
 	filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -181,16 +157,10 @@ func childDirs(dir string) []string {
 	return dirs
 }
 
-// addonsTargets returns the install targets under an addons/ anchor: each immediate
-// child, descended into when it is a *namespace* level — a folder carrying no config of
-// its own that holds config-bearing plugin folders (addons/addon_lib/tree_sitter_gd,
-// whose addon is tree_sitter_gd, not addon_lib). Taking the immediate children whole
-// used to pin the namespace folder as the addon, which made an uninstall delete every
-// addon sharing that namespace and hid the real plugin from ScanInstalled.
-//
-// It can't simply be pluginDirs(addonsDir): a child with no config anywhere beneath it
-// is an asset pack's folder (at_icons) and must be kept whole, which is the case the
-// addons/ anchor exists to handle in the first place.
+// addonsTargets returns the install targets under an addons/ folder: each child, or the
+// plugin folders inside a config-less namespace child (addons/addon_lib/tree_sitter_gd).
+// A child with no config anywhere (an asset pack) is kept whole, so this is not simply
+// pluginDirs.
 func addonsTargets(addonsDir string) []string {
 	var out []string
 	for _, child := range childDirs(addonsDir) {
@@ -216,9 +186,7 @@ func pathOr(p, fallback string) string {
 	return fallback
 }
 
-// destFor returns a staged config dir's install destination: the addon's own
-// `dir=` override declared in its config (see installDir) when present, else the
-// derived fallback. An explicit manifest path still wins upstream in resolveInstall.
+// destFor returns a config dir's declared dir= override, else fallback.
 func destFor(dir, fallback string) string {
 	if d := installDir(dir); d != "" {
 		return d

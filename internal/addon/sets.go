@@ -10,9 +10,7 @@ import (
 	"github.com/brohd11/gdaddon/internal/config"
 )
 
-// SetsDir is the directory holding saved "sets": manifest-shaped YAML files the
-// user can populate with plugins and later import wholesale into a project. It
-// lives under ~/.gdaddon/sets, alongside the global plugin list and the archive.
+// SetsDir is ~/.gdaddon/sets: manifest-shaped files of plugins to import into a project.
 func SetsDir() (string, error) {
 	dir, err := config.Dir()
 	if err != nil {
@@ -55,15 +53,11 @@ func ListSets() ([]string, error) {
 	return names, nil
 }
 
-// CreateSet creates a new empty set file named name and returns its path. Like
-// CreateManifest it creates the parent dir and refuses to overwrite an existing
-// set, so a duplicate name is reported rather than clobbering one.
+// CreateSet creates an empty set, refusing to overwrite.
 func CreateSet(name string) (string, error) { return CreateSetFrom(name, "") }
 
-// CreateSetFrom creates a new set named name seeded with the contents of the
-// manifest at fromPath (a verbatim copy, preserving each entry's url/path/version),
-// and returns its path. An empty fromPath creates an empty set. It refuses to
-// overwrite an existing set.
+// CreateSetFrom creates a set seeded with a verbatim copy of the manifest at fromPath
+// (empty when ""), refusing to overwrite.
 func CreateSetFrom(name, fromPath string) (string, error) {
 	path, err := SetPath(name)
 	if err != nil {

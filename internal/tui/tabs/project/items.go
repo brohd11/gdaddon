@@ -21,9 +21,7 @@ import (
 
 // addonDesc renders an addon row's status line from its inspected state.
 func addonDesc(s addon.Status) string {
-	// Git checkouts (clone/submodule) are working copies, not version-pinned
-	// packages: describe them by their tracked branch and whether the checkout is
-	// present. A submodule is parent-managed, so it can't be "cloned" by gdaddon.
+	// Describe git checkouts by branch and presence; a submodule is parent-managed.
 	if s.Addon.IsSubmodule() {
 		branch := s.Addon.Tag
 		if branch == "" {
@@ -86,20 +84,16 @@ func addonDesc(s addon.Status) string {
 	return desc
 }
 
-// addonItem builds one browse row from its rowData — the inspected status plus the cached
-// warning flags rowMarker decorates the name with. A non-installable addon gets a nil Pick
-// (an inert row), which replaces the old Installable() gate in the screen's Update.
+// addonItem builds one row with its warning marker. Non-installable addons are inert rows
+// (nil Pick).
 func addonItem(r rowData) components.Item {
 	s := r.s
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
 	}
-	// A present row carries its own shortcuts (the framework dispatches Item.Keys for the
-	// highlighted row, see RootListScreen): "t" opens a terminal at the install path (in this
-	// process; "T" for a window) for any package or checkout; "v" opens the Git page and "d" that checkout's diff list, but both
-	// only for a git checkout — on a package they aren't handled, so the key falls through (as
-	// "t" does on an absent row).
+	// A present row's keys: "t" and "T" open a terminal at the install path; "v" (Git menu)
+	// and "d" (diff list) only for git checkouts, otherwise falling through.
 	var keys func(*core.Shared, string) (core.Action, bool)
 	if s.Present() {
 		keys = func(sh *core.Shared, k string) (core.Action, bool) {
@@ -123,11 +117,8 @@ func addonItem(r rowData) components.Item {
 	return components.Item{Name: s.Addon.Label() + rowMarker(r), Desc: addonDesc(s), Pick: pick, Keys: keys}
 }
 
-// depsNeedAttention reports whether any declared dependency still needs the user's
-// action: not suppressed and not yet installed-and-satisfying (missing from the
-// manifest, in the manifest but not on disk, or installed but outdated). It's what
-// drives the "missing deps" row marker, so the warning persists until every
-// non-suppressed dep is actually installed.
+// depsNeedAttention reports any unsuppressed dependency not installed and satisfying,
+// which drives the "missing deps" marker.
 func depsNeedAttention(statuses []addon.DepStatus) bool {
 	for _, ds := range statuses {
 		if !ds.Suppressed && ds.State != addon.DepInstalled {
@@ -137,12 +128,9 @@ func depsNeedAttention(statuses []addon.DepStatus) bool {
 	return false
 }
 
-// rowMarker builds the combined name suffix from every warning the row carries — update,
-// branch drift, upstream divergence, dependencies, git-dirty — e.g. "  ⚠ [update]",
-// "  ⚠ [behind origin 3]", or "  ⚠ [ahead 2 / uncommitted changes]". Empty when the addon
-// is current, on its recorded branch, in sync with its upstream, its deps are satisfied,
-// and (for a checkout) its working tree is clean. The ahead/behind counts are as fresh as
-// the last fetch (see appctx.Ctx.GitSync).
+// rowMarker combines the row's warnings (update, branch drift, divergence, deps, dirty)
+// into one suffix, e.g. "  ⚠ [behind origin 3]"; empty when all is well. Counts are as
+// fresh as the last fetch.
 func rowMarker(r rowData) string {
 	var parts []string
 	if r.update {
@@ -172,14 +160,11 @@ func rowMarker(r rowData) string {
 	return "  ⚠ [" + strings.Join(parts, " / ") + "]"
 }
 
-// projectSortModes is the Project tab's sort cycle: name A→Z, name Z→A, then grouped
-// by install state, then the same status grouping with uninstalled rows hidden. The
-// "i" key advances through it (see projectState.onKey).
+// projectSortModes is the "i" key's cycle: A→Z, Z→A, by status, by status with
+// uninstalled rows hidden.
 var projectSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse, appctx.SortStatus, appctx.SortStatusInstalled}
 
-// visibleRows drops the rows a mode hides: SortStatusInstalled shows only addons
-// installed on disk (Present), so missing and invalid entries get no row. Every other
-// mode shows everything.
+// visibleRows hides uninstalled addons under SortStatusInstalled.
 func visibleRows(rows []rowData, mode appctx.SortMode) []rowData {
 	if mode != appctx.SortStatusInstalled {
 		return rows
@@ -193,9 +178,7 @@ func visibleRows(rows []rowData, mode appctx.SortMode) []rowData {
 	return kept
 }
 
-// rowData pairs an inspected addon with its cached warning flags (the same signals
-// rowMarker draws), so a row can be both sorted — the status mode factors warnings,
-// not just install state — and built from one value.
+// rowData pairs an inspected addon with its warning flags, for sorting and building rows.
 type rowData struct {
 	s      addon.Status
 	update bool          // a newer release exists (UpdateAvailable; excludes locked/current/unknown)
@@ -205,10 +188,8 @@ type rowData struct {
 	sync   addon.GitSync // git checkout's divergence from its upstream, as of the last fetch
 }
 
-// projectListItems builds the browse list contents: one row per addon, decorated
-// with the cached update-check and dependency-check markers, ordered per mode. The
-// project root's own repo gets no row — its status rides the header's Root line
-// (see appctx.Ctx.RootRepo).
+// projectListItems builds a row per addon, with markers, in mode order. The project root
+// has no row (it is in the header).
 func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	c := appctx.Of(sh)
 	statuses := inspect(sh)
@@ -232,11 +213,8 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	return items
 }
 
-// sortRows reorders rows in place for the chosen mode: A→Z / Z→A by name
-// (case-insensitive), or by attentionRank (install state + warnings) with a name
-// tie-break. Sorting this domain-aware slice — not the finished rows — keeps the
-// status mode keyed on real state/warnings rather than the marker-suffixed Title.
-// SortStatusInstalled sorts identically; its hiding happens in visibleRows.
+// sortRows orders rows by name (case-insensitive, either way) or by attentionRank with a
+// name tie-break, on real state rather than the marked-up titles.
 func sortRows(rows []rowData, mode appctx.SortMode) {
 	name := func(i int) string { return strings.ToLower(rows[i].s.Addon.Label()) }
 	switch mode {
@@ -255,10 +233,8 @@ func sortRows(rows []rowData, mode appctx.SortMode) {
 	}
 }
 
-// Attention tiers for SortStatus, most-urgent (lowest) first: install-state issues,
-// then the three warnings in the order the user cares about (update → deps → dirty),
-// then settled/installed, with invalid at the bottom. Reorder these to retune the
-// status sort — they're the single source of the ordering.
+// Status sort tiers, most urgent first: install issues, then update, deps, dirty, then
+// installed, invalid last.
 const (
 	rankMissing     = iota // not installed
 	rankMismatch           // installed version != pinned
@@ -274,10 +250,7 @@ const (
 	rankInvalid            // broken entry (missing url/path)
 )
 
-// attentionRank scores a row for the status sort: a base rank from install state,
-// which any warning can only raise in urgency (take the minimum). So an installed
-// addon with an available update ranks at the "update" tier, not "installed".
-// Invalid entries carry no install path (hence no warnings) and sort to the bottom.
+// attentionRank is a row's tier: the base install tier, raised by any warning.
 func attentionRank(r rowData) int {
 	base := rankInstalled
 	switch r.s.State {
@@ -316,9 +289,7 @@ func attentionRank(r rowData) int {
 
 // ---------- install payload ----------
 
-// versionItem is a leaf choice (a branch or a release asset) carried through
-// confirm/install. It is a payload built from a packages.Selection at the install
-// endpoint boundary (see installEndpoint).
+// versionItem is a chosen branch or release asset carried through confirm and install.
 type versionItem struct {
 	tag           string
 	asset         source.Asset
@@ -327,13 +298,4 @@ type versionItem struct {
 	branch        bool
 	archived      bool // asset comes from the local archive (local-file URL)
 	clone         bool // install the branch as a live git working copy (keeps .git) instead of an unzipped package
-}
-
-// pickSection describes the chosen asset for the confirm screen's title, e.g.
-// "Assets v1.0.0 - addon.zip" or "Branches - main".
-func pickSection(pick versionItem) string {
-	if pick.branch {
-		return "Branches - " + pick.tag
-	}
-	return fmt.Sprintf("Assets %s - %s", pick.tag, pick.asset.Name)
 }

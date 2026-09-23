@@ -6,12 +6,8 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// The sort toggle mechanism (enum + label + cycle + the list.Model/list.Item helpers)
-// lives in bubblestack/components now — it names no domain type, so a second consumer
-// (repoview) can share it. appctx re-exports it under the historical names so gdaddon's
-// tab call sites are unchanged (same pattern as GitRefresh = repoui.RefreshMsg). The
-// domain sort — sortRows/attentionRank keyed on real addon.Status — stays in each tab's
-// item builder (see tabs/project/items.go).
+// Re-exports of bubblestack's sort toggle under gdaddon's names. The domain sort lives in
+// each tab's row builder (tabs/project/items.go).
 
 type SortMode = components.SortMode
 
@@ -19,10 +15,8 @@ const (
 	SortAlpha   = components.SortAlpha
 	SortReverse = components.SortReverse
 	SortStatus  = components.SortStatus
-	// SortStatusInstalled is gdaddon's own mode, deliberately outside the shared enum
-	// ("installed" is a domain concept, and components stays generic for repoview).
-	// The high value keeps it clear of any mode components adds later. It sorts like
-	// SortStatus, but the Project tab hides rows whose addon isn't installed.
+	// SortStatusInstalled is gdaddon's own mode, valued high to stay clear of the shared enum:
+	// it sorts like SortStatus but hides uninstalled addons.
 	SortStatusInstalled SortMode = 100
 )
 

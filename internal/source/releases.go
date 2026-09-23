@@ -11,9 +11,8 @@ func (r Release) IsPrerelease() bool {
 	return r.Prerelease || version.IsPrerelease(r.Tag)
 }
 
-// SortReleases orders semantic tags descending, then uncomparable tags in their
-// original order. Equal semantic versions also retain their original order.
-// It changes only the slice order, never releases or their assets.
+// SortReleases orders semantic tags descending, then uncomparable tags in original order
+// (stable for equal versions). It only reorders.
 func SortReleases(releases []Release) {
 	sort.SliceStable(releases, func(i, j int) bool {
 		a, b := releases[i].Tag, releases[j].Tag

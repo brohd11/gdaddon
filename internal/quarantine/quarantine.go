@@ -1,7 +1,5 @@
-// Package quarantine clears macOS's com.apple.quarantine attribute from a project's
-// addons. Gatekeeper uses the attribute to block a compiled plugin's native binaries
-// from loading, so an addon downloaded as a zip needs it removed before Godot can use
-// it. Clear is a no-op stub on non-darwin platforms.
+// Package quarantine clears macOS's com.apple.quarantine attribute from a project's addons,
+// which otherwise stops Gatekeeper-blocked native plugin binaries from loading.
 package quarantine
 
 // Attr is the extended attribute Gatekeeper reads.

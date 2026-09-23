@@ -6,9 +6,7 @@ import (
 	"regexp"
 )
 
-// defaultGodotVersion is the fallback engine-version filter when the project's
-// version can't be read from project.godot (the Asset Library returns only a
-// small legacy set with no version, so a recent default beats none).
+// defaultGodotVersion is the version filter when project.godot has none.
 const defaultGodotVersion = "4.4"
 
 // featuresVersion matches the leading "major.minor" token in a Godot 4

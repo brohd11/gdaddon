@@ -78,6 +78,9 @@ discovers.
 	RunE:          runAddonInstall,
 }
 
+// stoppedMsg is printed when the user declines a dependency part-way through.
+const stoppedMsg = "\nstopped at your request; remaining dependencies were not installed"
+
 func init() {
 	f := addonInstallCmd.Flags()
 	f.BoolVar(&addonInstallAll, "all", false, "install every addon the manifest lists, instead of one named repo")
@@ -145,17 +148,14 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  dependency %s → %s\n", d.Label(), d.Path)
 	}
 	if aborted {
-		fmt.Println("\nstopped at your request; remaining dependencies were not installed")
+		fmt.Println(stoppedMsg)
 	}
 	prompter.reportSkipped(os.Stdout)
 	return nil
 }
 
-// checkInstallArgs rejects the combinations that name no target, two targets, or a
-// single-addon option alongside --all. Cobra can express none of these: --all and the
-// positional are different kinds of thing, and --asset/--name are only meaningful when
-// there is one addon to describe. A clone needs no guard here — it is part of the spec,
-// so it can only ever arrive on the positional --all rejects outright.
+// checkInstallArgs rejects no target, two targets, or single-addon options (--asset,
+// --name) with --all; cobra cannot express these.
 func checkInstallArgs(args []string) error {
 	switch {
 	case addonInstallAll && len(args) == 1:
@@ -181,22 +181,14 @@ func checkInstallArgs(args []string) error {
 	return nil
 }
 
-// runInstallAll installs every entry the manifest lists. It resolves declared
-// dependencies by default (InstallAllDeps), matching the single-addon form — --no-deps
-// stops at the manifest's own entries, which is what the old --install flag did.
-//
-// Unlike the targeted install this needs a manifest to already exist: creating an empty
-// one only to install nothing out of it would be a confusing no-op.
+// runInstallAll installs every manifest entry, with declared dependencies unless --no-deps.
+// It needs an existing manifest: creating an empty one to install nothing is pointless.
 func runInstallAll() error {
 	projectRoot, err := resolveRootQuiet(addonInstallRoot)
 	if err != nil {
 		return err
 	}
-	manifest, err := discoverManifest(projectRoot)
-	if err != nil {
-		return err
-	}
-	statuses, err := addon.Inspect(manifest, projectRoot)
+	manifest, statuses, err := inspectManifest(projectRoot)
 	if err != nil {
 		return err
 	}
@@ -214,16 +206,15 @@ func runInstallAll() error {
 	prompter, confirm := depConfirmer()
 	_, err = addon.InstallAllDeps(ctx, manifest, projectRoot, confirm, stdoutReport)
 	if errors.Is(err, addon.ErrDepAborted) {
-		fmt.Println("\nstopped at your request; remaining dependencies were not installed")
+		fmt.Println(stoppedMsg)
 		err = nil
 	}
 	prompter.reportSkipped(os.Stdout)
 	return err
 }
 
-// resolveEntry turns the parsed spec into the manifest entry to install: a clone entry
-// pointing at the canonical .git url (the branch, if any, coming from @ref), or a
-// release entry pinned to one downloadable asset.
+// resolveEntry turns the spec into the entry to install: a clone of the canonical .git url
+// (branch from @ref), or a release pinned to one asset.
 func resolveEntry(ctx context.Context, spec addon.Dependency) (addon.Addon, error) {
 	name := addonInstallName
 	if name == "" {
@@ -249,10 +240,8 @@ func resolveEntry(ctx context.Context, spec addon.Dependency) (addon.Addon, erro
 	return addon.Addon{Name: name, URL: asset.URL, Tag: rel.Tag, Kind: addon.KindPackage}, nil
 }
 
-// findOrCreateManifest locates the project's manifest, creating an empty one at the
-// project root when there is none — so installing into a fresh project just works.
-// This is deliberately unlike discoverManifest, which errors on a miss: the read-only
-// paths (--list) have nothing useful to do without a manifest, but an install does.
+// findOrCreateManifest finds the manifest, creating an empty one at the project root so a
+// fresh project can install (unlike discoverManifest, which errors for read-only commands).
 func findOrCreateManifest(projectRoot string) (string, error) {
 	manifestPath, err := addon.FindManifest(projectRoot)
 	if err != nil {
@@ -269,9 +258,8 @@ func findOrCreateManifest(projectRoot string) (string, error) {
 	return manifestPath, nil
 }
 
-// installHint annotates the errors whose fix isn't obvious from the message alone.
-// AddEntry rejects a name already used by a *different* repo's entry (a same-repo
-// re-install goes through UpsertEntry and never lands here), and the fix is a flag.
+// installHint explains errors whose fix is not obvious, like a name already used by a
+// different repo's entry.
 func installHint(err error, name string) error {
 	if errors.Is(err, addon.ErrNameTaken) {
 		return fmt.Errorf("%w — install it under another name with --name", err)

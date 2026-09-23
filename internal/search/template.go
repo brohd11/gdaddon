@@ -8,10 +8,8 @@ import (
 	"github.com/brohd11/gdaddon/internal/restrule"
 )
 
-// renderSearchURL substitutes a search rule's template placeholders. {query} and
-// {godot_version} are query-escaped (they live in the query string); {page} is
-// page+pageBase. Params named in omitIfEmpty whose value is empty are dropped
-// entirely (e.g. the Asset Library wants godot_version omitted, not blank).
+// renderSearchURL fills a search template: {query} and {godot_version} query-escaped,
+// {page} as page+pageBase. Params in omitIfEmpty are dropped when empty.
 func renderSearchURL(tmpl, query, godotVersion string, page, pageBase int, omitIfEmpty []string) string {
 	out := restrule.Render(tmpl, map[string]string{
 		"query":         url.QueryEscape(query),

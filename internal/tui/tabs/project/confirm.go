@@ -14,10 +14,7 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// The confirm box mechanism lives in components.DialogScreen; the builders below
-// supply its crumb/render/onYes closures for each feature. The install confirm (with
-// its source/clone-mode toggles) lives in confirm_install.go; the remove and archive
-// confirms are below.
+// Confirm builders for the project tab (the install confirm is in confirm_install.go).
 
 var confirmHelp = []key.Binding{
 	core.Hint("confirm", core.Keys.Yes),
@@ -33,11 +30,8 @@ const (
 	removeProjectLocal        // also delete the installed files
 )
 
-// newRemoveConfirm builds the project Remove confirm: a vertical selector between
-// removing just the manifest entry or that plus the installed files. ↑/↓ move the
-// selection (via the confirm's OnKey), enter commits the chosen mode. A submodule's
-// files are owned by the parent repo, so it offers no file-deletion modes — just a
-// plain confirm that removes the manifest entry.
+// newRemoveConfirm chooses between removing the entry and also deleting its files (↑/↓,
+// enter). A submodule's files belong to its parent, so it only removes the entry.
 func newRemoveConfirm(st addon.Status) *components.DialogScreen {
 	if st.Addon.IsSubmodule() {
 		return &components.DialogScreen{
@@ -69,7 +63,7 @@ func removeConfirmBody(sh *core.Shared, st addon.Status, mode int) string {
 // removeOptions renders the two removal modes stacked vertically, the active one
 // marked and highlighted (vertical analog of the New Plugin target toggle).
 func removeOptions(mode int) string {
-	return widgets.RenderToggle(mode, []widgets.ToggleOpt{
+	return widgets.RenderChoices(mode, []widgets.ToggleOpt{
 		{Label: "Local files", Desc: "delete installed files, keep the manifest entry"},
 		{Label: "Project", Desc: "remove from the project manifest only"},
 		{Label: "Project + local files", Desc: "also delete the installed files"},
@@ -78,10 +72,8 @@ func removeOptions(mode int) string {
 
 // ---------- archive confirm ----------
 
-// buildArchiveConfirm resolves the repo id and hands the chosen version's asset to
-// the shared packages.NewArchiveConfirm (which owns the confirm body, already-archived
-// check, and download task). It returns ok=false (with a status line) when there is
-// nothing to archive: an error or an already-archived selection.
+// buildArchiveConfirm hands the chosen asset to packages.NewArchiveConfirm; ok is false
+// (with a status) when there is nothing to archive.
 func buildArchiveConfirm(selected addon.Addon, local string, pick versionItem) (*components.DialogScreen, string, bool) {
 	repoID, err := source.RepoID(selected.URL)
 	if err != nil {

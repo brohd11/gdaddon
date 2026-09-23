@@ -15,10 +15,8 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// ArchiveEndpoint is a ready-made Endpoint that offers to download and archive the
-// chosen version's asset (a no-op for an already-archived asset, in which case the
-// confirm builder reports it instead). Shared by every browse flow whose leaf action
-// is "save a local copy" (Global "Add to Archive", Project Archive → Browse repo).
+// ArchiveEndpoint is an Endpoint that downloads and archives the chosen asset (reporting
+// when it is already archived). Used by the Global and Project archive flows.
 func ArchiveEndpoint(sel Selection) core.Screen {
 	items := []list.Item{
 		components.Item{
@@ -39,11 +37,9 @@ func ArchiveEndpoint(sel Selection) core.Screen {
 	})
 }
 
-// NewArchiveConfirm builds the confirm that downloads the given assets and stores
-// them under repoID/tag (a local copy that survives upstream delisting). It returns
-// ok=false (with a status line) when there is nothing to archive — already-archived
-// (local) assets are dropped first. name labels the package in the confirm/crumb.
-// Shared by the project Archive command and the Global "Add to archive" flow.
+// NewArchiveConfirm builds the confirm that downloads assets and stores them under
+// repoID/tag. ok is false (with a status) when nothing remains after dropping local
+// assets.
 func NewArchiveConfirm(name, repoID, tag string, assets []source.Asset) (*components.DialogScreen, string, bool) {
 	// Drop already-archived (local) assets; nothing to fetch for those.
 	var remote []source.Asset
@@ -74,9 +70,8 @@ func archiveConfirmBody(name, tag string, assets []source.Asset) string {
 		name, tag, strings.Join(lines, "\n"), root)
 }
 
-// newArchiveTask downloads each asset and stores it under repo/tag, then broadcasts
-// ArchiveDirty so the Archive tab reloads. It stays on the log until dismissed and
-// pops back to the nearest command hub (PopTo).
+// newArchiveTask downloads and stores each asset, broadcasts ArchiveDirty, stays on the log,
+// and returns to the nearest hub.
 func newArchiveTask(tag, repoID string, assets []source.Asset) *components.TaskScreen {
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		for _, a := range assets {
@@ -106,10 +101,3 @@ func newArchiveTask(tag, repoID string, assets []source.Asset) *components.TaskS
 // isArchived reports whether an asset is a local (already-archived) copy rather than
 // a remote URL to fetch.
 func isArchived(a source.Asset) bool { return !strings.HasPrefix(a.URL, "http") }
-
-func stripSuffix(s string) string {
-	s = strings.TrimSuffix(s, archivedSuffix)
-	s = strings.TrimSuffix(s, archivedMarker)
-	s = strings.TrimSpace(s)
-	return s
-}

@@ -21,9 +21,8 @@ func newInstallAllTask() *components.TaskScreen {
 		if err != nil {
 			report("error: %v", err)
 		} else {
-			// InstallAll's error is currently always nil (per-addon failures are
-			// reported inline); check it anyway so a future real error can't
-			// silently pass as "install complete".
+			// Check InstallAll's error (currently always nil) so a future failure is not reported as
+			// success.
 			outcomes, err = addon.InstallAll(ctx, c.ManifestPath, statuses, c.ProjectRoot, report)
 			if err != nil {
 				report("error: %v", err)
@@ -38,9 +37,8 @@ func newInstallAllTask() *components.TaskScreen {
 	return components.NewTask("installing all addons…", run, onDone)
 }
 
-// finishBatch routes a completed batch run: if any installed addon's path changed from
-// its prior manifest path, hand off to the shared post-install location form queue;
-// otherwise land on the Project tab as before (a refresh reloads it from the manifest).
+// finishBatch hands off to the location form queue when any install's path changed,
+// otherwise shows the Project tab.
 func finishBatch(sh *core.Shared, outcomes []addon.InstallOutcome, doneStatus string) core.Action {
 	targets := locationTargets(outcomes)
 	if len(targets) == 0 {

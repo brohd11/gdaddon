@@ -8,11 +8,9 @@ import (
 	"github.com/brohd11/gitstack/repo"
 )
 
-// This file holds the manifest/scan-domain git probes: classifying a plugin folder by its
-// `.git` entry and reading its origin/branch, so Inspect and ScanInstalled can tell a clone
-// from a submodule from a plain folder. The domain-neutral git engine — status, sync, fetch,
-// pull/push/commit, repo discovery — lives in the github.com/brohd11/gitstack/repo module and
-// is re-exported for gdaddon's callers in git_reexport.go.
+// Manifest-side git probes: classify a plugin folder by its `.git` entry and read its
+// origin and branch, so Inspect and ScanInstalled can tell clones, submodules and plain
+// folders apart.
 
 // gitKind classifies a scanned plugin folder by its `.git` entry.
 type gitKind int
@@ -23,13 +21,9 @@ const (
 	gitSubmodule                // .git is a file: a parent-managed submodule
 )
 
-// gitProbe classifies dir by its `.git` entry and, for a real checkout (a standalone
-// repo or a submodule), returns its origin remote (ssh scp form normalized to https)
-// and checked-out branch ("" on a detached HEAD). The `.git`-presence check is what
-// keeps a plain subfolder of the project repo from resolving to the project's own
-// remote: such a folder has no `.git` of its own, so it reads as gitNone. A submodule
-// (its `.git` is a gitdir-pointer file) is distinguished from a standalone clone (a
-// `.git` directory) but probed the same way — `git -C` works inside either.
+// gitProbe classifies dir by its own `.git` entry (a directory for a clone, a file for a
+// submodule) and returns its origin (scp form as https) and branch ("" when detached). A
+// folder without its own `.git` is gitNone, so it never reports the project repo's remote.
 func gitProbe(dir string) (kind gitKind, remote, branch string) {
 	info, err := os.Stat(filepath.Join(dir, ".git"))
 	if err != nil {
@@ -46,18 +40,14 @@ func gitProbe(dir string) (kind gitKind, remote, branch string) {
 	return kind, remote, branch
 }
 
-// isGitCheckout reports whether dir is its own git checkout (has a `.git` entry —
-// a directory for a standalone clone, a file for a submodule). The same presence
-// test HasUncommittedChanges/CurrentBranch (gitstack/repo) use, without reading git.
+// isGitCheckout reports whether dir has its own `.git` entry, without running git.
 func isGitCheckout(dir string) bool {
 	_, err := os.Stat(filepath.Join(dir, ".git"))
 	return err == nil
 }
 
-// normalizeGitRemote converts a git origin url into an https tracking url: an scp-form
-// `git@host:owner/repo[.git]` becomes `https://host/owner/repo[.git]`; an `https://…`
-// remote passes through. Returns "" for an empty/unrecognized value. The Track form's
-// NormalizeRepoURL handles any `.git` suffixing at use.
+// normalizeGitRemote converts an origin url to https (`git@host:owner/repo` becomes
+// `https://host/owner/repo`); "" if unrecognized.
 func normalizeGitRemote(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

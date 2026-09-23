@@ -10,9 +10,7 @@ import (
 	"github.com/brohd11/bubblestack/core"
 )
 
-// newImportConfirm prompts before importing a set into the project manifest. On
-// confirm it runs importSetToProject, which adds every entry, logs the summary,
-// then reloads and shows the Project tab.
+// newImportConfirm confirms importing a set into the project manifest.
 func newImportConfirm(setName string) *components.DialogScreen {
 	return components.CreateConfirmScreen(components.ConfirmSimple{
 		Crumb: "Import",
@@ -23,9 +21,8 @@ func newImportConfirm(setName string) *components.DialogScreen {
 	})
 }
 
-// importSetToProject adds every entry in the set to the project manifest (deduped by
-// repo id, carrying any pinned version), logs the result, then shows the Project tab
-// reloaded.
+// importSetToProject adds every set entry to the project manifest (deduplicated by repo),
+// logs a summary and shows the Project tab.
 func importSetToProject(sh *core.Shared, setName string) core.Action {
 	c := appctx.Of(sh)
 	if c.ManifestPath == "" {

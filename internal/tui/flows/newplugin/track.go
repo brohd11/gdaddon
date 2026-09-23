@@ -16,15 +16,10 @@ var trackConfirmHelp = []key.Binding{
 	core.Hint("back", core.Keys.Back),
 }
 
-// NewFromInstall builds the form for tracking an already-installed plugin found by
-// the Scan action: name and path are prefilled from disk and url is prefilled with a
-// suggestion (a git checkout's origin remote, a `source=` cfg key, or a matching
-// pathless manifest entry), with focus on the url field so the user confirms it. The
-// kind picker is pre-set when the folder is a git checkout — clone for a standalone
-// repo, submodule for a parent-managed one — and branch is its checked-out branch,
-// recorded as the entry's tag. On submit it upserts the project entry — backfilling
-// path/version on a matching pathless entry (the cogito case) or adding a new one —
-// so a bundled/sideloaded plugin (or submodule) starts being tracked.
+// NewFromInstall builds the form for tracking an installed plugin found by Scan: name and
+// path from disk, a suggested url (focused, to confirm), and for a git checkout its kind
+// and branch (recorded as tag). Submitting upserts the entry, filling in a matching
+// path-less entry or adding one.
 func NewFromInstall(path, name, version, suggestedURL string, kind addon.Kind, branch string) *components.FormScreen {
 	kindF := components.NewToggleField("kind", "Kind:    ", addon.KindOptions, "|")
 	kindF.SetIndex(addon.KindIndex(kind))
@@ -57,9 +52,7 @@ func normalizeTrackURL(url string) string {
 	return addon.NormalizeRepoURL(url)
 }
 
-// newTrackConfirm is the track flow's own confirm: unlike the plugin/store confirms
-// there is no Project/Global toggle (tracking always targets the project manifest),
-// so it only renders the body and commits on yes.
+// newTrackConfirm is the track flow's confirm, with no target toggle (always the project).
 func newTrackConfirm(name, url, path, version string, kind addon.Kind, branch string) *components.DialogScreen {
 	return &components.DialogScreen{
 		Render: func(sh *core.Shared) string {
@@ -81,11 +74,8 @@ func trackConfirmBody(sh *core.Shared, name, url, path, version string, kind add
 	return confirmBody(sh, "Track plugin", name, versionLabel(version), url, path, extra)
 }
 
-// commitTrack upserts the installed plugin into the project manifest: UpsertEntry
-// matches by repo identity, so it backfills path+version on an existing pathless
-// entry or appends a new one, and sets the kind from the Addon. For a git checkout
-// (clone or submodule) it records the branch as the entry's tag (what cloneInstall
-// clones, and what a submodule entry displays).
+// commitTrack upserts the plugin into the project manifest (matched by repo identity), with
+// its kind and, for checkouts, the branch as tag.
 func commitTrack(sh *core.Shared, name, url, path, version string, kind addon.Kind, branch string) core.Action {
 	manifestPath := appctx.Of(sh).ManifestPath
 	a := addon.Addon{Name: name, URL: url, Path: path, Version: version, Kind: kind}

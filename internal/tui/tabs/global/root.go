@@ -1,6 +1,5 @@
-// Package global is the Global tab: a listing of the user's global plugin list
-// (~/.gdaddon/plugins.yml). Selecting a plugin opens a per-plugin command submenu
-// (currently just Import to Project).
+// Package global is the Global tab: the user's global plugin list, with a per-plugin
+// submenu.
 package global
 
 import (
@@ -14,13 +13,11 @@ import (
 	"charm.land/bubbles/v2/list"
 )
 
-// globalItem is one entry from the global plugin list, carried into the per-plugin
-// submenu commands (Import / Remove). It is a payload, not a list row — the rows
-// are self-dispatching components.Item values built in globalItems.
+// globalItem is one global entry carried into the submenu commands; the rows themselves
+// are components.Item values.
 type globalItem struct {
-	// name is the manifest key — what every write to plugins.yml addresses — while
-	// display is the entry's own name. Keep them apart: removing by the rendered label
-	// would miss an identity-keyed entry entirely.
+	// name is the key every write addresses; display is the label. Removing by label would
+	// miss identity-keyed entries.
 	name, display, url, path, version, tag string
 	kind                                   addon.Kind
 }
@@ -66,9 +63,7 @@ func NewGlobalScreen(sh *core.Shared) *components.RootListScreen {
 	return screen
 }
 
-// globalItems reads ~/.gdaddon/plugins.yml as self-dispatching rows, ordered per
-// mode: each Pick opens that plugin's submenu. An empty/missing list shows an inert
-// hint row.
+// globalItems builds the Global rows, sorted per mode, or one hint row when empty.
 func globalItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	var items []list.Item
 	if path, err := addon.GlobalListPath(); err == nil {

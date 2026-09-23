@@ -7,11 +7,9 @@ import (
 	"github.com/brohd11/bubblestack/core"
 )
 
-// NewStoreForm builds the Add Store Asset form, mirroring NewWithURL: the canonical
-// store url prefilled (focus on Name), editable name/path, and the Project/Global
-// target toggle. It is store-aware on commit (commitStoreAsset): the store url is
-// preserved as-is (never NormalizeRepoURL'd into a .git url), and a project add pins
-// the store release identity as the tag. The Search tab opens this for a chosen store asset.
+// NewStoreForm builds the Add Store Asset form (store url prefilled, focus on Name, target
+// toggle). The store url is kept as-is, and a project add pins the store release as the
+// tag.
 func NewStoreForm(url, version string) *components.FormScreen {
 	target := components.NewToggleField("target", "Add to:  ", targetOptions, "|")
 
@@ -48,10 +46,8 @@ func newStoreConfirm(name, url, path, version string, addTarget int) *components
 		})
 }
 
-// commitStoreAsset writes the store entry to the project manifest (pinning the store
-// release identity as the tag; the real version is read from plugin.cfg on install) or
-// the global list (url-only, like a git global entry, so it can be imported into any
-// project), then unwinds to the matching tab.
+// commitStoreAsset writes the store entry to the project manifest (release as tag; the
+// version comes from plugin.cfg on install) or to the global list (url only).
 func commitStoreAsset(sh *core.Shared, name, url, path, version string, addTarget int) core.Action {
 	return commitAdd(sh, name, url, path, addTarget, func(manifestPath string) error {
 		return addon.AddEntryFull(manifestPath, addon.Addon{Name: name, URL: url, Path: path, Tag: version})

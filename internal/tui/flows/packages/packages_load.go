@@ -13,11 +13,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// BrowseRepo is the single-repo entry point: it lists one repo's versions, sourced
-// per opts.Source, and runs opts.Endpoint on the chosen package. SourceArchive builds
-// synchronously from the local archive (no HEAD — nothing fetchable); SourceRemote and
-// SourceAll fetch upstream first (SourceAll also folds in any archived versions), so
-// they return a loading screen that resolves into the picker.
+// BrowseRepo lists one repo's versions from opts.Source and runs opts.Endpoint on the
+// choice. SourceArchive builds from the local archive synchronously; SourceRemote and
+// SourceAll (which also folds in archived versions) fetch first behind a loading screen.
 func BrowseRepo(repoURL string, opts BrowseOpts) core.Screen {
 	repoID, _ := source.RepoID(repoURL)
 	if store.IsStoreURL(repoURL) {
@@ -31,15 +29,10 @@ func BrowseRepo(repoURL string, opts BrowseOpts) core.Screen {
 	return newReleasesLoading(repoID, repoURL, opts)
 }
 
-// newReleasesLoading fetches a repo's upstream versions, consults the local archive
-// (when SourceAll or MarkArchived), then replaces itself with the versions picker.
-//
-// Both SourceAll (install) and MarkArchived (archive) keep one row per remote version
-// and tag the ones with a local copy via opts.marker(). MarkArchived stops there (you
-// can't archive a non-remote version); SourceAll additionally lists archive-only
-// versions (delisted upstream / archived branch HEAD) as their own rows installed from
-// the local copy. On a hard fetch failure it pops with a status — except a SourceAll
-// browse can still fall back to an archive-only listing.
+// newReleasesLoading fetches upstream versions, checks the archive (SourceAll or
+// MarkArchived), and opens the versions picker. Both mark remote versions with a local
+// copy; SourceAll also lists archive-only versions. On a fetch failure it pops, except
+// SourceAll, which can fall back to the archive alone.
 func newReleasesLoading(repoID, repoURL string, opts BrowseOpts) *components.LoadingScreen {
 	onResult := func(sh *core.Shared, msg tea.Msg) core.Action {
 		m, ok := msg.(releasesMsg)
@@ -73,9 +66,8 @@ func newReleasesLoading(repoID, repoURL string, opts BrowseOpts) *components.Loa
 	return components.NewLoadingScreen(repoID, "fetching versions…", fetchReleases(repoURL), onResult)
 }
 
-// archiveOnly returns the archived releases whose tag is absent from the remote
-// releases, so an install browse still surfaces versions no longer upstream (their
-// assets are local copies, installed without a download).
+// archiveOnly returns archived releases missing upstream, so installs can still offer
+// them from the local copy.
 func archiveOnly(remote, archived []source.Release) []source.Release {
 	have := make(map[string]bool, len(remote))
 	for _, r := range remote {

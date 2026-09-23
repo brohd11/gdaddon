@@ -21,12 +21,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// Run wires the tabs and blocks until the user quits. Tab roots are built lazily by
-// the router (after the theme is applied), so each tab reads its own state when
-// constructed; nothing is inspected here.
-//
-// firstRun (gdaddon had to create ~/.gdaddon) adds the docs welcome popup to the
-// startup hook — the one moment we know the user has never seen the tool.
+// Run wires the tabs and blocks until quit. Roots are built lazily by the router. On a
+// first run (~/.gdaddon was created) the startup hook shows the docs welcome.
 func Run(projectRoot, version string, firstRun bool) error {
 	return bubblestack.Run(bubblestack.Config{
 		App:    appctx.New(projectRoot, version),
@@ -37,9 +33,7 @@ func Run(projectRoot, version string, firstRun bool) error {
 		Status:      components.NewStatusLine(),
 		// Theme is left unset so bubblestack.Run loads the shared ~/.bubblestack theme.
 		Init: func(sh *bubblestack.Shared) tea.Cmd {
-			// Non-fatal domain problems reach the log pane: load failures recorded
-			// during appctx.New (which ran before the router existed), and archive
-			// index-refresh failures (see arch.Logf).
+			// Log load failures from before the router existed, and archive index failures.
 			for _, e := range appctx.Of(sh).DrainLoadErrs() {
 				sh.Log(e)
 			}

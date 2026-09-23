@@ -14,11 +14,9 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// newCreateManifestForm builds the Create-manifest form: one directory field whose
-// value gets addon_manifest.yml appended (empty ⇒ the project root). On submit it
-// validates the dir is reachable from the root, writes an empty manifest, points the
-// context at it, and broadcasts so the Project list reloads (focused) and this menu
-// drops the Create row. Only reached while no manifest is loaded.
+// newCreateManifestForm asks for a directory (empty: the project root), writes an empty
+// addon_manifest.yml there once it is within discovery depth, points the context at it and
+// broadcasts so the lists reload. Only reachable without a manifest.
 func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 	root := appctx.Of(sh).ProjectRoot
 	dirF := components.NewTextField("dir", "Dir:  ", "(optional — defaults to the project root)")
@@ -54,11 +52,8 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 			if err := addon.CreateManifest(target); err != nil {
 				return core.SeqErr(err, core.Async(f.Focus("dir")))
 			}
-			// Compose the outcome at the call site: set the status, show the Project tab
-			// (ShowTab discards this form's stack), and async-refresh the paths — the
-			// refresh re-scans under the root, rediscovers the file we just wrote
-			// (validated above to be within the walk depth), then broadcasts PathRefresh
-			// so the Project list and Actions menu reload.
+			// Show the Project tab and asynchronously re-scan the paths, which finds the new manifest
+			// and broadcasts PathRefresh.
 			return core.Seq(
 				core.SetStatusAndLog("Created Manifest: "+target),
 				core.ShowTab(appctx.TitleProject),

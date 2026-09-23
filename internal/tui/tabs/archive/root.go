@@ -1,6 +1,5 @@
-// Package archive is the Archive tab: a listing of the locally-archived packages
-// (~/.gdaddon/archive). Selecting a repo drills into its archived versions (the
-// versions.go flow, repo-level), where a package can be removed from the archive.
+// Package archive is the Archive tab: the locally archived packages, browsable by repo and
+// version, where packages can be removed.
 package archive
 
 import (

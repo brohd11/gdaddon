@@ -12,23 +12,14 @@ import (
 	"github.com/brohd11/bubblestack/core"
 )
 
-// The streaming task screen itself is the generic components.TaskScreen. These
-// builders supply the run/onDone closures for each feature; install and install-all
-// navigate away on completion, archive stays on the log until dismissed.
+// Task builders over components.TaskScreen: install tasks navigate away when done; archive
+// stays on the log.
 
-// The install task's terminating payload is the addon.InstallResult itself, carried
-// opaquely through core.TaskEvent.Payload and read back in onDone. It is not repacked
-// into a local struct: the pin closures need everything the install resolved (the
-// declared name included), and a second shape here is one more place for a field to go
-// missing as that result grows.
+// The install task's final payload is the addon.InstallResult itself, read back in onDone.
 
-// newInstallTaskScreen is the shared install task behind newInstallTask and
-// newStoreInstallTask: run installs target and onDone pins the resolved result via
-// pin (which returns the completion status line, or the pin's manifest-write error),
-// then hands off to the shared location form when the resolved path differs from the
-// entry's prior manifest path (a path-less or relocated entry) so the user can
-// confirm/correct it and optionally record it globally; a package shipping several
-// addons (res.Path == "") can't be tracked to one folder, so it finishes silently.
+// newInstallTaskScreen installs target and pins the result via pin, then opens the location
+// form when the path differs from the prior one. A multi-folder package (no Path) just
+// finishes.
 func newInstallTaskScreen(selected addon.Addon, target addon.Addon, pin func(sh *core.Shared, res addon.InstallResult) (string, error)) *components.TaskScreen {
 	run := func(ctx context.Context, sh *core.Shared, report func(string, ...any), done chan<- core.TaskEvent) {
 		res, err := addon.Install(ctx, target, appctx.Of(sh).ProjectRoot, report)
@@ -73,7 +64,7 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 	if pick.clone {
 		// Clone the canonical repo (.git url from the repo id), checking out the
 		// chosen branch, instead of unzipping the branch archive.
-		target.URL = "https://" + pick.repoID + ".git"
+		target.URL = addon.CloneURL(pick.repoID)
 		target.Tag = pick.tag
 		target.Kind = addon.KindClone
 	}
@@ -83,12 +74,8 @@ func newInstallTask(selected addon.Addon, local string, pick versionItem) *compo
 	})
 }
 
-// newStoreInstallTask installs the chosen Asset Store version. Store assets have no
-// git asset/clone variants: the target carries the canonical store url + the picked
-// release (the store release identity, e.g. "v3.10.2", carried as the tag), and
-// addon.Install (→ storeInstall) resolves that release's download and unzips it. On
-// success it pins the installed plugin.cfg version + the release tag + resolved path
-// (url left untouched), mirroring pinInstall's version/tag split.
+// newStoreInstallTask installs an Asset Store version (store url, release as tag) and pins
+// the installed version, tag and path.
 func newStoreInstallTask(selected addon.Addon, local, version string) *components.TaskScreen {
 	target := selected
 	target.Tag = version

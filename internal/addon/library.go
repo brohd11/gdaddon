@@ -11,10 +11,8 @@ import (
 	"github.com/brohd11/gdaddon/internal/source"
 )
 
-// GlobalListPath is the user's cross-project plugin library: a manifest-shaped
-// YAML file (usually url-only entries) under ~/.gdaddon. New Plugin → Global
-// writes here; Import Plugin reads from it. The folder is git-committable and is
-// the future home for archived/downloaded assets.
+// GlobalListPath is the user's cross-project plugin library under ~/.gdaddon, a
+// manifest-shaped file of mostly url-only entries.
 func GlobalListPath() (string, error) {
 	dir, err := config.Dir()
 	if err != nil {
@@ -23,10 +21,8 @@ func GlobalListPath() (string, error) {
 	return filepath.Join(dir, "plugins.yml"), nil
 }
 
-// FindByRepo returns the entry whose URL is the same repo as url — matched by
-// source.RepoID, so .git vs release-zip forms collapse. ok is false when url is
-// unparseable or nothing matches. The target id is resolved once, then compared
-// against each entry's RepoID.
+// FindByRepo returns the entry for url's repo, matched by source.RepoID (so .git and zip
+// urls match); false when unparseable or absent.
 func FindByRepo(entries []Addon, url string) (Addon, bool) {
 	id, err := source.RepoID(url)
 	if err != nil {
@@ -52,10 +48,8 @@ func IndexByRepo(entries []Addon) map[string]Addon {
 	return m
 }
 
-// IndexByName maps each entry's key to the entry (later duplicates win). The by-key
-// companion to IndexByRepo, for re-reading an entry you already hold after a manifest
-// write. The dependency system's name matching is not this — it answers to an addon's
-// repo name and declared name, and lives in depIndex.
+// IndexByName maps each entry's key to the entry (later duplicates win). Dependency name
+// matching is depIndex, not this.
 func IndexByName(entries []Addon) map[string]Addon {
 	m := make(map[string]Addon, len(entries))
 	for _, e := range entries {
@@ -86,30 +80,9 @@ func (s Status) Archived(archivedIDs []string) bool {
 	return false
 }
 
-// InGlobalList reports whether the global plugin list already has an entry for
-// the same repo as url (matched by source.RepoID, so .git vs release-zip forms
-// collapse). A missing/unparseable list or url reads as "not present".
-func InGlobalList(url string) bool {
-	globalPath, err := GlobalListPath()
-	if err != nil {
-		return false
-	}
-	entries, err := Parse(globalPath)
-	if err != nil { // includes file-not-exist → empty list
-		return false
-	}
-	_, ok := FindByRepo(entries, url)
-	return ok
-}
-
-// setGlobalDisplayName records display on the global list's entry for url's repo, when
-// that entry exists and has no name of its own. Matched by repo identity rather than by
-// key: the global list keeps a canonical repo url (source.RepoURL) while the project
-// entry that triggered this is pinned to a release asset, and either side may still be on
-// a hand-written key.
-//
-// Best-effort and silent, the same posture as InGlobalList — a user with no global list
-// is the ordinary case, and nothing about an install should fail over a label.
+// setGlobalDisplayName sets display on the global entry for url's repo when it has no
+// name, matched by repo identity since the two sides store different url forms. Silent
+// and best-effort: most users have no global list.
 func setGlobalDisplayName(url, display string) {
 	globalPath, err := GlobalListPath()
 	if err != nil {
@@ -126,13 +99,9 @@ func setGlobalDisplayName(url, display string) {
 	_ = SetDisplayName(globalPath, e.Name, display)
 }
 
-// UpsertEntry updates the existing entry for a.URL's repo (matched by source.RepoID)
-// in place — overwriting its url/version/tag — or appends a new one when absent. Used
-// where re-selecting a plugin should re-pin it rather than error on a duplicate
-// (a set's "Add Version", tracking an installed plugin). Reuses UpdateEntry /
-// AddEntryFull. An empty tag leaves an existing tag line untouched (a branch pin
-// records no tag); a.Kind is applied additively (set for a non-package kind, never
-// cleared here).
+// UpsertEntry updates the entry for a.URL's repo in place (url, version, tag) or appends
+// one, so re-selecting a plugin re-pins it. An empty tag leaves the existing tag; a
+// non-package kind is set but never cleared here.
 func UpsertEntry(manifestPath string, a Addon) error {
 	existingName := ""
 	if entries, err := Parse(manifestPath); err == nil {
@@ -158,10 +127,7 @@ func UpsertEntry(manifestPath string, a Addon) error {
 	return nil
 }
 
-// CreateManifest creates an empty manifest file at path (and its parent dirs),
-// establishing a project's addon_manifest.yml before any entries exist. It refuses to
-// overwrite an existing file. Parse/Inspect read the empty file as an empty addon
-// list, and AddEntry appends to it later.
+// CreateManifest creates an empty manifest (and parent dirs), refusing to overwrite.
 func CreateManifest(path string) error {
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("%s already exists", filepath.Base(path))
@@ -174,22 +140,17 @@ func CreateManifest(path string) error {
 	return os.WriteFile(path, []byte{}, 0o644)
 }
 
-// ErrNameTaken marks AddEntry's name-collision failure: the key is already used by a
-// *different* repo's entry, so the caller has to choose another name (a same-repo
-// duplicate is a separate, more specific error, and UpsertEntry avoids both). Exposed
-// as a sentinel so a front-end can offer the fix without matching on message text.
+// ErrNameTaken marks a key already used by a different repo's entry, so front-ends can
+// offer a rename.
 var ErrNameTaken = errors.New("that name is taken by another entry")
 
-// AddEntry appends a new top-level entry to a manifest-shaped YAML file, creating
-// the file (and its parent dir) if absent. The block uses the flat 4-space shape:
+// AddEntry appends a top-level entry, creating the file if needed:
 //
 //	<name>:
 //	    url: <url>
 //	    path: <path>
 //
-// An empty path omits the path line (used for url-only global entries). No
-// version line is written. If name already exists as a column-0 key, it returns
-// an error rather than duplicating it.
+// An empty path is omitted. An existing key is an error.
 func AddEntry(manifestPath, name, url, path string) error {
 	if name == "" || url == "" {
 		return fmt.Errorf("plugin name and url are required")

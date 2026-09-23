@@ -11,13 +11,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is the binary version, injected at build time via ldflags
-// (-X gdaddon/cmd.version=...); defaults to "dev" for a plain `go build`.
+// version is stamped by the makefile via -X ldflags; "dev" for a plain go build.
 var version = "dev"
 
-// firstRun records whether ~/.gdaddon was absent when this process started, sampled in
-// bootstrap() before config.Ensure creates it. runRoot reads it to decide whether the
-// TUI opens the welcome popup.
+// firstRun records whether ~/.gdaddon was absent at startup (before config.Ensure), so the
+// TUI can show the welcome popup.
 var firstRun bool
 
 var rootCmd = &cobra.Command{
@@ -41,21 +39,15 @@ func Execute() {
 	}
 }
 
-// bootstrap prepares ~/.gdaddon before any command runs. It is persistent (and no
-// subcommand overrides it) so a non-interactive run gets the same config the TUI does —
-// the modes used to be root flags handled inside runRoot, and moving them to
-// subcommands would otherwise have skipped this.
-//
-// Everything it prints goes to stderr, keeping `gdaddon list --json`'s stdout pure JSON.
+// bootstrap prepares ~/.gdaddon before any command, so non-interactive subcommands get
+// the same config as the TUI. It prints to stderr, keeping `list --json` output pure.
 func bootstrap(cmd *cobra.Command, args []string) error {
-	// Sampled before Ensure creates it: no ~/.gdaddon means the user has never run
-	// gdaddon, which is when the TUI offers the docs. (Ensure's created-paths return
-	// would also fire for someone who merely deleted one config file.)
+	// Sampled before Ensure: a missing ~/.gdaddon means a first run (a deleted config file
+	// does not).
 	firstRun = isFirstRun()
 
-	// Dump the default config files on first run so they're the editable source
-	// of truth (config.yml: archive dir/theme; sources.yml: search/vcs rules). A
-	// failure here is non-fatal.
+	// Write the default config files on first run so they can be edited; failures are
+	// non-fatal.
 	if created, err := config.Ensure(); err == nil {
 		for _, path := range created {
 			fmt.Fprintf(os.Stderr, "wrote default config to %s\n", path)
@@ -73,7 +65,7 @@ func bootstrap(cmd *cobra.Command, args []string) error {
 // a subcommand (install / list / update-addons / repos), so this path does one thing.
 func runRoot(cmd *cobra.Command, args []string) error {
 	projectRoot, err := resolveRoot(args)
-	if err != nil {
+	if err != nil || projectRoot == "" {
 		return err
 	}
 	return tui.Run(projectRoot, version, firstRun)
@@ -89,15 +81,21 @@ func isFirstRun() bool {
 	return os.IsNotExist(err)
 }
 
-// discoverManifest finds the manifest under the project root, returning a helpful
-// error when there isn't one. Shared by the read-only and whole-manifest paths, which
-// have nothing to do without one — unlike a targeted `install <owner/repo>`, which
-// bootstraps a manifest instead (findOrCreateManifest in addoninstall.go).
-// stdoutReport is the addon.Reporter the non-interactive subcommands pass into the install
-// and update flows: the same progress lines the TUI streams into its log pane, printed to
-// stdout one per line. The flows format their own messages, so this only adds the newline.
+// stdoutReport is the addon.Reporter for non-interactive subcommands: the progress lines
+// the TUI logs, one per stdout line.
 func stdoutReport(format string, a ...any) { fmt.Printf(format+"\n", a...) }
 
+// inspectManifest finds the manifest under projectRoot and inspects every entry.
+func inspectManifest(projectRoot string) (string, []addon.Status, error) {
+	manifest, err := discoverManifest(projectRoot)
+	if err != nil {
+		return "", nil, err
+	}
+	statuses, err := addon.Inspect(manifest, projectRoot)
+	return manifest, statuses, err
+}
+
+// discoverManifest finds the manifest under the project root, or errors when there is none.
 func discoverManifest(projectRoot string) (string, error) {
 	manifest, err := addon.FindManifest(projectRoot)
 	if err != nil {

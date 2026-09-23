@@ -9,20 +9,16 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// RemoveConfirmHelp is the hint row every Remove toggle-confirm shows: the options are
-// walked with ↑/↓ rather than answered yes/no, so the generic confirm hints would be
-// wrong. Shared so the Project and Global tabs' Remove boxes can't drift apart — a
-// plain (non-toggle) remove confirm is a different box and keeps its own yes/no hints.
+// RemoveConfirmHelp is the hint row of every Remove toggle-confirm (options move with
+// ↑/↓, not yes/no).
 var RemoveConfirmHelp = []key.Binding{
 	core.Hint("option", core.Keys.Up, core.Keys.Down),
 	core.Hint("remove", core.Keys.Select),
 	core.Hint("cancel", core.Keys.Back),
 }
 
-// RemoveConfirmBody renders the shape a Remove toggle-confirm's box takes: what is being
-// removed, one labelled detail line identifying it (the Project tab shows the install
-// path, the Global tab the repo url), then the stacked mode options. An empty value
-// reads "(none)" so the line never trails off blank.
+// RemoveConfirmBody renders a Remove box: what is removed, one detail line ("(none)" when
+// empty) and the options.
 func RemoveConfirmBody(name, label, value, options string) string {
 	if value == "" {
 		value = "(none)"
@@ -30,22 +26,18 @@ func RemoveConfirmBody(name, label, value, options string) string {
 	return fmt.Sprintf("Remove %s\n\n  %s:  %s\n\n%s", name, label, value, options)
 }
 
-// ToggleConfirm configures a confirm box with a vertical option selector: ↑/↓ move a
-// selected index, the box redraws for it, and enter commits the chosen one. It carries
-// no domain type — Render and OnPick close over whatever the caller needs.
+// ToggleConfirm configures a confirm with a vertical option selector (↑/↓, enter).
 type ToggleConfirm struct {
 	Crumb  string
 	Count  int                                    // number of options (clamp upper bound)
 	Start  int                                    // initial selected index
-	Render func(sh *core.Shared, mode int) string // full box body; caller calls sh.Box + RenderToggle
+	Render func(sh *core.Shared, mode int) string // full box body; caller calls sh.Box + RenderChoices
 	OnPick func(sh *core.Shared, mode int) core.Action
 	Help   []key.Binding
 }
 
-// NewToggleConfirm wires a components.DialogScreen whose ↑/↓ move a selected index
-// within [0, Count-1] (no wrap); Render draws the box for the current index and OnPick
-// commits it. It owns only the selector state + clamp, so every site keeps full control
-// of its rendered body and commit action.
+// NewToggleConfirm builds a DialogScreen whose ↑/↓ move an index within [0, Count-1];
+// Render draws it and OnPick commits.
 func NewToggleConfirm(tc ToggleConfirm) *components.DialogScreen {
 	mode := tc.Start
 	return &components.DialogScreen{

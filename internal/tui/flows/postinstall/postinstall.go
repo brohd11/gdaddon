@@ -1,10 +1,6 @@
-// Package postinstall is the shared "confirm install location" flow: after an install
-// pins an addon to a derived path, it lets the user confirm or correct where it landed
-// (a correction moves the files) and optionally record the path in the global list.
-// It runs a queue of Targets one form at a time, so both the single-install (project
-// tab) and the batch flows (actions tab) drive it the same way. It sits in the flows
-// layer (core ← components ← appctx ← flows ← tabs), so tabs compose it without
-// importing each other.
+// Package postinstall is the "confirm install location" flow: after an install lands at a
+// derived path, the user confirms or corrects it (moving the files) and may record it in
+// the global list. It walks a queue of targets, for single and batch installs alike.
 package postinstall
 
 import (
@@ -22,10 +18,8 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
-// Target is one installed addon awaiting a location confirmation. Path is the current
-// installed location (prefilled, and the source of a relocate); URL strips to the
-// canonical repo url for the global list. The entry is already pinned to Path on disk
-// — the form only optionally relocates it and records it globally.
+// Target is one installed addon awaiting confirmation. Path is where it is (already pinned);
+// URL is reduced to the repo url for the global list.
 type Target struct {
 	// Name is the manifest key every write here addresses; Display is the entry's own
 	// name, shown instead wherever a human reads it.
@@ -61,9 +55,8 @@ var formHelp = []key.Binding{
 	skipAllBind,
 }
 
-// New returns the location form for the first of targets (len(targets) must be >= 1).
-// Confirm/keep advances to the next target, finishing on the Project tab when the
-// queue empties; ctrl+s keeps every remaining target at once.
+// New returns the form for the first target (at least one required). Confirming advances;
+// the Project tab shows when the queue empties; ctrl+s keeps all remaining.
 func New(sh *core.Shared, targets []Target) *components.FormScreen {
 	t := targets[0]
 	rest := targets[1:]
@@ -113,9 +106,8 @@ func New(sh *core.Shared, targets []Target) *components.FormScreen {
 	})
 }
 
-// commit validates and applies one target's form: relocate the files when the path was
-// corrected (re-pinning the new path), optionally export/update the global entry, then
-// advance to the next target.
+// commit applies one target: move the files if the path changed (re-pinning), optionally
+// update the global entry, then advance.
 func commit(sh *core.Shared, t Target, rest []Target, f *components.FormScreen, globalF *components.ToggleField) core.Action {
 	c := appctx.Of(sh)
 
@@ -185,9 +177,8 @@ func skipAll(rest []Target) core.Action {
 	return finish(core.SetStatusAndLog(fmt.Sprintf("kept %d addon(s) at their installed paths", n)))
 }
 
-// applyGlobal records the install path in the global list: it updates the existing
-// entry's path when the repo is already listed (matched by canonical repo id), else
-// adds a new url+path entry with the url stripped to its canonical repo form.
+// applyGlobal records the path in the global list, updating the repo's entry or adding one
+// with its canonical url.
 func applyGlobal(c *appctx.Ctx, t Target, path string) error {
 	globalPath, err := addon.GlobalListPath()
 	if err != nil {
