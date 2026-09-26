@@ -115,6 +115,8 @@ func TestSetDisplayName(t *testing.T) {
 // TestAdoptName is the rule every install path relies on: record what the package calls
 // itself, but only into a name that isn't already spoken for, and never touch the key.
 func TestAdoptName(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	setup := func(t *testing.T, block string) (string, Addon) {
 		t.Helper()
 		path := filepath.Join(t.TempDir(), "addon_manifest.yml")
@@ -184,6 +186,7 @@ func TestAdoptName(t *testing.T) {
 // differing key, and an already-named global entry is left alone.
 func TestAdoptNameBackfillsGlobal(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	globalPath, err := GlobalListPath()
 	if err != nil {
 		t.Fatal(err)
@@ -232,6 +235,7 @@ func TestAdoptNameBackfillsGlobal(t *testing.T) {
 // global library: there is nothing to back-fill and nothing may fail.
 func TestAdoptNameNoGlobalList(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	path := filepath.Join(t.TempDir(), "addon_manifest.yml")
 	block := "github.com/owner/repo:\n    url: https://github.com/owner/repo.git\n"
 	if err := os.WriteFile(path, []byte(block), 0o644); err != nil {
@@ -303,6 +307,7 @@ func TestIdentityKeyRoundTripsThroughWriters(t *testing.T) {
 // and a second install changes nothing.
 func TestInstallRecordsDeclaredName(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	ds := newDepServer(t)
 	project := t.TempDir()
 
@@ -361,6 +366,7 @@ func TestInstallRecordsDeclaredName(t *testing.T) {
 // the branch that installs what the manifest already holds.
 func TestDependencyEntryIsKeyedAndNamed(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	ds := newDepServer(t)
 	project := t.TempDir()
 

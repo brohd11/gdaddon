@@ -3,9 +3,9 @@ module github.com/brohd11/gdaddon
 go 1.26.4
 
 require (
-	github.com/brohd11/bubblestack v0.2.4
-	github.com/brohd11/gitstack v0.2.3
-	github.com/brohd11/goutil v0.2.0
+	github.com/brohd11/bubblestack v0.2.5
+	github.com/brohd11/gitstack v0.2.4
+	github.com/brohd11/goutil v0.2.1
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.10.2
@@ -25,7 +25,7 @@ require (
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.9
-	charm.land/lipgloss/v2 v2.0.6
+	charm.land/lipgloss/v2 v2.0.6 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect

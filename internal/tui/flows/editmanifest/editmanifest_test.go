@@ -1,6 +1,7 @@
 package editmanifest_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -41,6 +42,7 @@ func submitEdit(t *testing.T, r core.Router, form *components.FormScreen, newURL
 
 func TestProjectEditRefreshesMemoryAndDropsStaleSubmenu(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	projectRoot := t.TempDir()
 	manifestPath := filepath.Join(projectRoot, "addon_manifest.yml")
 	if err := addon.AddEntry(manifestPath, "demo", "https://github.com/owner/old", "addons/demo"); err != nil {
@@ -66,6 +68,7 @@ func TestProjectEditRefreshesMemoryAndDropsStaleSubmenu(t *testing.T) {
 
 func TestGlobalEditRefreshesMemoryAndDropsStaleSubmenu(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	globalPath, err := addon.GlobalListPath()
 	if err != nil {
 		t.Fatal(err)
