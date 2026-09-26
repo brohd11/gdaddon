@@ -13,8 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # The makefile stamps the version via `git describe`, which needs tags
-          # and history -- the default shallow checkout would yield "dev".
+          # Version stamping and release notes need tags and full history.
           fetch-depth: 0
 
       - uses: actions/setup-go@v5
@@ -23,6 +22,17 @@ jobs:
 
       - run: make package
 
-      - uses: softprops/action-gh-release@v2
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@v4
+        id: notes
+        with:
+          version: v2.14.2
+          config: cliff.toml
+          args: --current --strip header
+        env:
+          OUTPUT: ${{ runner.temp }}/release-notes.md
+
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
+          body_path: ${{ steps.notes.outputs.changelog }}
