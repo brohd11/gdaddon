@@ -10,10 +10,10 @@ github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-udiff v0.4.1 h1:OEIrQ8maEeDBXQDoGCbbTTXYJMYRCRO1fnodZ12Gv5o=
 github.com/aymanbagabas/go-udiff v0.4.1/go.mod h1:0L9PGwj20lrtmEMeyw4WKJ/TMyDtvAoK9bf2u/mNo3w=
-github.com/brohd11/bubblestack v0.2.5 h1:UDDFVfn8uiJN8zAJMuu+cUte3lcCrykoATDd6NXDu0U=
-github.com/brohd11/bubblestack v0.2.5/go.mod h1:wNWHjyTAia9PkORhbcyeh4jpXReFeG6PraLNpbjwPH8=
-github.com/brohd11/gitstack v0.2.4 h1:cApsNBqZRgaGaSZ9+ECcVu1d/0Z/9149Hd6GXn7UhDE=
-github.com/brohd11/gitstack v0.2.4/go.mod h1:8FAEnfD1L2unLqHUEHzp4AoT4CHYdd8CwVjlQO9AyTs=
+github.com/brohd11/bubblestack v0.2.6 h1:vR5pbcGwawLff1w66dyesClOMr7rU26LKJGhqhDhZco=
+github.com/brohd11/bubblestack v0.2.6/go.mod h1:wNWHjyTAia9PkORhbcyeh4jpXReFeG6PraLNpbjwPH8=
+github.com/brohd11/gitstack v0.2.5 h1:SpGCo4HwjgYuoLEW7wCewZ6ZCZ6BD3x1GyfRZeyprYg=
+github.com/brohd11/gitstack v0.2.5/go.mod h1:hM4KAk9OuqaEpu0wjN8ZcI7E0lhAQjmfY8KzOkBTYcg=
 github.com/brohd11/goutil v0.2.1 h1:prc6cRp24rjHLopQLW11MOe0CGPsQa88lLFUa3Y/bm4=
 github.com/brohd11/goutil v0.2.1/go.mod h1:CNwpa6c70oSgx4GeBgVpa3o38yOVfkBEtr0tqd1jRYs=
 github.com/charmbracelet/colorprofile v0.4.3 h1:QPa1IWkYI+AOB+fE+mg/5/4HRMZcaXex9t5KX76i20Q=
