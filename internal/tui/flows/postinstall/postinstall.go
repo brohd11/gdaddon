@@ -136,6 +136,10 @@ func commit(sh *core.Shared, t Target, rest []Target, f *components.FormScreen, 
 	var logs []core.Action
 	if moved {
 		logs = append(logs, core.SetStatusAndLog("moved "+t.label()+" → "+finalPath))
+		// The .gitignore entry follows the move; the files already landed, so only log.
+		if err := addon.MoveIgnore(c.ProjectRoot, t.Path, finalPath); err != nil {
+			logs = append(logs, core.SetStatusAndLog("gitignore: "+err.Error()))
+		}
 	}
 	if globalF.Index() == globalDo {
 		if err := applyGlobal(c, t, finalPath); err != nil {

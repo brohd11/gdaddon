@@ -21,6 +21,9 @@ edit, and gdaddon reads whatever it finds. The folder is safe to commit: the shi
 
 - `archive_dir` — where downloaded package zips are kept. Defaults to `~/.gdaddon/archive`
 - `theme` — the color theme. Actions ▸ Theme changes it and writes it here
+- `gitignore_installs` — off by default. When `true`, each package or clone install adds
+  `/<path>/` to the project root's `.gitignore` unless a line already covers it. The entry
+  follows the addon if you change its path in the install-location form
 
 `t` opens a terminal at the addon's directory in *this* window — gdaddon steps aside and
 returns when the shell exits. `T` and Open ▸ Terminal open a separate window instead,

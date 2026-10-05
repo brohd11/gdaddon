@@ -19,6 +19,9 @@ import (
 type Config struct {
 	ArchiveDir       string `yaml:"archive_dir,omitempty"`
 	LastSearchSource string `yaml:"last_search_source,omitempty"` // last-selected Search tab source; loaded at startup, saved on search
+	// GitignoreInstalls adds each install's final path to the project root's .gitignore.
+	// No omitempty, so the written default shows the (off) toggle.
+	GitignoreInstalls bool `yaml:"gitignore_installs"`
 }
 
 // sourcesFile is the parsed ~/.gdaddon/config/sources.yml — the provider rules

@@ -97,6 +97,11 @@ func TestEnsureWritesDefaultsOnce(t *testing.T) {
 		}
 	}
 
+	// The off-by-default gitignore toggle is written so users can find it.
+	if data, err := os.ReadFile(configPath); err != nil || !strings.Contains(string(data), "gitignore_installs: false") {
+		t.Errorf("default config.yml lacks gitignore_installs: false (err %v):\n%s", err, data)
+	}
+
 	// Idempotent: a second call leaves the (possibly user-edited) files alone.
 	if err := os.WriteFile(configPath, []byte("archive_dir: ~/custom\n"), 0o644); err != nil {
 		t.Fatal(err)

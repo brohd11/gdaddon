@@ -131,8 +131,23 @@ func sanitizeDisplay(name string) string {
 }
 
 // Install fetches one addon and installs it under baseDir, at the entry's path or one
-// derived from the package layout (resolveInstall), replacing existing folders.
+// derived from the package layout (resolveInstall), replacing existing folders. With
+// gitignore_installs on, the final path is added to the project's .gitignore.
 func Install(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
+	res, err := install(ctx, a, baseDir, report)
+	if err == nil && res.Path != "" {
+		// Non-fatal: the files are in place either way.
+		if added, gerr := IgnoreInstall(baseDir, res.Path); gerr != nil {
+			report("  -> could not update .gitignore: %v", gerr)
+		} else if added {
+			report("  -> added %s to .gitignore", ignoreLine(res.Path))
+		}
+	}
+	return res, err
+}
+
+// install is Install without the .gitignore step.
+func install(ctx context.Context, a Addon, baseDir string, report Reporter) (InstallResult, error) {
 	if a.URL == "" {
 		return InstallResult{}, fmt.Errorf("missing 'url'")
 	}

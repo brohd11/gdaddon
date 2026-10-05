@@ -373,6 +373,9 @@ On first run gdaddon writes `~/.gdaddon/config.yml`. It controls:
 
 - **`archive_dir`** — where archived packages are stored (default `~/.gdaddon/archive`; a
   leading `~` is expanded).
+- **`gitignore_installs`** — off by default. When `true`, each package or clone install adds
+  `/<path>/` to the project root's `.gitignore` unless a line already covers it; changing the
+  path in the install-location form moves the entry with it.
 - **`current_theme`** — the TUI color theme (also changeable via **Actions → Theme**).
 - **search/VCS sources** — per-host rules for searching, listing releases/branches, and
   building source-archive urls. GitHub and Codeberg ship as defaults and double as worked
