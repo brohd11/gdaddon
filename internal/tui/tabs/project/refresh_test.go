@@ -123,7 +123,9 @@ esac
 	// The root action must reload manifest changes and all git state, without
 	// starting the release-update check that a manual ProjectDirty would start.
 	write(manifestPath, manifest.String()+"new:\n  url: https://github.com/u/new\n  path: new\n", 0o644)
-	if act := screen.Receive(sh, appctx.GitRepoRefresh{Dir: base}); act.Cmd != nil {
+	before := c.UpdateGen.Load()
+	drain(sh, screen, screen.Receive(sh, appctx.GitRepoRefresh{Dir: base}))
+	if c.UpdateGen.Load() != before {
 		t.Fatal("root git refresh started network work")
 	}
 	if len(c.ProjectStatuses()) != 31 || c.GitDirty["repo01"] {
@@ -132,11 +134,17 @@ esac
 	// Both batch completion forms retain full local refreshes.
 	for _, payload := range []any{appctx.GitRefresh{}, repoui.FetchDoneMsg{}} {
 		t.Setenv("REFRESH_TEST_DIRTY", " M plugin.cfg")
-		screen.Receive(sh, payload)
+		drain(sh, screen, screen.Receive(sh, payload))
 		if !c.GitDirty["repo01"] {
 			t.Fatalf("%T did not reload unrelated repo", payload)
 		}
 		t.Setenv("REFRESH_TEST_DIRTY", "")
 		c.RefreshProject()
 	}
+}
+
+// drain runs a refresh to completion, feeding its broadcasts back to the screen, and returns
+// the status lines it wrote.
+func drain(sh *core.Shared, screen core.Receiver, act core.Action) []string {
+	return core.DrainBroadcasts(act, func(p any) core.Action { return screen.Receive(sh, p) })
 }

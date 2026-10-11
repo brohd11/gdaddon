@@ -28,7 +28,9 @@ func TestProjectRootAsyncCallbacks(t *testing.T) {
 		t.Fatal("initialization must schedule the update check")
 	}
 	for _, payload := range []any{appctx.ProjectDirty{}, appctx.PathRefresh{}} {
-		if act := root.Receive(sh, payload); act.Cmd == nil {
+		before := c.UpdateGen.Load()
+		root.Receive(sh, payload)
+		if c.UpdateGen.Load() == before {
 			t.Fatalf("%T must schedule a fresh update check", payload)
 		}
 	}
@@ -39,7 +41,9 @@ func TestProjectRootAsyncCallbacks(t *testing.T) {
 	if c.UpdateChecks["alpha"].LatestTag != "v2" || len(root.List().VisibleItems()) != 1 || !root.Compact() {
 		t.Fatal("async results must update the cache without dropping filter or density")
 	}
-	if act := root.Receive(sh, appctx.GitRefresh{}); act.Cmd != nil {
+	before := c.UpdateGen.Load()
+	root.Receive(sh, appctx.GitRefresh{})
+	if c.UpdateGen.Load() != before {
 		t.Fatal("a local Git refresh must not schedule a network update check")
 	}
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/brohd11/bubblestack"
 	"github.com/brohd11/bubblestack/components"
+	"github.com/brohd11/bubblestack/core"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -25,7 +26,8 @@ import (
 // first run (~/.gdaddon was created) the startup hook shows the docs welcome.
 func Run(projectRoot, version string, firstRun bool) error {
 	return bubblestack.Run(bubblestack.Config{
-		App:    appctx.New(projectRoot, version),
+		// Deferred: the project is inspected async (the GitRefresh below), so the UI draws at once.
+		App:    appctx.NewDeferred(projectRoot, version),
 		Header: appctx.Header,
 		// A header click opens the project repo's own Git page, same as ctrl+v.
 		HeaderClick: func(sh *bubblestack.Shared, _, _ int) bubblestack.Action { return project.RootGitAction(sh) },
@@ -38,7 +40,12 @@ func Run(projectRoot, version string, firstRun bool) error {
 				sh.Log(e)
 			}
 			arch.Logf = func(format string, args ...any) { sh.Log(fmt.Sprintf(format, args...)) }
-			cmds := []tea.Cmd{appctx.SelfUpdateCheckCmd(sh)}
+			cmds := []tea.Cmd{
+				appctx.SelfUpdateCheckCmd(sh),
+				// Start the first async project inspection (local git state only; the Project
+				// root's Init runs the update check).
+				func() tea.Msg { return core.PropagateAll(appctx.GitRefresh{}) },
+			}
 			if firstRun {
 				cmds = append(cmds, docs.WelcomeCmd())
 			}

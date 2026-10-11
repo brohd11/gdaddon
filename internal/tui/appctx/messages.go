@@ -7,14 +7,15 @@ import (
 )
 
 // RefreshAll broadcasts every Dirty marker so each tab root reloads (the Refresh key and
-// Actions ▸ Refresh).
+// Actions ▸ Refresh). The Project reload is async and reports "Refreshed" itself when it
+// lands; ProjectDirty and PathRefresh both start it, the second superseding the first
+// before any inspection runs.
 func RefreshAll() core.Action {
 	return core.Seq(
 		core.PropagateAll(ArchiveDirty{}),
 		core.PropagateAll(ProjectDirty{}),
 		core.PropagateAll(GlobalDirty{}),
 		core.PropagateAll(PathRefresh{}),
-		core.SetStatus("Refreshed"),
 	)
 }
 

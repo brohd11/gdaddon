@@ -85,30 +85,42 @@ func RootGitAction(sh *core.Shared) core.Action {
 	return core.Push(repoui.RepoMenu(sh, *root, root.Name))
 }
 
-// receive rebuilds the list on ProjectDirty (contents changed) or PathRefresh (path
-// changed). Status and focus are composed by the caller.
+// receive reloads the list asynchronously on ProjectDirty (contents changed), PathRefresh
+// (path changed), GitRefresh and fetch completion, landing each entry's result as it
+// arrives. Status and focus are composed by the caller.
 func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
+	c := appctx.Of(sh)
+	if act, ok := c.Refresh.Receive(payload); ok {
+		return act
+	}
+	if handled, changed, act := c.ApplyRefreshResult(payload); handled {
+		if changed {
+			s.screen.SetItems(projectListItems(sh, s.sort))
+		}
+		return act
+	}
 	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
-		s.reload(sh)
 		// Re-run the update check against the refreshed manifest; the markers
 		// fill back in when its results broadcast.
-		return core.Async(checkUpdatesCmd(sh))
+		return core.Seq(s.reload(sh), core.Async(checkUpdatesCmd(sh)))
 	case updateChecksReady:
-		appctx.Of(sh).SetUpdateChecks(p.checks)
+		c.SetUpdateChecks(p.checks)
 		s.screen.SetItems(projectListItems(sh, s.sort))
 	case appctx.GitRefresh:
 		// A batch git operation finished: recompute the local git state (no network update check).
-		s.reload(sh)
+		return s.reload(sh)
 	case appctx.GitRepoRefresh:
-		appctx.Of(sh).RefreshRepo(p)
+		if c.RefreshRepo(p) {
+			return s.reload(sh)
+		}
 		s.screen.SetItems(projectListItems(sh, s.sort))
 	case repoui.FetchDoneMsg:
 		// The refs are current: re-inspect so ahead/behind markers appear, rebuild the roots, and
 		// log the per-repo results.
 		s.fetching = false
-		s.reload(sh)
 		return core.Seq(
+			s.reload(sh),
 			core.RefreshRoots(),
 			repoui.LogFetchResults(sh, p.Results, "git checkout(s)", "no git checkouts to fetch"),
 		)
@@ -116,10 +128,15 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	return core.Action{}
 }
 
-// reload re-inspects and rebuilds the rows, in that order.
-func (s *projectState) reload(sh *core.Shared) {
-	appctx.Of(sh).RefreshProject()
+// reload starts the async re-inspection and shows the rows pending right away. The status
+// sort's order is frozen at its pre-refresh ranks until every result lands.
+func (s *projectState) reload(sh *core.Shared) core.Action {
+	c := appctx.Of(sh)
+	ranks := statusRanks(sh)
+	act := c.StartProjectRefresh()
+	c.RankSnap = ranks
 	s.screen.SetItems(projectListItems(sh, s.sort))
+	return act
 }
 
 // inspect uses the project's cached inspection so redraws do not query every repo.

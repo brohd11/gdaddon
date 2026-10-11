@@ -20,25 +20,37 @@ func (c *Ctx) refreshGitChecks(statuses []addon.Status) {
 
 // recordGitState replaces one checkout's entries in GitDirty and GitSync.
 func (c *Ctx) recordGitState(s addon.Status) {
-	delete(c.GitDirty, s.Addon.Name)
-	delete(c.GitSync, s.Addon.Name)
+	dirty, sync := readGitState(s)
+	c.setGitState(s.Addon.Name, dirty, sync)
+}
+
+// readGitState reads a present checkout's dirty state and divergence (local git reads, safe
+// off the UI thread); an absent one reads clean and untracked.
+func readGitState(s addon.Status) (dirty bool, sync addon.GitSync) {
 	if !s.Present() {
-		return
+		return false, addon.GitSync{}
 	}
-	if addon.HasUncommittedChanges(s.FullPath) {
-		c.GitDirty[s.Addon.Name] = true
+	return addon.HasUncommittedChanges(s.FullPath), addon.GitSyncStatus(s.FullPath)
+}
+
+// setGitState stores one checkout's git state, dropping clean/untracked entries.
+func (c *Ctx) setGitState(name string, dirty bool, sync addon.GitSync) {
+	delete(c.GitDirty, name)
+	delete(c.GitSync, name)
+	if dirty {
+		c.GitDirty[name] = true
 	}
-	if sync := addon.GitSyncStatus(s.FullPath); sync.Tracking {
-		c.GitSync[s.Addon.Name] = sync
+	if sync.Tracking {
+		c.GitSync[name] = sync
 	}
 }
 
-// RefreshRepo refreshes a known addon and enclosing checkout markers. Root
-// operations may change the manifest or package layout and retain a full reload.
-func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) {
+// RefreshRepo refreshes a known addon and enclosing checkout markers. Root operations may
+// change the manifest or package layout, so they report full and the caller starts a
+// whole-project refresh.
+func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) (full bool) {
 	if msg.Targets(c.ProjectRoot) {
-		c.loadProject()
-		return
+		return true
 	}
 	statuses := c.ProjectStatuses()
 	known := false
@@ -46,7 +58,7 @@ func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) {
 		known = known || (s.Addon.IsGitWorkdir() && msg.Targets(s.FullPath))
 	}
 	if !known {
-		return
+		return false
 	}
 	if c.GitDirty == nil {
 		c.GitDirty = make(map[string]bool)
@@ -73,4 +85,5 @@ func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) {
 	}
 	c.refreshDepChecks(statuses)
 	c.OrphanDeps = addon.OrphanDeps(statuses)
+	return false
 }

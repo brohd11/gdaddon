@@ -85,9 +85,13 @@ func addonDesc(s addon.Status) string {
 }
 
 // addonItem builds one row with its warning marker. Non-installable addons are inert rows
-// (nil Pick).
+// (nil Pick). A pending row (being re-inspected) shows its cached state muted; one never
+// inspected yet has no state to show, so it carries no markers or actions.
 func addonItem(r rowData) components.Item {
 	s := r.s
+	if r.unseen {
+		return components.Item{Name: s.Addon.Label(), Desc: "refreshing…", Pending: true}
+	}
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
 		pick = func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(s, sh)) }
@@ -114,7 +118,11 @@ func addonItem(r rowData) components.Item {
 			return core.Action{}, false
 		}
 	}
-	return components.Item{Name: s.Addon.Label() + rowMarker(r), Desc: addonDesc(s), Pick: pick, Keys: keys}
+	desc := addonDesc(s)
+	if r.pending {
+		desc += " · refreshing…"
+	}
+	return components.Item{Name: s.Addon.Label() + rowMarker(r), Desc: desc, Pending: r.pending, Pick: pick, Keys: keys}
 }
 
 // depsNeedAttention reports any unsuppressed dependency not installed and satisfying,
@@ -164,14 +172,15 @@ func rowMarker(r rowData) string {
 // uninstalled rows hidden.
 var projectSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse, appctx.SortStatus, appctx.SortStatusInstalled}
 
-// visibleRows hides uninstalled addons under SortStatusInstalled.
+// visibleRows hides uninstalled addons under SortStatusInstalled (an unseen entry stays
+// until its inspection says).
 func visibleRows(rows []rowData, mode appctx.SortMode) []rowData {
 	if mode != appctx.SortStatusInstalled {
 		return rows
 	}
 	kept := rows[:0]
 	for _, r := range rows {
-		if r.s.Present() {
+		if r.s.Present() || r.unseen {
 			kept = append(kept, r)
 		}
 	}
@@ -186,6 +195,10 @@ type rowData struct {
 	orphan bool          // an is_dependency entry no longer required by anything installed
 	dirty  bool          // git checkout has uncommitted changes
 	sync   addon.GitSync // git checkout's divergence from its upstream, as of the last fetch
+	// pending is set while a refresh re-inspects the entry; unseen when it has no earlier
+	// inspection either. rank, when set, is the pre-refresh status rank to sort by.
+	pending, unseen bool
+	rank            *int
 }
 
 // projectListItems builds a row per addon, with markers, in mode order. The project root
@@ -195,13 +208,9 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	statuses := inspect(sh)
 	rows := make([]rowData, len(statuses))
 	for i, s := range statuses {
-		rows[i] = rowData{
-			s:      s,
-			update: c.UpdateChecks[s.Addon.Name].State == addon.UpdateAvailable,
-			deps:   depsNeedAttention(c.DepStatuses[s.Addon.Name]),
-			orphan: c.OrphanDeps[s.Addon.Name],
-			dirty:  c.GitDirty[s.Addon.Name],
-			sync:   c.GitSync[s.Addon.Name],
+		rows[i] = rowFor(c, s)
+		if n, ok := c.RankSnap[s.Addon.Name]; ok {
+			rows[i].rank = &n
 		}
 	}
 	rows = visibleRows(rows, mode)
@@ -213,6 +222,22 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 	return items
 }
 
+// rowFor pairs an inspected addon with its cached warning flags and refresh state.
+func rowFor(c *appctx.Ctx, s addon.Status) rowData {
+	name := s.Addon.Name
+	return rowData{
+		s:      s,
+		update: c.UpdateChecks[name].State == addon.UpdateAvailable,
+		deps:   depsNeedAttention(c.DepStatuses[name]),
+		orphan: c.OrphanDeps[name],
+		dirty:  c.GitDirty[name],
+		sync:   c.GitSync[name],
+		// An unseen entry's zero Status would read as invalid; addonItem holds it until inspected.
+		pending: c.Pending[name],
+		unseen:  c.Unseen(name),
+	}
+}
+
 // sortRows orders rows by name (case-insensitive, either way) or by attentionRank with a
 // name tie-break, on real state rather than the marked-up titles.
 func sortRows(rows []rowData, mode appctx.SortMode) {
@@ -222,7 +247,7 @@ func sortRows(rows []rowData, mode appctx.SortMode) {
 		sort.SliceStable(rows, func(i, j int) bool { return name(i) > name(j) })
 	case appctx.SortStatus, appctx.SortStatusInstalled:
 		sort.SliceStable(rows, func(i, j int) bool {
-			ri, rj := attentionRank(rows[i]), attentionRank(rows[j])
+			ri, rj := sortRank(rows[i]), sortRank(rows[j])
 			if ri != rj {
 				return ri < rj
 			}
@@ -249,6 +274,27 @@ const (
 	rankInstalled          // installed and clean
 	rankInvalid            // broken entry (missing url/path)
 )
+
+// sortRank is the status sort's key: the frozen pre-refresh rank while a refresh lands,
+// else attentionRank.
+func sortRank(r rowData) int {
+	if r.rank != nil {
+		return *r.rank
+	}
+	return attentionRank(r)
+}
+
+// statusRanks snapshots every current row's attentionRank by name, for appctx.RankSnap.
+func statusRanks(sh *core.Shared) map[string]int {
+	c := appctx.Of(sh)
+	ranks := make(map[string]int)
+	for _, s := range inspect(sh) {
+		if !c.Unseen(s.Addon.Name) {
+			ranks[s.Addon.Name] = attentionRank(rowFor(c, s))
+		}
+	}
+	return ranks
+}
 
 // attentionRank is a row's tier: the base install tier, raised by any warning.
 func attentionRank(r rowData) int {

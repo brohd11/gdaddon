@@ -23,11 +23,16 @@ type updateChecksReady struct {
 const updateCheckTimeout = 30 * time.Second
 
 // checkUpdatesCmd checks each installed addon for a newer release off the UI thread and
-// broadcasts the results.
+// broadcasts the results. A check superseded before it starts (RefreshAll asks twice in
+// one tick) skips its network work.
 func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 	c := appctx.Of(sh)
 	manifestPath, projectRoot := c.ManifestPath, c.ProjectRoot
+	gen := c.UpdateGen.Add(1)
 	return func() tea.Msg {
+		if c.UpdateGen.Load() != gen {
+			return nil
+		}
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
 			return nil

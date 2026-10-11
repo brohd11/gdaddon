@@ -6,10 +6,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/archive"
 
+	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repo"
 )
@@ -40,6 +42,8 @@ type Ctx struct {
 	// UpdateChecks caches per-addon update results by name, filled asynchronously and read by
 	// the Project list's marker. Missing keys mean UpdateUnknown.
 	UpdateChecks map[string]addon.UpdateInfo
+	// UpdateGen numbers update checks so one superseded before it starts skips its fetches.
+	UpdateGen atomic.Int64
 
 	// DepStatuses caches each addon's declared dependencies and their state by name
 	// (recomputed locally in loadProject), for the missing-deps marker, the Dependencies row
@@ -61,17 +65,46 @@ type Ctx struct {
 	// for the header, the fetch key and the batch menu's include-root toggle.
 	RootRepo *repo.Repo
 
+	// Refresh tracks the async project reload (StartProjectRefresh). It lives here, not on
+	// the Project root, because roots are rebuilt while results are in flight.
+	Refresh components.Refresh
+	// Pending marks entries, by name, whose inspection the running Refresh is re-reading;
+	// their rows show the cached state muted. RootPending is the same for RootRepo.
+	Pending     map[string]bool
+	RootPending bool
+	// unseen marks pending entries with no earlier inspection to show (see Unseen).
+	unseen map[string]bool
+	// RankSnap holds the Project list's status-sort ranks, by name, from before the running
+	// refresh, so rows keep their order until it lands. The project tab fills it; it is
+	// cleared when the pass completes.
+	RankSnap map[string]int
+
 	// loadErrs collects real load failures (not missing files) for the UI to show.
 	loadErrs []string
 }
 
-// New builds the context for a project root and performs the initial path scan.
+// New builds the context for a project root and performs the initial path scan and a
+// full, synchronous project load.
 func New(projectRoot, version string) *Ctx {
+	c := newCtx(projectRoot, version)
+	c.loadProject()
+	return c
+}
+
+// NewDeferred is New without inspecting the project: the manifest is parsed and every
+// entry left Pending, so the TUI can draw at once and inspect through
+// StartProjectRefresh (broadcast GitRefresh to start it).
+func NewDeferred(projectRoot, version string) *Ctx {
+	c := newCtx(projectRoot, version)
+	c.beginProject()
+	return c
+}
+
+func newCtx(projectRoot, version string) *Ctx {
 	c := &Ctx{ProjectRoot: projectRoot, Version: version}
 	c.Scan()
 	c.loadGlobal()
 	c.loadArchive()
-	c.loadProject()
 	return c
 }
 
@@ -98,6 +131,7 @@ func (c *Ctx) loadArchive() {
 func (c *Ctx) loadProject() {
 	c.projectLoaded = true
 	c.projectStatuses = nil
+	c.Pending, c.unseen, c.RootPending = nil, nil, false
 	// Describe the root repo even without a manifest, so the header stays current.
 	if root, ok := repo.DescribeRoot(c.ProjectRoot); ok {
 		c.RootRepo = &root
@@ -147,7 +181,9 @@ func (c *Ctx) RefreshGlobal() { c.loadGlobal() }
 // RefreshArchive reloads the cached archived repo IDs from disk.
 func (c *Ctx) RefreshArchive() { c.loadArchive() }
 
-// RefreshProject reloads the cached project addon list from disk.
+// RefreshProject reloads the cached project addon list from disk, synchronously. The
+// Project tab reloads through StartProjectRefresh instead; this is for callers that need
+// the fresh state before they continue.
 func (c *Ctx) RefreshProject() { c.loadProject() }
 
 // ProjectStatuses returns the cached inspection, loading it once. Treat it as read-only.

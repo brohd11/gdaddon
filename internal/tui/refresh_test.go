@@ -49,7 +49,10 @@ func TestSubmoduleRefreshUpdatesParentMarker(t *testing.T) {
 	}
 	git(root, "add", "addons/child")
 	git(root, "commit", "-qm", "record child")
-	c.RefreshRepo(appctx.GitRepoRefresh{Dir: root})
+	if !c.RefreshRepo(appctx.GitRepoRefresh{Dir: root}) {
+		t.Fatal("a root operation must ask for a full refresh")
+	}
+	c.RefreshProject() // what the full refresh lands, synchronously
 	if c.RootRepo.Dirty {
 		t.Fatal("root commit did not clear parent marker")
 	}
