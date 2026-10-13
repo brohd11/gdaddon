@@ -11,8 +11,8 @@ import (
 )
 
 // pluginCfgNames mark an installable addon and carry its version: plugin.cfg for editor
-// plugins, addon.cfg or version.cfg for libraries kept out of the plugin menu. All use an
-// [addon] or [plugin] section (see cfgSection) with version="…".
+// plugins, addon.cfg or version.cfg for libraries kept out of the plugin menu. All use a
+// [plugin] section, optionally overlaid by [addon] (see cfgSection), with version="…".
 var pluginCfgNames = []string{"plugin.cfg", "addon.cfg", "version.cfg"}
 
 // pluginCfgPath returns the path of the recognized config file in dir (checked in
@@ -27,13 +27,20 @@ func pluginCfgPath(dir string) string {
 	return ""
 }
 
-// cfgSection returns the config's [addon] section when present, else [plugin]. The two
-// are never merged.
+// cfgSection returns the config's [plugin] keys overlaid with its [addon] keys, so
+// [addon] only needs what it adds or overrides.
 func cfgSection(cfg *ini.File) *ini.Section {
-	if s, err := cfg.GetSection("addon"); err == nil {
-		return s
+	merged := ini.Empty().Section("")
+	for _, name := range []string{"plugin", "addon"} {
+		s, err := cfg.GetSection(name)
+		if err != nil {
+			continue
+		}
+		for _, k := range s.Keys() {
+			merged.Key(k.Name()).SetValue(k.Value())
+		}
 	}
-	return cfg.Section("plugin")
+	return merged
 }
 
 // hasPluginCfg reports whether dir is an addon/library folder.

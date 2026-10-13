@@ -72,7 +72,6 @@ func TestCfgSection(t *testing.T) {
 		{"addon section", "[addon]\nversion=\"1.0.0\"\n", "1.0.0"},
 		{"plugin section", "[plugin]\nversion=\"2.0.0\"\n", "2.0.0"},
 		{"addon wins over plugin", "[plugin]\nversion=\"2.0.0\"\n[addon]\nversion=\"1.0.0\"\n", "1.0.0"},
-		{"addon section is not merged with plugin", "[plugin]\nversion=\"2.0.0\"\n[addon]\nname=\"x\"\n", ""},
 	}
 	for _, file := range pluginCfgNames {
 		for _, c := range cases {
@@ -86,6 +85,39 @@ func TestCfgSection(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestCfgSectionMerge(t *testing.T) {
+	for _, file := range pluginCfgNames {
+		t.Run(file, func(t *testing.T) {
+			dir := t.TempDir()
+			body := "[plugin]\nname=\"base\"\nversion=\"2.0.0\"\n[addon]\nname=\"x\"\n"
+			if err := os.WriteFile(filepath.Join(dir, file), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := getLocalPluginVersion(dir); got != "2.0.0" {
+				t.Errorf("version = %q, want 2.0.0 from [plugin]", got)
+			}
+			if got := getLocalPluginName(dir); got != "x" {
+				t.Errorf("name = %q, want x from [addon]", got)
+			}
+		})
+	}
+}
+
+func TestDependenciesMergedSections(t *testing.T) {
+	dir := t.TempDir()
+	body := "[plugin]\nversion=\"1.0.0\"\ndeps=[\"a/old\"]\n[addon]\nrequire=[\"owner/repo\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "plugin.cfg"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deps, err := Dependencies(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 1 || deps[0].Repo != "repo" {
+		t.Fatalf("deps = %+v, want only owner/repo from [addon] require", deps)
 	}
 }
 

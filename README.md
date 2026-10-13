@@ -69,7 +69,7 @@ github.com/user/repo:
 
 ### Dependency Management
 If your addon relies on third party content, you can define those in its `plugin.cfg`,
-`addon.cfg` or `version.cfg`, under an `[addon]` or `[plugin]` section (`[addon]` wins if both exist):
+`addon.cfg` or `version.cfg`, under an `[addon]` or `[plugin]` section (keys in `[addon]` override the same keys in `[plugin]`):
 ```
 [plugin]
 name="My Plugin"
