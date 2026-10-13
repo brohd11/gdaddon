@@ -27,7 +27,7 @@ stays uninstalled. `--all` does the whole manifest instead; that's the equivalen
 Actions ▸ Install All + Deps.
 
 The repo is `owner/repo`, or `host/owner/repo` for a host other than github.com — the
-same shorthand a `plugin.cfg`/`version.cfg` `require` or `deps` entry uses, prefix and
+same shorthand a `plugin.cfg`/`addon.cfg`/`version.cfg` `require` or `deps` entry uses, prefix and
 all. An optional `@tag` picks a release, or downloads the tag's source ZIP when no
 release exists. Without one you get the latest published non-prerelease, which `@latest`
 also names explicitly. A leading `v` is optional on either side, so `@1.2.0` finds

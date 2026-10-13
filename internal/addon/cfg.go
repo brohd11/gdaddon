@@ -11,9 +11,9 @@ import (
 )
 
 // pluginCfgNames mark an installable addon and carry its version: plugin.cfg for editor
-// plugins, version.cfg for libraries kept out of the plugin menu. Both use a [plugin]
-// section with version="…".
-var pluginCfgNames = []string{"plugin.cfg", "version.cfg"}
+// plugins, addon.cfg or version.cfg for libraries kept out of the plugin menu. All use an
+// [addon] or [plugin] section (see cfgSection) with version="…".
+var pluginCfgNames = []string{"plugin.cfg", "addon.cfg", "version.cfg"}
 
 // pluginCfgPath returns the path of the recognized config file in dir (checked in
 // pluginCfgNames order), or "" if none is present.
@@ -25,6 +25,15 @@ func pluginCfgPath(dir string) string {
 		}
 	}
 	return ""
+}
+
+// cfgSection returns the config's [addon] section when present, else [plugin]. The two
+// are never merged.
+func cfgSection(cfg *ini.File) *ini.Section {
+	if s, err := cfg.GetSection("addon"); err == nil {
+		return s
+	}
+	return cfg.Section("plugin")
 }
 
 // hasPluginCfg reports whether dir is an addon/library folder.
@@ -67,7 +76,7 @@ func stampVersion(dir, ver, srcURL string) {
 	_ = os.WriteFile(filepath.Join(dir, "version.cfg"), []byte(body), 0o644)
 }
 
-// readPluginCfgKey returns one key from dir's config [plugin] section, unquoted, or "" when
+// readPluginCfgKey returns one key from dir's config section (cfgSection), unquoted, or "" when
 // absent or unreadable. Callers that must see read errors load the config themselves.
 func readPluginCfgKey(dir, key string) string {
 	cfgPath := pluginCfgPath(dir)
@@ -78,7 +87,7 @@ func readPluginCfgKey(dir, key string) string {
 	if err != nil {
 		return ""
 	}
-	raw := cfg.Section("plugin").Key(key).String()
+	raw := cfgSection(cfg).Key(key).String()
 	return strings.Trim(strings.TrimSpace(raw), `'"`)
 }
 

@@ -58,7 +58,7 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %w", cfgPath, err)
 	}
-	plugin := cfg.Section("plugin")
+	plugin := cfgSection(cfg)
 	key := "deps"
 	if plugin.HasKey("require") {
 		key = "require"

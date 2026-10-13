@@ -35,7 +35,7 @@ Name a repo to install one addon, or pass --all to install everything the
 manifest already lists.
 
 A repo is named as owner/repo, or host/owner/repo for a host other than
-github.com — the same shorthand a plugin.cfg/version.cfg 'require' or 'deps'
+github.com — the same shorthand a plugin.cfg/addon.cfg/version.cfg 'require' or 'deps'
 entry uses. An optional @tag picks a release, or the tag's source ZIP when no
 release exists; @latest is the newest published non-prerelease, which is also
 what you get with no @ref at all.
@@ -47,7 +47,7 @@ remote's default branch.
 The install location is worked out from the downloaded package: a repo whose
 root holds a plugin.cfg is installed whole, a repo shipping an addons/ folder
 has its plugin folders mirrored under the project's addons/, and anything else
-is located by its plugin.cfg/version.cfg files. An addon can override this by
+is located by its plugin.cfg/addon.cfg/version.cfg files. An addon can override this by
 declaring dir="addons/whatever" in its own config.
 
 The project root is the git toplevel unless --root says otherwise (this command
