@@ -20,30 +20,35 @@ directory. `install` takes it as `--root` instead, because its argument is the r
 
 ## install
 
-`gdaddon install owner/repo` downloads that addon's latest release, records it in the
+`gdaddon install owner/repo` downloads the source of that addon's latest release, records it in the
 project's manifest, and installs the dependencies it declares — and theirs, and so on.
 Only that closure is touched: an unrelated entry sitting uninstalled in your manifest
 stays uninstalled. `--all` does the whole manifest instead; that's the equivalent of
 Actions ▸ Install All + Deps.
 
 The repo is `owner/repo`, or `host/owner/repo` for a host other than github.com — the
-same shorthand a `plugin.cfg`/`addon.cfg`/`version.cfg` `require` or `deps` entry uses, prefix and
-all. An optional `@tag` picks a release, or downloads the tag's source ZIP when no
-release exists. Without one you get the latest published non-prerelease, which `@latest`
-also names explicitly. A leading `v` is optional on either side, so `@1.2.0` finds
-`v1.2.0`; exact names take precedence within the release lookup and within the tag
-lookup. Tags without releases are available in the TUI's **Tags** browser and never
-become automatic update candidates.
+same spec an addon's `require` entry uses, so see [Dependencies](03-dependencies.md) for
+the grammar. An optional `@tag` installs that tag's
+source; append `/release` for its uploaded release asset instead, which a GDExtension
+needs. Without a tag you get the latest published non-prerelease, which `@latest` also
+names explicitly. A leading `v` is optional on either side, so `@1.2.0` finds `v1.2.0`;
+exact names take precedence. Tags without releases never become automatic update
+candidates.
 
 ```
 gdaddon install brohd11/Godot-Script-Tabs
 gdaddon install brohd11/Godot-Script-Tabs@v0.1.4
 gdaddon install brohd11/Godot-Script-Tabs@latest
+gdaddon install brohd11/my-ext/release@v1.0.0
+gdaddon install brohd11/my-ext/release@v1.0.0:*-linux.zip
 gdaddon install codeberg.org/someone/their-addon
-gdaddon install clone:brohd11/Godot-Script-Tabs@dev
+gdaddon install brohd11/Godot-Script-Tabs/clone@dev
 gdaddon install --all
 gdaddon install --all --no-deps       # the manifest's own entries only
 ```
+
+When a release ships several uploads, pick one with a `:<glob>` on the spec, or with
+`--asset`, which matches a substring of the name.
 
 Naming one addon creates a manifest if the project has none, so it works in a
 brand-new project. `--all` needs one to already exist.
@@ -61,18 +66,18 @@ opt-in that makes a submodule-shaped repo land somewhere other than `addons/<rep
 
 ### Branches
 
-A release is the default. To track a branch instead, prefix the repo with `clone:` and
-it is installed as a live git checkout, `@ref` naming the branch:
+To work on an addon rather than use it, append `/clone`: it is installed as a live git
+checkout, `@ref` naming the branch:
 
 ```
-gdaddon install clone:owner/repo          # the remote's default branch
-gdaddon install clone:owner/repo@dev      # the dev branch
-gdaddon install clone:owner/repo@main     # the main branch
+gdaddon install owner/repo/clone          # the remote's default branch
+gdaddon install owner/repo/clone@dev      # the dev branch
 ```
 
-Without the prefix, `@main` names a Git tag and does not select a branch. The prefix is
-part of the spec rather than a flag, so the same text works here and in an addon's
-`require` list — see [Dependencies](03-dependencies.md).
+Without `/clone`, `@main` names a Git tag and does not select a branch. Only a typed
+install can ask for a clone; an addon's `require` list can't — see
+[Dependencies](03-dependencies.md). A repo can keep these lines in a "for development"
+section of its readme, so setting up to work on it is one paste.
 
 The checked-out branch is recorded as the entry's `tag`, so it reads as a clone rather
 than as branch drift on the next refresh. Updating a clone is git's job, not gdaddon's —

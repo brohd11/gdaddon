@@ -158,7 +158,7 @@ const (
 )
 
 // ResolveUpdate returns a plan when a newer release exists, choosing its asset with
-// source.AutoAsset. ResolveNone covers up to date, branch-tracked, locked, uncomparable and
+// source.AutoAsset (the generated archive again for an entry installed from source). ResolveNone covers up to date, branch-tracked, locked, uncomparable and
 // unfetchable; ResolveAmbiguous a newer release with several uploads.
 func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePlan, UpdateResolution) {
 	if a.URL == "" {
@@ -172,28 +172,21 @@ func ResolveUpdate(ctx context.Context, a Addon, localVersion string) (UpdatePla
 	if state != UpdateAvailable {
 		return UpdatePlan{}, ResolveNone
 	}
-	asset, ok := source.AutoAsset(latest)
+	// A source entry stays on source: a newer release's upload is a different package.
+	pick := source.AutoAsset
+	if isSourceArchiveURL(a.URL) {
+		pick = source.GeneratedAsset
+	}
+	asset, ok := pick(latest)
 	if !ok {
 		// ok=false is either an empty release (nothing to do) or 2+ uploaded packages
 		// (ambiguous — no user to pick, so surface it as a skip).
-		if uploadedCount(latest) >= 2 {
+		if len(source.Uploads(latest)) >= 2 {
 			return UpdatePlan{Addon: a, OldVersion: localVersion, NewTag: latest.Tag}, ResolveAmbiguous
 		}
 		return UpdatePlan{}, ResolveNone
 	}
 	return UpdatePlan{Addon: a, OldVersion: localVersion, NewTag: latest.Tag, Asset: asset}, ResolvePlan
-}
-
-// uploadedCount counts a release's uploaded assets (not the generated archive), to tell
-// ambiguous from empty.
-func uploadedCount(rel source.Release) int {
-	n := 0
-	for _, a := range rel.Assets {
-		if !a.Generated {
-			n++
-		}
-	}
-	return n
 }
 
 // maxConcurrentChecks caps concurrent release fetches (host rate limits).

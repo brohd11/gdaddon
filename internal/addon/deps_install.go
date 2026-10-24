@@ -2,6 +2,7 @@ package addon
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/brohd11/gdaddon/internal/archive"
@@ -193,7 +194,7 @@ func DepEntry(d Dependency, asset source.Asset, asDependency bool) Addon {
 }
 
 // CloneEntry is the manifest entry for a clone dependency: canonical .git url, branch in
-// Tag (empty for the remote default), kind clone. The CLI's clone: install uses it too.
+// Tag (empty for the remote default), kind clone. The CLI's /clone install uses it too.
 func CloneEntry(d Dependency, name string, asDependency bool) Addon {
 	return Addon{
 		Name:       name,
@@ -205,7 +206,7 @@ func CloneEntry(d Dependency, name string, asDependency bool) Addon {
 }
 
 // ResolveDepAsset finds d's release (archive first, then network) and picks its asset via
-// source.AutoAsset (ambiguous uploads give ok=false). It returns d with an @latest spec
+// PickDepAsset (no single candidate gives ok=false). It returns d with an @latest spec
 // resolved to the concrete tag, which is what callers must record.
 func ResolveDepAsset(ctx context.Context, d Dependency) (Dependency, source.Asset, bool) {
 	// Only look in the tag-keyed archive once latest has a value, so a rolling `latest` tag is
@@ -215,27 +216,35 @@ func ResolveDepAsset(ctx context.Context, d Dependency) (Dependency, source.Asse
 			return d, asset, true
 		}
 	}
-	rel, err := ResolveVersion(ctx, d.RepoURL, d.Tag)
+	rel, err := ResolveVersion(ctx, d)
 	if err != nil {
 		return d, source.Asset{}, false
 	}
 	if d.WantsLatest() {
 		d.Tag = rel.Tag
 	}
-	asset, ok := source.AutoAsset(rel)
-	return d, asset, ok
+	asset, err := PickDepAsset(rel, d)
+	return d, asset, err == nil
 }
 
-// archivedDepAsset returns an archived asset for d's tag; ambiguity gives ok=false.
+// archivedDepAsset returns an archived asset for d's tag, or ok=false when PickDepAsset
+// can't settle on one. The archive keeps no Generated flag, so the generated source
+// archive is recognised by the name it was stored under.
 func archivedDepAsset(d Dependency) (source.Asset, bool) {
 	releases, err := archive.List(d.RepoID)
 	if err != nil {
 		return source.Asset{}, false
 	}
+	srcName := source.SourceArchiveName(d.RepoURL)
 	for _, rel := range releases {
-		if source.TagEqual(rel.Tag, d.Tag) {
-			return source.AutoAsset(rel)
+		if !source.TagEqual(rel.Tag, d.Tag) {
+			continue
 		}
+		for i := range rel.Assets {
+			rel.Assets[i].Generated = srcName != "" && strings.TrimSuffix(rel.Assets[i].Name, archive.ArchivedSuffix) == srcName
+		}
+		asset, err := PickDepAsset(rel, d)
+		return asset, err == nil
 	}
 	return source.Asset{}, false
 }

@@ -178,20 +178,20 @@ func TestDepIndexFind(t *testing.T) {
 	}
 }
 
-// TestPlanDepsCloneAndLatest covers the two spec words that are not release tags.
+// TestPlanDepsCloneEntryAndLatest covers the entries and spec words that are not
+// comparable release tags.
 //
-// A clone requirement is satisfied by *presence*: `clone:` says how a dependency the
-// manifest lacks should be added, not that an entry the user deliberately pinned to a
-// release is now wrong. Its ref is a branch, too, and a branch is free to be named
-// something that parses as a version ("2.0") — which without its own rule would be
-// compared as one and report the entry as stale forever.
+// A clone *entry* satisfies any requirement on its repo: it is a checkout being worked on,
+// and its branch is free to be named something that parses as a version ("1.0"), which
+// compared as one would report the entry stale forever. The legacy `clone:` prefix is
+// plain source, so an ordinary entry at the tag satisfies it.
 //
 // `@latest` is likewise never stale: the entry records the concrete tag the word resolved
 // to when it was added, so the pair is not comparable and the dep is trusted.
-func TestPlanDepsCloneAndLatest(t *testing.T) {
+func TestPlanDepsCloneEntryAndLatest(t *testing.T) {
 	root := t.TempDir()
 	a := declaring(t, root, "A", "https://github.com/u/A", "addons/a",
-		`["clone:u/Pinned@main", "clone:u/Live@main", "clone:u/Numeric@2.0", "clone:u/Gone@main", "u/Fresh@latest"]`)
+		`["clone:u/Pinned@v1.0.0", "u/Live@v2.0.0", "u/Numeric@2.0", "u/Gone@v1.0.0", "u/Fresh@latest"]`)
 
 	manifest := []Addon{
 		a,
@@ -199,7 +199,7 @@ func TestPlanDepsCloneAndLatest(t *testing.T) {
 		// second-guess it.
 		{Name: "Pinned", URL: "https://github.com/u/Pinned", Tag: "v1.0.0"},
 		{Name: "Live", URL: "https://github.com/u/Live.git", Tag: "main", Kind: KindClone},
-		// A branch whose name happens to read as a version, against an older one.
+		// A branch whose name happens to read as a version, older than the requirement.
 		{Name: "Numeric", URL: "https://github.com/u/Numeric.git", Tag: "1.0", Kind: KindClone},
 		// The tag `@latest` resolved to when the entry was recorded.
 		{Name: "Fresh", URL: "https://github.com/u/Fresh", Tag: "v1.2.0"},

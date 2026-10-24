@@ -45,19 +45,29 @@ func TestParseDependencyList(t *testing.T) {
 			nil,
 		},
 		{
-			"clone: requires a live checkout, and @ref is a branch",
-			`["clone:u/Live@main", "clone:u/Default", "clone:codeberg.org/u/Foo@dev"]`,
+			// PackageExporter drops the prefix, so an old cfg means the same to both tools.
+			"legacy clone: is read as source",
+			`["clone:u/Live@v1.0.0", "clone:codeberg.org/u/Foo@dev"]`,
 			[]Dependency{
-				{Host: "github.com", Owner: "u", Repo: "Live", Tag: "main", Kind: KindClone, RepoURL: "https://github.com/u/Live", RepoID: "github.com/u/live"},
-				{Host: "github.com", Owner: "u", Repo: "Default", Kind: KindClone, RepoURL: "https://github.com/u/Default", RepoID: "github.com/u/default"},
-				{Host: "codeberg.org", Owner: "u", Repo: "Foo", Tag: "dev", Kind: KindClone, RepoURL: "https://codeberg.org/u/Foo", RepoID: "codeberg.org/u/foo"},
+				{Host: "github.com", Owner: "u", Repo: "Live", Tag: "v1.0.0", RepoURL: "https://github.com/u/Live", RepoID: "github.com/u/live"},
+				{Host: "codeberg.org", Owner: "u", Repo: "Foo", Tag: "dev", RepoURL: "https://codeberg.org/u/Foo", RepoID: "codeberg.org/u/foo"},
 			},
 		},
 		{
-			"package: is the explicit spelling of the default",
-			`["package:u/Pkg@v1.0.0"]`,
+			"/source spells out the default, and a trailing slash is tolerated",
+			`["u/A/source@v1.0.0", "u/B/@v2.0.0"]`,
 			[]Dependency{
-				{Host: "github.com", Owner: "u", Repo: "Pkg", Tag: "v1.0.0", RepoURL: "https://github.com/u/Pkg", RepoID: "github.com/u/pkg"},
+				{Host: "github.com", Owner: "u", Repo: "A", Tag: "v1.0.0", RepoURL: "https://github.com/u/A", RepoID: "github.com/u/a"},
+				{Host: "github.com", Owner: "u", Repo: "B", Tag: "v2.0.0", RepoURL: "https://github.com/u/B", RepoID: "github.com/u/b"},
+			},
+		},
+		{
+			"/release, with an optional asset glob, and on a dotted host",
+			`["u/Ext/release@v1.0.0", "u/Lsp/release@v0.2.1:lsp-*.zip", "codeberg.org/u/Foo/release@1.0"]`,
+			[]Dependency{
+				{Host: "github.com", Owner: "u", Repo: "Ext", Tag: "v1.0.0", Release: true, RepoURL: "https://github.com/u/Ext", RepoID: "github.com/u/ext"},
+				{Host: "github.com", Owner: "u", Repo: "Lsp", Tag: "v0.2.1", Release: true, AssetPattern: "lsp-*.zip", RepoURL: "https://github.com/u/Lsp", RepoID: "github.com/u/lsp"},
+				{Host: "codeberg.org", Owner: "u", Repo: "Foo", Tag: "1.0", Release: true, RepoURL: "https://codeberg.org/u/Foo", RepoID: "codeberg.org/u/foo"},
 			},
 		},
 		{
@@ -70,12 +80,13 @@ func TestParseDependencyList(t *testing.T) {
 			},
 		},
 		{
-			// A submodule is the parent repo's to manage, and `latest` is a release
-			// concept that a branch checkout cannot honour.
-			"submodule: and clone:@latest are rejected",
-			`["submodule:u/Sub", "clone:u/Live@latest", "clone:"]`,
+			// A clone is an install-time choice (a build can't read a branch), and a glob
+			// only picks among a release's uploads, so it needs /release and a tag.
+			"kind prefixes, a declared /clone and a misplaced glob are skipped",
+			`["package:u/Pkg@v1.0.0", "submodule:u/Sub", "u/Live/clone@main", "u/r@v1:x.zip", "u/r/source@v1:x.zip", "u/r/release@v1:", "u/r/release:x.zip", "u/r/other@v1"]`,
 			nil,
 		},
+		{"three segments need a dotted host or a marker", `["a/b/c@v1"]`, nil},
 		{
 			// The colon here belongs to the host, not to a kind prefix — the shape the
 			// dependency tests' own local server produces.
@@ -113,7 +124,7 @@ func TestDependenciesFromCfg(t *testing.T) {
 		{"deps in plugin.cfg", "plugin.cfg", `deps=["u/Dep@v1.2.0"]`, "github.com/u/dep", "v1.2.0", KindPackage},
 		{"require in plugin.cfg", "plugin.cfg", `require=["u/Required@v2.0.0"]`, "github.com/u/required", "v2.0.0", KindPackage},
 		{"require in version.cfg", "version.cfg", `require=["u/Library"]`, "github.com/u/library", "", KindPackage},
-		{"clone: read end to end from a cfg", "plugin.cfg", `require=["clone:u/Live@main"]`, "github.com/u/live", "main", KindClone},
+		{"a declared /clone is skipped, legacy clone: is source", "plugin.cfg", `require=["u/Live/clone@main", "clone:u/Old@v1.0.0"]`, "github.com/u/old", "v1.0.0", KindPackage},
 		{
 			"require wins over deps",
 			"plugin.cfg",
@@ -367,7 +378,7 @@ func TestAddDepEntry(t *testing.T) {
 	}
 }
 
-// TestAddDepEntryClone covers what a `clone:` requirement becomes in the manifest: the
+// TestAddDepEntryClone covers what a typed `/clone` spec becomes in the manifest: the
 // canonical .git url, the branch in tag:, kind: clone, and no version — a checkout tracks
 // a branch, so there is nothing to pin. It also asserts the path costs no network call:
 // a branch has no release to resolve, and a dead context would fail any lookup attempted.
@@ -378,7 +389,7 @@ func TestAddDepEntryClone(t *testing.T) {
 	dead, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	branch, _ := ParseRepoSpec("clone:u/Live@main")
+	branch, _ := ParseRepoSpec("u/Live/clone@main")
 	entry, added, err := AddDepEntry(dead, path, branch, true)
 	if err != nil || !added {
 		t.Fatalf("AddDepEntry = (%v, %v), want (true, nil)", added, err)
@@ -389,7 +400,7 @@ func TestAddDepEntryClone(t *testing.T) {
 
 	// No branch named: the entry records none either, and the install fills in whatever
 	// the remote's default turned out to be (see pinInstalled).
-	def, _ := ParseRepoSpec("clone:u/Default")
+	def, _ := ParseRepoSpec("u/Default/clone")
 	if _, added, err := AddDepEntry(dead, path, def, true); err != nil || !added {
 		t.Fatalf("default-branch clone = (%v, %v), want (true, nil)", added, err)
 	}

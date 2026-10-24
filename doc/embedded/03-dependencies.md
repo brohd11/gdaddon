@@ -14,32 +14,44 @@ require=["owner/repo@v1.0.0", "owner/other"]
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 even when its list is empty.
 
-A spec is `[clone:]owner/repo[@ref]`. The host defaults to github.com — write
-`host/owner/repo` for anything else — and both the prefix and the `@ref` are optional:
+A spec is `owner/repo[/release][@ref]`, the same grammar PackageExporter builds
+against, so one `require` line means the same thing to both. The host defaults to
+github.com; write `host/owner/repo` for anything else (a first segment is a host only when
+it has a dot).
 
 | spec | means |
 | --- | --- |
-| `owner/repo@v1.0.0` | at least v1.0.0 |
+| `owner/repo@v1.0.0` | v1.0.0's source, or newer |
+| `owner/repo/release@v1.0.0` | v1.0.0's uploaded release asset |
+| `owner/repo/release@v1.0.0:*-linux.zip` | the upload matching the glob |
 | `owner/repo@latest` | the newest published non-prerelease, pinned when it's recorded |
-| `owner/repo` | any version — recorded unpinned, installed from the default branch |
-| `clone:owner/repo@main` | a live git checkout of branch `main` |
-| `clone:owner/repo` | a live git checkout of the remote's default branch |
+| `owner/repo` | any version — recorded unpinned for you to pin |
 
-`@` always names the ref and nothing else. A clone is asked for with the `clone:` prefix,
-never by spelling it into the ref: `@clone-main` is just a branch called `clone-main`.
-`package:` is accepted as the explicit spelling of the default. `submodule:` is not —
-a submodule belongs to the parent repo, and gdaddon never installs one.
+A plain tag is the tag's **source**: the repo as it was at that tag, which is what
+PackageExporter reads when it builds. `/source` says the same thing explicitly. A tag
+needs no published release, and an uploaded build does not replace it.
 
-A tag does not need a published release. gdaddon prefers the matching release's
-uploaded package; when the tag has no release, it downloads and extracts the tag's
-source ZIP. Multiple uploaded builds still require an explicit asset choice.
+`/release` is for what can't be used from source — a GDExtension, or a third-party zip.
+It installs the tag's uploaded asset and never falls back to source; a release with no
+upload is an error that tells you to drop `/release`. When a release uploads several
+assets, `:<glob>` picks one (git forbids `:` in tags, so the split is unambiguous). It is
+a glob rather than a name so the pin survives a tag bump.
+
 The local package archive is checked first, allowing saved packages to work offline.
 
-Tags without releases can also be selected through **Tags** in the package browser.
-They do not participate in “latest” installs or automatic updates, which use published
-releases. `@main` names a tag, not a branch — use `clone:owner/repo@main` for the branch.
+### Clones are an install-time choice
 
-### The two words that aren't tags
+A `require` can't ask for a live checkout: a build reads a tag, never a branch, so
+PackageExporter skips a `/clone` spec and so does gdaddon. Clone what you are working on
+when you install it — `gdaddon install owner/repo/clone@main`, or **Clone** in the TUI. A
+repo can list those commands in a "for development" section of its readme.
+
+The older `clone:owner/repo` prefix is read as plain source, as PackageExporter reads it.
+
+A clone entry satisfies any requirement on its repo: it is a checkout being worked on, so
+gdaddon doesn't compare its branch against the required tag.
+
+### The reserved word
 
 `latest` is reserved. It resolves to the newest published non-prerelease **when the entry
 is recorded**, and the manifest stores the tag it resolved to, not the word — so the entry
@@ -47,18 +59,11 @@ is a real pin and moving it forward stays an explicit act (`gdaddon update-addon
 that publishes a literal rolling tag named `latest` can't be pinned to it by name; the
 reserved meaning wins.
 
-A `clone:` dep's `@ref` is a *branch*, so it isn't version-compared at all. The entry it
-creates records `kind: clone` with the branch in `tag:` and no `version:` — a checkout
-tracks a branch, so there is nothing to pin. Leaving the ref off clones the remote's
-default branch, and the branch it lands on is written back to the entry.
-
-Requiring a clone says how a dependency the manifest *lacks* should be added. It does not
-override an entry you already have: if you deliberately pinned that repo to a release, it
-still satisfies the requirement and gdaddon leaves it alone.
-
 Matching is against the entry's `tag` — the release identity — not its `version`, since
 the version string in a `plugin.cfg` is the author's to invent and often disagrees with
 the release it shipped in. Comparison is semver `>=`, so a newer tag satisfies a dep.
+Source and release aren't compared: an entry installed either way satisfies a requirement
+at its tag.
 
 ## The Dependencies screen
 
@@ -86,17 +91,7 @@ downloaded:
 ```
   my-addon declares a dependency:
     github.com/someone/util-lib @v0.4.1
-    https://github.com/someone/util-lib/releases/download/v0.4.1/util-lib.zip
-  Install it? [y/N/a(ll)/q(uit)]:
-```
-
-A dependency that asked for a checkout says so, since accepting it means live code with
-its own `.git` that tracks a branch rather than a pinned snapshot:
-
-```
-  my-addon declares a dependency:
-    github.com/someone/util-lib (clone: main)
-    https://github.com/someone/util-lib.git
+    https://github.com/someone/util-lib/archive/refs/tags/v0.4.1.zip
   Install it? [y/N/a(ll)/q(uit)]:
 ```
 

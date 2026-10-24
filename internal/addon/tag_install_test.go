@@ -166,7 +166,7 @@ func TestUnpublishedTagsDoNotChangeLatestOrUpdates(t *testing.T) {
 	publishSource(t, bodies, "child", `[]`)
 	bodies["/repos/u/child/releases"] = []byte(`[{"tag_name":"v1.0.0"}]`)
 	bodies["/repos/u/child/tags"] = []byte(`[{"name":"v2.0.0"},{"name":"v1.0.0"}]`)
-	rel, err := ResolveVersion(context.Background(), "https://github.com/u/child", "")
+	rel, err := ResolveVersion(context.Background(), Dependency{RepoURL: "https://github.com/u/child"})
 	if err != nil || rel.Tag != "v1.0.0" {
 		t.Fatalf("latest=%+v, err=%v", rel, err)
 	}

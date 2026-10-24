@@ -69,15 +69,15 @@ func declaredDeps(a Addon, projectRoot string) ([]Dependency, error) {
 	return Dependencies(filepath.Join(projectRoot, a.Path))
 }
 
-// depSatisfied reports whether an entry at recordedTag meets d. Tagless deps are satisfied
-// by presence, and uncomparable tags are trusted rather than nagged about. Clone deps are
-// satisfied by presence of any kind; checked separately because a branch may look like a
-// version.
-func depSatisfied(d Dependency, recordedTag string) bool {
-	if d.Tag == "" || d.IsClone() {
+// depSatisfied reports whether entry meets d. Tagless deps and clones are satisfied by
+// presence (a clone is a checkout being worked on, and its branch may read as a version),
+// and uncomparable tags are trusted rather than nagged about. Source and release are not
+// compared: either satisfies a requirement at its tag.
+func depSatisfied(d Dependency, entry Addon) bool {
+	if d.Tag == "" || entry.IsClone() {
 		return true
 	}
-	sat, verified := d.SatisfiedByTag(recordedTag)
+	sat, verified := d.SatisfiedByTag(entry.Tag)
 	return !verified || sat
 }
 
@@ -117,7 +117,7 @@ func PlanDeps(a Addon, projectRoot string, manifest []Addon) (DepPlan, error) {
 		switch {
 		case i < 0:
 			plan.Add = append(plan.Add, d)
-		case depSatisfied(d, manifest[i].Tag):
+		case depSatisfied(d, manifest[i]):
 			plan.Satisfied = append(plan.Satisfied, d)
 		default:
 			plan.Stale = append(plan.Stale, StaleDep{Dep: d, Recorded: manifest[i].Tag})

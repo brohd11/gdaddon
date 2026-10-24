@@ -33,7 +33,7 @@ func TestSubcommandsRegistered(t *testing.T) {
 
 // TestCheckInstallArgs covers the combinations cobra can't express: --all and a repo
 // spec are different kinds of target, and --asset/--name only describe one addon. A
-// clone needs no case here — it is spelled in the spec ("clone:u/r"), so it rides the
+// clone needs no case here — it is spelled in the spec ("u/r/clone"), so it rides the
 // positional --all already rejects and cannot reach this function on its own.
 func TestCheckInstallArgs(t *testing.T) {
 	cases := []struct {
@@ -45,12 +45,12 @@ func TestCheckInstallArgs(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "repo spec alone", args: []string{"u/r"}},
-		{name: "clone spec alone", args: []string{"clone:u/r@main"}},
+		{name: "clone spec alone", args: []string{"u/r/clone@main"}},
 		{name: "all alone", all: true},
 		{name: "single-addon flags with a repo", args: []string{"u/r"}, asset: "linux"},
 		{name: "no target", wantErr: true},
 		{name: "both targets", all: true, args: []string{"u/r"}, wantErr: true},
-		{name: "all with a clone spec", all: true, args: []string{"clone:u/r"}, wantErr: true},
+		{name: "all with a clone spec", all: true, args: []string{"u/r/clone"}, wantErr: true},
 		{name: "all with --asset", all: true, asset: "linux", wantErr: true},
 		{name: "all with --name", all: true, entry: "thing", wantErr: true},
 	}
@@ -143,13 +143,12 @@ func TestBootstrapRunsForSubcommands(t *testing.T) {
 	}
 }
 
-// TestInstallHasNoCloneFlag pins the removal of --clone. A clone is now spelled in the
-// spec itself ("clone:owner/repo@branch"), which is the same text a plugin.cfg require=
-// item uses — one grammar instead of a flag that only the CLI had. A flag registration
-// surviving an edit would quietly give the two spellings different code paths again.
+// TestInstallHasNoCloneFlag pins the removal of --clone. A clone is spelled in the spec
+// itself ("owner/repo/clone@branch"), beside /release, so the CLI has one grammar with
+// plugin.cfg require= items even though only a typed spec may ask for a checkout.
 func TestInstallHasNoCloneFlag(t *testing.T) {
 	if f := addonInstallCmd.Flags().Lookup("clone"); f != nil {
-		t.Error("install should carry no --clone flag; the spec's clone: prefix replaced it")
+		t.Error("install should carry no --clone flag; the spec's /clone marker replaced it")
 	}
 	if err := addonInstallCmd.Flags().Parse([]string{"--clone"}); err == nil {
 		t.Error("--clone should now be an unknown flag")

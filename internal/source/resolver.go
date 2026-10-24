@@ -233,27 +233,40 @@ func resolveBranches(ctx context.Context, rule *config.VCSRule, owner, repo stri
 	return branches, nil
 }
 
-// AutoAsset picks an asset without a user: exactly one uploaded asset is installed (e.g. a
+// AutoAsset picks an asset without a user: exactly one upload is installed (e.g. a
 // precompiled GDExtension), none means the generated source archive, and two or more is
 // ambiguous (ok=false: skip, or show a picker).
 func AutoAsset(rel Release) (Asset, bool) {
-	var uploaded []Asset
-	var generated *Asset
-	for i := range rel.Assets {
-		if rel.Assets[i].Generated {
-			generated = &rel.Assets[i]
-		} else {
-			uploaded = append(uploaded, rel.Assets[i])
-		}
-	}
-	switch {
-	case len(uploaded) == 1:
-		return uploaded[0], true
-	case len(uploaded) == 0 && generated != nil:
-		return *generated, true
+	switch uploads := Uploads(rel); len(uploads) {
+	case 1:
+		return uploads[0], true
+	case 0:
+		return GeneratedAsset(rel)
 	default:
 		return Asset{}, false
 	}
+}
+
+// Uploads returns rel's uploaded assets, leaving out the generated archive. Checksum and
+// signature sidecars never get here: only .zip uploads are listed.
+func Uploads(rel Release) []Asset {
+	var out []Asset
+	for _, a := range rel.Assets {
+		if !a.Generated {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// GeneratedAsset returns rel's host-generated source archive, if it has one.
+func GeneratedAsset(rel Release) (Asset, bool) {
+	for _, a := range rel.Assets {
+		if a.Generated {
+			return a, true
+		}
+	}
+	return Asset{}, false
 }
 
 // asSlice coerces a decoded JSON value to a slice (nil when it isn't one).

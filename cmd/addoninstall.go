@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/source"
 
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ var (
 const manifestFileName = "addon_manifest.yml"
 
 var addonInstallCmd = &cobra.Command{
-	Use:   "install [--all | [clone:]<owner/repo>[@ref]]",
+	Use:   "install [--all | <owner/repo>[/release|/clone][@ref]]",
 	Short: "Install Godot addons into this project and record them in the manifest",
 	Long: `Install downloads addons into the project and records them in its addon
 manifest, along with the dependencies they declare (and theirs, and so on).
@@ -35,14 +36,18 @@ Name a repo to install one addon, or pass --all to install everything the
 manifest already lists.
 
 A repo is named as owner/repo, or host/owner/repo for a host other than
-github.com — the same shorthand a plugin.cfg/addon.cfg/version.cfg 'require' or 'deps'
-entry uses. An optional @tag picks a release, or the tag's source ZIP when no
-release exists; @latest is the newest published non-prerelease, which is also
+github.com — the same spec a plugin.cfg/addon.cfg/version.cfg 'require' or 'deps'
+entry uses, and the one PackageExporter builds against. An optional @tag installs
+that tag's source; @latest is the newest published non-prerelease, which is also
 what you get with no @ref at all.
 
-Prefix the repo with 'clone:' to install a live git checkout instead of a
-release, in which case @ref names the branch and leaving it off takes the
-remote's default branch.
+Append /release to install the tag's uploaded release asset instead (needed for
+GDExtension and other prebuilt packages); a release shipping several assets is
+picked with @tag:<glob>, e.g. owner/repo/release@v1.0.0:*-linux.zip, or --asset.
+
+Append /clone to install a live git checkout, for working on the addon itself;
+@ref then names the branch, and leaving it off takes the remote's default
+branch. A clone is only ever asked for here: a declared 'require' cannot.
 
 The install location is worked out from the downloaded package: a repo whose
 root holds a plugin.cfg is installed whole, a repo shipping an addons/ folder
@@ -67,11 +72,13 @@ discovers.
   gdaddon install --all --no-deps                  # the manifest's own entries only
   gdaddon install --all --trust-deps               # ... and don't ask about deps
   gdaddon install brohd11/my-addon
-  gdaddon install brohd11/my-addon@v1.2.0
-  gdaddon install brohd11/my-addon@latest          # newest release, pinned
+  gdaddon install brohd11/my-addon@v1.2.0          # the tag's source
+  gdaddon install brohd11/my-addon@latest          # newest release's tag, pinned
+  gdaddon install brohd11/my-ext/release@v1.2.0    # the uploaded release asset
+  gdaddon install brohd11/my-ext/release@v1.2.0:*-linux.zip
   gdaddon install codeberg.org/someone/their-addon
-  gdaddon install clone:brohd11/my-addon           # git checkout, default branch
-  gdaddon install clone:brohd11/my-addon@dev       # git checkout, branch dev`,
+  gdaddon install brohd11/my-addon/clone           # git checkout, default branch
+  gdaddon install brohd11/my-addon/clone@dev       # git checkout, branch dev`,
 	Args:          cobra.MaximumNArgs(1),
 	SilenceUsage:  true,
 	SilenceErrors: false,
@@ -85,7 +92,7 @@ func init() {
 	f := addonInstallCmd.Flags()
 	f.BoolVar(&addonInstallAll, "all", false, "install every addon the manifest lists, instead of one named repo")
 	f.StringVar(&addonInstallRoot, "root", "", "project root (default: the git toplevel, else the current directory)")
-	f.StringVar(&addonInstallAsset, "asset", "", "pick a release asset by name (substring) when the release ships several")
+	f.StringVar(&addonInstallAsset, "asset", "", "pick a /release asset by name (substring) when the release ships several")
 	f.StringVar(&addonInstallName, "name", "", "manifest entry name (default: derived from the repo)")
 	f.BoolVar(&addonInstallNoDeps, "no-deps", false, "don't install declared dependencies")
 	f.BoolVar(&addonInstallTrustDeps, "trust-deps", false, "install declared dependencies without confirming each one")
@@ -102,7 +109,7 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 
 	spec, ok := addon.ParseRepoSpec(args[0])
 	if !ok {
-		return fmt.Errorf("could not parse %q: expected [clone:]owner/repo or [clone:]host/owner/repo, either with an optional @ref", args[0])
+		return fmt.Errorf("could not parse %q: expected [host/]owner/repo[/release|/clone][@ref], with @ref:<glob> only after /release", args[0])
 	}
 
 	projectRoot, err := resolveRootQuiet(addonInstallRoot)
@@ -161,7 +168,7 @@ func checkInstallArgs(args []string) error {
 	case addonInstallAll && len(args) == 1:
 		return fmt.Errorf("--all installs the whole manifest; drop %q (or drop --all to install just it)", args[0])
 	case !addonInstallAll && len(args) == 0:
-		return fmt.Errorf("name a repo to install ([clone:]owner/repo[@ref]), or pass --all for the whole manifest")
+		return fmt.Errorf("name a repo to install (owner/repo[/release|/clone][@ref]), or pass --all for the whole manifest")
 	case addonInstallNoDeps && addonInstallTrustDeps:
 		return fmt.Errorf("--no-deps skips dependencies and --trust-deps installs them all; pick one")
 	}
@@ -214,30 +221,40 @@ func runInstallAll() error {
 }
 
 // resolveEntry turns the spec into the entry to install: a clone of the canonical .git url
-// (branch from @ref), or a release pinned to one asset.
+// (branch from @ref), or a tag pinned to its source or one release asset.
 func resolveEntry(ctx context.Context, spec addon.Dependency) (addon.Addon, error) {
 	name := addonInstallName
 	if name == "" {
 		name = addon.EntryKey(spec.RepoURL)
 	}
 
-	// Built by the same helper the dependency walker uses, so `gdaddon install clone:x`
-	// and a declared `require=["clone:x"]` cannot record different things.
 	if spec.IsClone() {
 		return addon.CloneEntry(spec, name, false), nil
 	}
 
-	rel, err := addon.ResolveVersion(ctx, spec.RepoURL, spec.Tag)
+	rel, err := addon.ResolveVersion(ctx, spec)
 	if err != nil {
 		return addon.Addon{}, fmt.Errorf("%s: %w", spec.RepoID, err)
 	}
-	asset, err := addon.SelectAsset(rel, addonInstallAsset)
+	asset, err := pickAsset(rel, spec)
 	if err != nil {
 		return addon.Addon{}, fmt.Errorf("%s: %w", spec.RepoID, err)
 	}
 
 	fmt.Printf("%s %s (%s)\n", spec.RepoID, rel.Tag, asset.Name)
 	return addon.Addon{Name: name, URL: asset.URL, Tag: rel.Tag, Kind: addon.KindPackage}, nil
+}
+
+// pickAsset is the dependency walker's pick, except that --asset may choose among a
+// /release's uploads when the spec carries no glob of its own.
+func pickAsset(rel source.Release, spec addon.Dependency) (source.Asset, error) {
+	if addonInstallAsset == "" {
+		return addon.PickDepAsset(rel, spec)
+	}
+	if !spec.Release || spec.AssetPattern != "" {
+		return source.Asset{}, fmt.Errorf("--asset picks a /release upload, and only when the spec has no :<glob>")
+	}
+	return addon.SelectAsset(source.Release{Tag: rel.Tag, Assets: source.Uploads(rel)}, addonInstallAsset)
 }
 
 // findOrCreateManifest finds the manifest, creating an empty one at the project root so a

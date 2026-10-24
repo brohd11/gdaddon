@@ -2,12 +2,27 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/restrule"
 )
+
+// SourceArchiveName is the asset name of this host's generated source archive ("" when the
+// host has none), which is also the name an archived copy of it is stored under.
+func SourceArchiveName(rawURL string) string {
+	ref, err := parseRepoURL(rawURL)
+	if err != nil {
+		return ""
+	}
+	rule, ok := ruleForHost(ref.Host)
+	if !ok {
+		return ""
+	}
+	return rule.SourceArchive.Name
+}
 
 // SupportsTags reports whether this host has a tag listing and source archive rule.
 func SupportsTags(rawURL string) bool {
@@ -65,6 +80,24 @@ func Tags(ctx context.Context, rawURL string) ([]Release, error) {
 // the tag's source package only when none matches. An API failure is an error, never a
 // silent switch to source.
 func ResolveTag(ctx context.Context, rawURL, tag string) (Release, error) {
+	rel, err := ResolveReleaseTag(ctx, rawURL, tag)
+	if err == nil || !errors.Is(err, ErrNoSuchTag) {
+		return rel, err
+	}
+	rel, err = ResolveSourceTag(ctx, rawURL, tag)
+	if errors.Is(err, ErrNoSuchTag) {
+		return Release{}, fmt.Errorf("no release or Git tag named %s", tag)
+	}
+	return rel, err
+}
+
+// ErrNoSuchTag reports a listing that was read in full without finding the tag, as opposed
+// to one that could not be read.
+var ErrNoSuchTag = errors.New("no such tag")
+
+// ResolveReleaseTag finds tag's published release, searching past the first page; a leading
+// v is tolerated when no exact match exists.
+func ResolveReleaseTag(ctx context.Context, rawURL, tag string) (Release, error) {
 	if tag == "" {
 		return Release{}, fmt.Errorf("a tag is required")
 	}
@@ -88,37 +121,50 @@ func ResolveTag(ctx context.Context, rawURL, tag string) (Release, error) {
 		if err != nil {
 			return Release{}, err
 		}
-		for _, rel := range releases {
-			if rel.Tag == tag {
-				return rel, nil
-			}
-			if alias == nil && TagEqual(rel.Tag, tag) {
-				copy := rel
-				alias = &copy
-			}
+		if rel, exact := matchTag(releases, tag, &alias); exact {
+			return rel, nil
 		}
 		endpoint = next
 	}
 	if alias != nil {
 		return *alias, nil
 	}
+	return Release{}, fmt.Errorf("no release tagged %s: %w", tag, ErrNoSuchTag)
+}
+
+// ResolveSourceTag finds tag among the repo's git tags as a generated source package, a
+// leading v tolerated when no exact match exists.
+func ResolveSourceTag(ctx context.Context, rawURL, tag string) (Release, error) {
+	if tag == "" {
+		return Release{}, fmt.Errorf("a tag is required")
+	}
 	tags, err := Tags(ctx, rawURL)
 	if err != nil {
 		return Release{}, err
 	}
-	for _, rel := range tags {
-		if rel.Tag == tag {
-			return rel, nil
-		}
-		if alias == nil && TagEqual(rel.Tag, tag) {
-			copy := rel
-			alias = &copy
-		}
+	var alias *Release
+	if rel, exact := matchTag(tags, tag, &alias); exact {
+		return rel, nil
 	}
 	if alias != nil {
 		return *alias, nil
 	}
-	return Release{}, fmt.Errorf("no release or Git tag named %s", tag)
+	return Release{}, fmt.Errorf("no Git tag named %s: %w", tag, ErrNoSuchTag)
+}
+
+// matchTag returns the release tagged exactly tag, recording the first v-toggled match in
+// *alias (if still unset) for the caller to fall back on once every page is read.
+func matchTag(releases []Release, tag string, alias **Release) (Release, bool) {
+	for _, rel := range releases {
+		if rel.Tag == tag {
+			return rel, true
+		}
+		if *alias == nil && TagEqual(rel.Tag, tag) {
+			copy := rel
+			*alias = &copy
+		}
+	}
+	return Release{}, false
 }
 
 // TagEqual tolerates a leading v on either version identifier.

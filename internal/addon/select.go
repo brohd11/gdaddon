@@ -2,23 +2,68 @@ package addon
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"path"
 	"strings"
 
+	"github.com/brohd11/gdaddon/internal/archive"
 	"github.com/brohd11/gdaddon/internal/source"
 )
 
-// ResolveVersion keeps untagged installs on published releases; explicit tags may use a
-// source package when no release exists. LatestTag resolves like no tag, decided here only.
-func ResolveVersion(ctx context.Context, repoURL, tag string) (source.Release, error) {
-	if tag != "" && !IsLatestTag(tag) {
-		return source.ResolveTag(ctx, repoURL, tag)
+// ResolveVersion finds the release d names: a `/release` tag among published releases only,
+// any other tag among git tags (its source package). No tag, or LatestTag, is the newest
+// published non-prerelease either way, decided here only.
+func ResolveVersion(ctx context.Context, d Dependency) (source.Release, error) {
+	if d.Tag != "" && !d.WantsLatest() {
+		if !d.Release {
+			return source.ResolveSourceTag(ctx, d.RepoURL, d.Tag)
+		}
+		rel, err := source.ResolveReleaseTag(ctx, d.RepoURL, d.Tag)
+		if errors.Is(err, source.ErrNoSuchTag) {
+			return rel, fmt.Errorf("%w; drop /release to install the tag's source", err)
+		}
+		return rel, err
 	}
-	listing, err := source.AvailableVersions(ctx, repoURL)
+	listing, err := source.AvailableVersions(ctx, d.RepoURL)
 	if err != nil {
 		return source.Release{}, err
 	}
 	return SelectRelease(listing.Releases, "")
+}
+
+// PickDepAsset picks what d installs from rel without a user: the generated source archive,
+// or for `/release` the single upload (the one matching its glob, when it has one).
+// Several candidates are an *AmbiguousAssetError; a `/release` never falls back to source.
+func PickDepAsset(rel source.Release, d Dependency) (source.Asset, error) {
+	if !d.Release {
+		if asset, ok := source.GeneratedAsset(rel); ok {
+			return asset, nil
+		}
+		return source.Asset{}, fmt.Errorf("%s has no source package", rel.Tag)
+	}
+	uploads := source.Uploads(rel)
+	if d.AssetPattern != "" {
+		var matched []source.Asset
+		for _, a := range uploads {
+			if ok, _ := path.Match(d.AssetPattern, strings.TrimSuffix(a.Name, archive.ArchivedSuffix)); ok {
+				matched = append(matched, a)
+			}
+		}
+		if len(matched) == 0 {
+			return source.Asset{}, fmt.Errorf("no asset of %s matches %q; available:\n  %s",
+				rel.Tag, d.AssetPattern, strings.Join(assetNames(uploads), "\n  "))
+		}
+		uploads = matched
+	}
+	switch len(uploads) {
+	case 1:
+		return uploads[0], nil
+	case 0:
+		return source.Asset{}, fmt.Errorf("%s has no uploaded release asset; drop /release to install the tag's source", rel.Tag)
+	default:
+		return source.Asset{}, &AmbiguousAssetError{Tag: rel.Tag, Assets: assetNames(uploads)}
+	}
 }
 
 // AmbiguousAssetError reports a release with several uploaded assets (AutoAsset picks only

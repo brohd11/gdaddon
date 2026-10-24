@@ -24,6 +24,11 @@ func TestAutoAsset(t *testing.T) {
 			t.Errorf("expected ok=false for 2+ uploaded assets")
 		}
 	})
+	t.Run("Uploads leaves out the generated archive", func(t *testing.T) {
+		if n := len(Uploads(Release{Assets: []Asset{upload, upload2, gen}})); n != 2 {
+			t.Errorf("Uploads = %d, want 2", n)
+		}
+	})
 	t.Run("empty release", func(t *testing.T) {
 		if _, ok := AutoAsset(Release{}); ok {
 			t.Errorf("expected ok=false for a release with no assets")

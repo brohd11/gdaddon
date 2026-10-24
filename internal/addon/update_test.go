@@ -61,20 +61,6 @@ func TestLatestRelease(t *testing.T) {
 	})
 }
 
-func TestUploadedCount(t *testing.T) {
-	rel := source.Release{Assets: []source.Asset{
-		{Name: "addon.zip"},
-		{Name: "other.zip"},
-		{Name: "Source code (zip)", Generated: true},
-	}}
-	if got := uploadedCount(rel); got != 2 {
-		t.Errorf("uploadedCount = %d, want 2 (generated excluded)", got)
-	}
-	if got := uploadedCount(source.Release{Assets: []source.Asset{{Name: "s", Generated: true}}}); got != 0 {
-		t.Errorf("uploadedCount of a source-archive-only release = %d, want 0", got)
-	}
-}
-
 func TestReleaseForURL(t *testing.T) {
 	releases := []source.Release{
 		{Tag: "v2.0.0", Assets: []source.Asset{{Name: "addon.zip", URL: "https://h/dl/v2.0.0/addon.zip"}}},

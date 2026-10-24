@@ -20,24 +20,28 @@ const LatestTag = "latest"
 // the single definition shared by the spec parser and ResolveVersion.
 func IsLatestTag(ref string) bool { return strings.EqualFold(ref, LatestTag) }
 
-// Dependency is one parsed plugin.cfg dependency. A spec is
-// `[<kind>:]owner/repo[@<ref>]` (host optional, github.com by default):
-//   - `owner/repo@v1.0.0` pins that tag;
-//   - `owner/repo@latest` pins the newest non-prerelease when recorded;
-//   - `owner/repo` pins nothing (added version-less);
-//   - `clone:owner/repo@main` requires a live checkout, Tag being a branch (none means
-//     the remote default).
+// Dependency is one parsed plugin.cfg dependency, in PackageExporter's require grammar
+// `[host/]owner/repo[/source|/release][@<ref>[:<glob>]]` (github.com unless the first of
+// three or more segments has a dot):
+//   - `owner/repo@v1.0.0` is that tag's source (`/source` says the same);
+//   - `owner/repo/release@v1.0.0` is its uploaded release asset, `:<glob>` picking one of
+//     several (git forbids `:` in tags);
+//   - `@latest` pins the newest non-prerelease when recorded; no `@ref` pins nothing;
+//   - `owner/repo/clone@main` is a live checkout, Tag being a branch (none means the remote
+//     default). Only a typed install may ask for one (see ParseRepoSpec).
 //
 // RepoURL is the canonical url; RepoID its host/owner/repo form for matching entries.
 // Every field is comparable.
 type Dependency struct {
-	Host    string
-	Owner   string
-	Repo    string
-	Tag     string
-	Kind    Kind
-	RepoURL string
-	RepoID  string
+	Host         string
+	Owner        string
+	Repo         string
+	Tag          string
+	Kind         Kind
+	Release      bool   // `/release`: the tag's uploaded asset rather than its source
+	AssetPattern string // `/release@tag:<glob>`: which upload, when there are several
+	RepoURL      string
+	RepoID       string
 }
 
 // IsClone reports whether the spec asked for a live git checkout rather than a package,
@@ -68,7 +72,8 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 }
 
 // parseDependencyList parses a Godot bracketed, comma-separated, optionally quoted list of
-// specs, skipping malformed items (no owner/repo, unknown kind, clone with @latest).
+// specs, skipping malformed items. A declared `/clone` is skipped too: a build can't read a
+// branch, so PackageExporter skips it and the two tools must agree on what a cfg requires.
 func parseDependencyList(raw string) []Dependency {
 	raw = strings.TrimSpace(raw)
 	raw = strings.TrimPrefix(raw, "[")
@@ -82,79 +87,99 @@ func parseDependencyList(raw string) []Dependency {
 		if item == "" {
 			continue
 		}
-		if d, ok := parseDependency(item); ok {
+		if d, ok := parseDependency(item, false); ok {
 			deps = append(deps, d)
 		}
 	}
 	return deps
 }
 
-// ParseRepoSpec parses a `[<kind>:]owner/repo[@<ref>]` spec into the Dependency a plugin.cfg
-// item yields. The CLI's install argument shares it so typed and declared specs agree;
-// hence keywords rather than shell-hostile sigils.
+// ParseRepoSpec parses a spec typed at the CLI into the Dependency a plugin.cfg item yields,
+// so typed and declared specs agree; it alone also accepts `/clone`, since cloning is a
+// development choice made at install time.
 func ParseRepoSpec(spec string) (Dependency, bool) {
-	return parseDependency(strings.TrimSpace(spec))
+	return parseDependency(strings.TrimSpace(spec), true)
 }
 
-func parseDependency(item string) (Dependency, bool) {
-	item, kind, ok := splitDepKind(item)
-	if !ok {
-		return Dependency{}, false
-	}
-	// An `@ref` suffix is optional: with it the dependency names a release tag (or, for a
-	// clone, a branch); without it the repo is added version-less / on the default branch.
-	repoPart, tag := item, ""
+// Spec markers: the optional third path segment, after owner/repo.
+const (
+	sourceMarker  = "source"
+	releaseMarker = "release"
+	cloneMarker   = "clone"
+)
+
+// legacyClonePrefix is the old `clone:owner/repo` spelling. It is read as plain source, as
+// PackageExporter reads it, so an old cfg means the same thing to both tools.
+const legacyClonePrefix = "clone:"
+
+func parseDependency(item string, allowClone bool) (Dependency, bool) {
+	item = strings.TrimPrefix(item, legacyClonePrefix)
+	// An `@ref` suffix is optional: with it the dependency names a tag (or, for a clone, a
+	// branch); without it the repo is added version-less / on the default branch.
+	repoPart, tag, pattern := item, "", ""
 	if at := strings.LastIndex(item, "@"); at >= 0 {
 		repoPart, tag = item[:at], strings.TrimSpace(item[at+1:])
+		if colon := strings.Index(tag, ":"); colon >= 0 {
+			tag, pattern = strings.TrimSpace(tag[:colon]), strings.TrimSpace(tag[colon+1:])
+			if pattern == "" {
+				return Dependency{}, false
+			}
+		}
 	}
-	// `latest` is a release concept and a clone checks out a branch, so the combination
-	// asks for two different things at once and is rejected rather than guessed at.
-	if kind == KindClone && IsLatestTag(tag) {
-		return Dependency{}, false
-	}
-	host, owner, repo, repoURL, ok := parseRepoShorthand(repoPart)
+	host, owner, repo, marker, ok := parseRepoPath(repoPart)
 	if !ok {
 		return Dependency{}, false
 	}
-	id, err := source.RepoID(repoURL)
+	d := Dependency{Host: host, Owner: owner, Repo: repo, Tag: tag, AssetPattern: pattern}
+	switch marker {
+	case "", sourceMarker:
+	case releaseMarker:
+		d.Release = true
+	case cloneMarker:
+		// `latest` is a release concept and a clone checks out a branch, so the combination
+		// asks for two different things at once and is rejected rather than guessed at.
+		if !allowClone || IsLatestTag(tag) {
+			return Dependency{}, false
+		}
+		d.Kind = KindClone
+	default:
+		return Dependency{}, false
+	}
+	if pattern != "" && (!d.Release || tag == "") {
+		return Dependency{}, false
+	}
+	d.RepoURL = fmt.Sprintf("https://%s/%s/%s", host, owner, repo)
+	id, err := source.RepoID(d.RepoURL)
 	if err != nil {
 		return Dependency{}, false
 	}
-	return Dependency{Host: host, Owner: owner, Repo: repo, Tag: tag, Kind: kind, RepoURL: repoURL, RepoID: id}, true
+	d.RepoID = id
+	return d, true
 }
 
-// splitDepKind strips an optional `clone:` or `package:` prefix. `submodule:` is rejected
-// (gdaddon never installs submodules). Only exact keywords before the first "/" count, so
-// a host with a port (127.0.0.1:8080/owner/repo) still parses as a host.
-func splitDepKind(item string) (rest string, kind Kind, ok bool) {
-	colon := strings.Index(item, ":")
-	slash := strings.Index(item, "/")
-	if colon < 0 || (slash >= 0 && colon > slash) {
-		return item, KindPackage, true
+// parseRepoPath splits `[host/]owner/repo[/marker]`. The first segment is a host only when
+// three or more remain and it has a dot, which keeps `owner/repo/release` apart from
+// `host/owner/repo`; a colon is allowed only there (a port).
+func parseRepoPath(s string) (host, owner, repo, marker string, ok bool) {
+	parts := strings.Split(strings.Trim(strings.TrimSpace(s), "/"), "/")
+	host = defaultDepHost
+	if len(parts) >= 3 && strings.Contains(parts[0], ".") {
+		host, parts = parts[0], parts[1:]
 	}
-	switch item[:colon] {
-	case "clone":
-		return item[colon+1:], KindClone, true
-	case "package":
-		return item[colon+1:], KindPackage, true
-	case string(KindSubmodule):
-		return "", KindPackage, false
+	if len(parts) == 3 {
+		marker, parts = parts[2], parts[:2]
 	}
-	return item, KindPackage, true
-}
-
-// parseRepoShorthand splits owner/repo (github.com assumed) or host/owner/repo and returns
-// the canonical https url; ok is false otherwise.
-func parseRepoShorthand(s string) (host, owner, repo, url string, ok bool) {
-	switch parts := strings.Split(strings.Trim(s, "/"), "/"); len(parts) {
-	case 2:
-		host, owner, repo = defaultDepHost, parts[0], parts[1]
-	case 3:
-		host, owner, repo = parts[0], parts[1], parts[2]
-	default:
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.Contains(parts[0]+parts[1], ":") {
 		return "", "", "", "", false
 	}
-	if owner == "" || repo == "" {
+	return host, parts[0], parts[1], marker, true
+}
+
+// parseRepoShorthand parses owner/repo or host/owner/repo (no marker) and returns the
+// canonical https url; ok is false otherwise.
+func parseRepoShorthand(s string) (host, owner, repo, url string, ok bool) {
+	host, owner, repo, marker, ok := parseRepoPath(s)
+	if !ok || marker != "" {
 		return "", "", "", "", false
 	}
 	return host, owner, repo, fmt.Sprintf("https://%s/%s/%s", host, owner, repo), true
@@ -179,7 +204,7 @@ func MissingDeps(a Addon, projectRoot string, manifest []Addon) ([]Dependency, e
 		if suppressed[d.RepoID] {
 			continue
 		}
-		if i := ix.find(d); i < 0 || !depSatisfied(d, manifest[i].Tag) {
+		if i := ix.find(d); i < 0 || !depSatisfied(d, manifest[i]) {
 			missing = append(missing, d)
 		}
 	}
@@ -267,7 +292,7 @@ func DepStatuses(a Addon, projectRoot string, statuses []Status) ([]DepStatus, e
 			ds.State = DepNotInstalled
 		default:
 			ds.LocalTag = statuses[i].Addon.Tag
-			if depSatisfied(d, statuses[i].Addon.Tag) {
+			if depSatisfied(d, statuses[i].Addon) {
 				ds.State = DepInstalled // satisfied, tagless, or unverifiable tag → trusted
 			} else {
 				ds.State = DepOutdated

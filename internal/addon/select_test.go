@@ -41,17 +41,28 @@ func TestParseRepoSpec(t *testing.T) {
 		},
 		{"surrounding space is tolerated", "  u/r  ", Dependency{Host: "github.com", Owner: "u", Repo: "r", RepoURL: "https://github.com/u/r", RepoID: "github.com/u/r"}, true},
 		{
-			// The half of the grammar that replaced the old --clone flag: a hand-typed
-			// spec and a declared require= item go through this one parser.
-			"clone: with a branch",
-			"clone:brohd11/Godot-Script-Tabs@dev",
+			// Only a typed spec may ask for a checkout; a declared require= cannot.
+			"/clone with a branch",
+			"brohd11/Godot-Script-Tabs/clone@dev",
 			Dependency{Host: "github.com", Owner: "brohd11", Repo: "Godot-Script-Tabs", Tag: "dev", Kind: KindClone, RepoURL: "https://github.com/brohd11/Godot-Script-Tabs", RepoID: "github.com/brohd11/godot-script-tabs"},
 			true,
 		},
 		{
-			"clone: without a branch takes the remote default",
-			"clone:u/r",
+			"/clone without a branch takes the remote default",
+			"u/r/clone",
 			Dependency{Host: "github.com", Owner: "u", Repo: "r", Kind: KindClone, RepoURL: "https://github.com/u/r", RepoID: "github.com/u/r"},
+			true,
+		},
+		{
+			"/release with an asset glob",
+			"u/r/release@v1.0.0:*-linux.zip",
+			Dependency{Host: "github.com", Owner: "u", Repo: "r", Tag: "v1.0.0", Release: true, AssetPattern: "*-linux.zip", RepoURL: "https://github.com/u/r", RepoID: "github.com/u/r"},
+			true,
+		},
+		{
+			"legacy clone: is plain source",
+			"clone:u/r@v1.0.0",
+			Dependency{Host: "github.com", Owner: "u", Repo: "r", Tag: "v1.0.0", RepoURL: "https://github.com/u/r", RepoID: "github.com/u/r"},
 			true,
 		},
 		{
@@ -61,8 +72,10 @@ func TestParseRepoSpec(t *testing.T) {
 			true,
 		},
 		{"submodule: is not installable", "submodule:u/r", Dependency{}, false},
-		{"clone: cannot ask for @latest", "clone:u/r@latest", Dependency{}, false},
+		{"/clone cannot ask for @latest", "u/r/clone@latest", Dependency{}, false},
+		{"/clone takes no glob", "u/r/clone@main:x.zip", Dependency{}, false},
 		{"bare clone: names no repo", "clone:", Dependency{}, false},
+		{"three segments without a dotted host", "a/b/c", Dependency{}, false},
 		{"single segment", "justaname", Dependency{}, false},
 		{"too many segments", "a/b/c/d", Dependency{}, false},
 		{"empty owner", "/repo", Dependency{}, false},

@@ -190,7 +190,7 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 	commit := func() bool { return true }
 
 	switch {
-	case present && st.Present() && depSatisfied(d, st.Addon.Tag):
+	case present && st.Present() && depSatisfied(d, st.Addon):
 		report("  -> %s is already installed. Skipping...", st.Addon.Label())
 		return st.Addon, nil, true, nil
 
@@ -216,10 +216,10 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 			return true
 		}
 
-	case d.Tag != "" && !d.IsClone():
-		// Present but not satisfying: re-pin at the required tag (UpsertEntry). Clones never get
-		// here (any present entry satisfies them), and must not, since this would turn a checkout
-		// into a release asset.
+	case d.Tag != "" && !st.Addon.IsClone():
+		// Recorded but not satisfying, or not on disk: re-pin at the required tag (UpsertEntry).
+		// A clone entry falls through to a plain install instead, since this would turn a
+		// checkout into a package.
 		d, asset, ok := resolveDepAssetTimed(ctx, d)
 		if !ok {
 			report("  -> Skipping %s: no asset for %s", d.RepoID, d.Tag)
@@ -229,7 +229,7 @@ func ensureDep(ctx context.Context, manifestPath string, d Dependency, declaredB
 		// bump from re-fetching files that went missing under an already-fine tag.
 		req.Dep = d
 		req.Action = DepRepin
-		if depSatisfied(d, st.Addon.Tag) {
+		if depSatisfied(d, st.Addon) {
 			req.Action = DepReinstall
 		}
 		req.AssetURL, req.EntryName, req.LocalTag = asset.URL, st.Addon.Name, st.Addon.Tag

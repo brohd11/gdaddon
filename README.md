@@ -74,14 +74,17 @@ If your addon relies on third party content, you can define those in its `plugin
 [plugin]
 name="My Plugin"
 require=[
-    "user/repo@v1.0.0",       # a Git tag, or newer
-    "user/other@latest",      # newest release, pinned when it's recorded
-    "clone:user/live@main",   # a live git checkout of branch main
+    "user/repo@v1.0.0",               # the tag's source, or newer
+    "user/other@latest",              # newest release's tag, pinned when it's recorded
+    "user/ext/release@v2.0.0",        # the tag's uploaded release asset (GDExtension, ...)
+    "user/lsp/release@v1.0.0:*.zip",  # ... picked by glob when it uploads several
 ]
 ```
-A spec is `[clone:]owner/repo[@ref]`, where `@` always names the ref and `clone:` asks for
-a live checkout rather than a release — the same text `gdaddon install` takes. See the
-[docs](doc/docs.md) for the full grammar.
+A spec is `owner/repo[/release][@ref[:glob]]`, the same grammar PackageExporter builds
+against and the same text `gdaddon install` takes: a plain tag is its source, `/release`
+its uploaded asset. A `require` can't ask for a clone — clone what you're working on at
+install time (`gdaddon install owner/repo/clone@main`). See the [docs](doc/docs.md) for
+the full grammar.
 
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 including when it is an empty list. When the addon is installed, its config will be read
@@ -89,9 +92,9 @@ and checked for dependencies. If they are found and the dependency is not presen
 addon will be flagged and you can run the get dependencies command to add them to your
 project.
 
-A Git tag does not need a published release: gdaddon installs its source ZIP when
-there is no matching release. The package browser's **Tags** entry exposes these
-versions for manual installation. Latest installs and updates use published releases.
+A Git tag does not need a published release: a plain spec installs the tag's source ZIP.
+The package browser's **Tags** entry exposes these versions for manual installation.
+Latest installs and updates use published releases.
 
 If you don't have a tagged version, just the repo will be added to your project where you can add the proper version manually.
 
@@ -104,11 +107,12 @@ along with the dependencies that addon declares (and theirs, and so on). Unlike
 "Install All + Deps", nothing else in the manifest is touched.
 
 ```bash
-gdaddon install user/repo-name                     # latest release
-gdaddon install user/repo-name@v1.2.0              # a specific release
+gdaddon install user/repo-name                     # latest release's source
+gdaddon install user/repo-name@v1.2.0              # a specific tag's source
+gdaddon install user/repo-name/release@v1.2.0      # its uploaded release asset
 gdaddon install codeberg.org/someone/their-addon   # a host other than github.com
-gdaddon install clone:user/repo-name               # live git checkout, default branch
-gdaddon install clone:user/repo-name@dev           # live git checkout, branch dev
+gdaddon install user/repo-name/clone               # live git checkout, default branch
+gdaddon install user/repo-name/clone@dev           # live git checkout, branch dev
 ```
 
 The project root is the git toplevel (or `--root`), and a manifest is created if there

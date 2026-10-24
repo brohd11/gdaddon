@@ -51,11 +51,11 @@ func TestResolveEntryTagWithoutRelease(t *testing.T) {
 		t.Fatal("@main silently became a branch")
 	}
 
-	// A branch is only ever reached through the spec's own clone: prefix — the ref half
+	// A branch is only ever reached through the spec's own /clone marker — the ref half
 	// alone never changes what kind of install this is.
-	cloneSpec, ok := addon.ParseRepoSpec("clone:u/r@main")
+	cloneSpec, ok := addon.ParseRepoSpec("u/r/clone@main")
 	if !ok {
-		t.Fatal("clone:u/r@main did not parse")
+		t.Fatal("u/r/clone@main did not parse")
 	}
 	entry, err = resolveEntry(context.Background(), cloneSpec)
 	if err != nil || entry.Kind != addon.KindClone || entry.Tag != "main" || !strings.HasSuffix(entry.URL, ".git") {
