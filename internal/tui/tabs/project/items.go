@@ -125,11 +125,11 @@ func addonItem(r rowData) components.Item {
 	return components.Item{Name: s.Addon.Label() + rowMarker(r), Desc: desc, Pending: r.pending, Pick: pick, Keys: keys}
 }
 
-// depsNeedAttention reports any unsuppressed dependency not installed and satisfying,
-// which drives the "missing deps" marker.
+// depsNeedAttention reports whether any dependency needs attention, which drives the
+// "missing deps" marker.
 func depsNeedAttention(statuses []addon.DepStatus) bool {
 	for _, ds := range statuses {
-		if !ds.Suppressed && ds.State != addon.DepInstalled {
+		if ds.NeedsAttention() {
 			return true
 		}
 	}

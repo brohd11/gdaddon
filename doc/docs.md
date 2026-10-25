@@ -40,8 +40,12 @@ gdaddon list --json --updates   # also resolve each addon's update state (networ
 package's pinned HEAD sha; `""` otherwise), `live_branch` (a git checkout's current
 branch; `""` for non-git entries), `url`, `lock` (bool; the entry is version-pinned, so
 no update alerts), `update` (`unknown`/`current`/`available`), `latest_tag`, and
-`missing_deps` (an array of `{repo_id, tag, url}`, empty when satisfied). It's always
-valid JSON — an empty manifest prints `[]`.
+`missing_deps`. That last one is an array of `{repo_id, tag, url, state, local_tag}`,
+one per unsuppressed dependency that needs attention, the same ones the TUI's missing-deps
+marker flags. `state` is `missing` (no manifest entry), `not_installed` (on the manifest
+but not on disk) or `outdated` (the entry's tag is older than required). `local_tag` is
+the matched entry's tag, `""` when there is none. The array is empty when every dependency
+is satisfied. It's always valid JSON — an empty manifest prints `[]`.
 
 Everything in `--json` is computed locally and instantly **except** `update`/
 `latest_tag`, which require a network round-trip per addon and so stay `"unknown"`

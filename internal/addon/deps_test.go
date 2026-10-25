@@ -418,3 +418,26 @@ func TestAddDepEntryClone(t *testing.T) {
 		t.Errorf("recorded default-branch clone = %+v, want kind clone with no tag", other)
 	}
 }
+
+func TestDepStatusNeedsAttention(t *testing.T) {
+	cases := []struct {
+		ds    DepStatus
+		want  bool
+		label string
+	}{
+		{DepStatus{State: DepInstalled}, false, "installed"},
+		{DepStatus{State: DepMissing}, true, "missing"},
+		{DepStatus{State: DepNotInstalled}, true, "not_installed"},
+		{DepStatus{State: DepOutdated}, true, "outdated"},
+		{DepStatus{State: DepMissing, Suppressed: true}, false, "missing"},
+		{DepStatus{State: DepOutdated, Suppressed: true}, false, "outdated"},
+	}
+	for _, c := range cases {
+		if got := c.ds.NeedsAttention(); got != c.want {
+			t.Errorf("%+v.NeedsAttention() = %v, want %v", c.ds, got, c.want)
+		}
+		if got := c.ds.State.String(); got != c.label {
+			t.Errorf("%d.String() = %q, want %q", c.ds.State, got, c.label)
+		}
+	}
+}

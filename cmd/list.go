@@ -119,11 +119,37 @@ type listEntryJSON struct {
 	MissingDeps []missDepJSON `json:"missing_deps"`
 }
 
-// missDepJSON is one unsatisfied dependency declared by an installed addon.
+// missDepJSON is one dependency declared by an installed addon that needs attention, by
+// the same rule as the TUI's "missing deps" marker.
 type missDepJSON struct {
-	RepoID string `json:"repo_id"`
-	Tag    string `json:"tag"`
-	URL    string `json:"url"`
+	RepoID   string `json:"repo_id"`
+	Tag      string `json:"tag"` // the required tag; "" for any version
+	URL      string `json:"url"`
+	State    string `json:"state"`     // missing/not_installed/outdated
+	LocalTag string `json:"local_tag"` // the matched manifest entry's tag; "" when there is none
+}
+
+// missingDepsJSON lists s's declared dependencies that need attention, in declaration
+// order ("[]" when none), matched against every inspected status so it reflects the disk.
+func missingDepsJSON(s addon.Status, projectRoot string, statuses []addon.Status) []missDepJSON {
+	deps := make([]missDepJSON, 0)
+	checks, err := addon.DepStatuses(s.Addon, projectRoot, statuses)
+	if err != nil {
+		return deps
+	}
+	for _, ds := range checks {
+		if !ds.NeedsAttention() {
+			continue
+		}
+		deps = append(deps, missDepJSON{
+			RepoID:   ds.Dep.RepoID,
+			Tag:      ds.Dep.Tag,
+			URL:      ds.Dep.RepoURL,
+			State:    ds.State.String(),
+			LocalTag: ds.LocalTag,
+		})
+	}
+	return deps
 }
 
 // kindLabel renders an addon.Kind as a readable label (the empty package kind
@@ -160,11 +186,6 @@ func updateStateFor(s addon.Status, checks map[string]addon.UpdateInfo, withUpda
 // printListJSON prints the statuses as a JSON array ("[]" when empty), checking updates
 // over the network only with --updates.
 func printListJSON(statuses []addon.Status, projectRoot string, withUpdates bool) error {
-	manifestAddons := make([]addon.Addon, 0, len(statuses))
-	for _, s := range statuses {
-		manifestAddons = append(manifestAddons, s.Addon)
-	}
-
 	checks := resolveUpdateStates(statuses, withUpdates)
 
 	// Orphan state is local (which is_dependency entries nothing installed still needs),
@@ -173,13 +194,6 @@ func printListJSON(statuses []addon.Status, projectRoot string, withUpdates bool
 
 	entries := make([]listEntryJSON, 0, len(statuses))
 	for _, s := range statuses {
-		deps := make([]missDepJSON, 0)
-		if missing, err := addon.MissingDeps(s.Addon, projectRoot, manifestAddons); err == nil {
-			for _, d := range missing {
-				deps = append(deps, missDepJSON{RepoID: d.RepoID, Tag: d.Tag, URL: d.RepoURL})
-			}
-		}
-
 		update, latestTag := updateStateFor(s, checks, withUpdates)
 
 		// Divergence only means anything for a checkout that's actually on disk; everything
@@ -209,7 +223,7 @@ func printListJSON(statuses []addon.Status, projectRoot string, withUpdates bool
 			LatestTag:     latestTag,
 			Ahead:         sync.Ahead,
 			Behind:        sync.Behind,
-			MissingDeps:   deps,
+			MissingDeps:   missingDepsJSON(s, projectRoot, statuses),
 		})
 	}
 

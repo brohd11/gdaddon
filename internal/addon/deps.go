@@ -259,6 +259,20 @@ const (
 	DepOutdated                     // installed but the entry's tag is verifiably older than required
 )
 
+// String renders the state as a stable snake_case label (published by `list --json`).
+func (s DepState) String() string {
+	switch s {
+	case DepInstalled:
+		return "installed"
+	case DepNotInstalled:
+		return "not_installed"
+	case DepOutdated:
+		return "outdated"
+	default:
+		return "missing"
+	}
+}
+
 // DepStatus is one declared dependency paired with its resolved install state and
 // whether the user has suppressed it — the row model for the Dependencies screen.
 type DepStatus struct {
@@ -266,6 +280,12 @@ type DepStatus struct {
 	State      DepState
 	Suppressed bool
 	LocalTag   string // the matched manifest entry's tag, for display ("" when none)
+}
+
+// NeedsAttention reports an unsuppressed dependency that is not installed and satisfying:
+// the one rule behind the TUI's "missing deps" marker and `list --json`'s missing_deps.
+func (ds DepStatus) NeedsAttention() bool {
+	return !ds.Suppressed && ds.State != DepInstalled
 }
 
 // DepStatuses returns the install state of each dependency a declares, matched (via
