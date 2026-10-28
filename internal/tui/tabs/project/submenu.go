@@ -1,10 +1,14 @@
 package project
 
 import (
+	"errors"
+	"os"
+
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/source"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	"github.com/brohd11/gdaddon/internal/tui/flows/editmanifest"
+	"github.com/brohd11/gdaddon/internal/tui/flows/editversion"
 	"github.com/brohd11/gdaddon/internal/tui/flows/packages"
 	"github.com/brohd11/gdaddon/internal/tui/sysopen"
 
@@ -98,6 +102,23 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 			Desc: "browse the repo's versions and save a local copy",
 			Pick: func(sh *core.Shared) core.Action { return core.Push(newArchiveSubmenu(st, sh)) },
 		})
+	}
+	if st.Present() {
+		// Include configs without a version; real read errors remain actionable
+		// when opening the form instead of silently hiding the editor.
+		if _, err := addon.ReadConfigVersion(st.FullPath); !errors.Is(err, os.ErrNotExist) {
+			items = append(items, components.Item{
+				Name: "✎ Edit Version/Tag",
+				Desc: "edit only the version in this addon's config",
+				Pick: func(sh *core.Shared) core.Action {
+					form, err := editversion.New(st.FullPath, a.Label())
+					if err != nil {
+						return core.StatusErr(err)
+					}
+					return core.Push(form)
+				},
+			})
+		}
 	}
 	items = append(items, components.Item{
 		Name: "✎ Edit Manifest",
