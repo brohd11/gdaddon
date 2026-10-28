@@ -27,6 +27,7 @@ func TestSetConfigVersionPreservesFile(t *testing.T) {
 			{"empty file", "", "", "1.0.0", "[plugin]\nversion=\"1.0.0\"\n"},
 			{"BOM", "\uFEFF[plugin]\nversion=\"1.0.0\"\n", "1.0.0", "1.0.1", "\uFEFF[plugin]\nversion=\"1.0.1\"\n"},
 			{"same value", "[plugin]\nversion = \"1.0.0\" ; keep", "1.0.0", "1.0.0", "[plugin]\nversion = \"1.0.0\" ; keep"},
+			{"multiline dependencies", "[plugin]\r\nrequire=[\r\n\"u/r@v1.0.0\", ; keep\r\n]\r\nversion=\"1.0.0\"\r\n", "1.0.0", "1.0.1", "[plugin]\r\nrequire=[\r\n\"u/r@v1.0.0\", ; keep\r\n]\r\nversion=\"1.0.1\"\r\n"},
 		} {
 			t.Run(name+"/"+tc.name, func(t *testing.T) {
 				dir := t.TempDir()

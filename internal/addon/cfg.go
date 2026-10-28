@@ -90,7 +90,7 @@ func readPluginCfgKey(dir, key string) string {
 	if cfgPath == "" {
 		return ""
 	}
-	cfg, err := ini.Load(cfgPath)
+	cfg, err := loadConfig(cfgPath)
 	if err != nil {
 		return ""
 	}

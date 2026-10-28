@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/source"
-
-	"gopkg.in/ini.v1"
 )
 
 // defaultDepHost is assumed when a dependency item names only owner/repo.
@@ -58,7 +56,7 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 	if cfgPath == "" {
 		return nil, nil
 	}
-	cfg, err := ini.Load(cfgPath)
+	cfg, err := loadConfig(cfgPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %w", cfgPath, err)
 	}

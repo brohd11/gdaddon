@@ -168,7 +168,9 @@ func (c *Ctx) loadProject() {
 func (c *Ctx) refreshDepChecks(statuses []addon.Status) {
 	checks := make(map[string][]addon.DepStatus)
 	for _, a := range c.ProjectAddons {
-		if ds, err := addon.DepStatuses(a, c.ProjectRoot, statuses); err == nil && len(ds) > 0 {
+		ds, err := addon.DepStatuses(a, c.ProjectRoot, statuses)
+		c.noteLoadErr(a.Label()+" dependencies", err)
+		if err == nil && len(ds) > 0 {
 			checks[a.Name] = ds
 		}
 	}

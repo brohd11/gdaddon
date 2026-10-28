@@ -35,7 +35,7 @@ func ReadConfigVersion(dir string) (ConfigVersion, error) {
 // configVersion also identifies where a missing version belongs: [addon] if present,
 // otherwise [plugin]. Loading with the inspection parser keeps read semantics aligned.
 func configVersion(data []byte) (*ini.File, string, string, error) {
-	cfg, err := ini.Load(data)
+	cfg, err := parseConfig(data)
 	if err != nil {
 		return nil, "", "", err
 	}
