@@ -163,12 +163,55 @@ func TestHeaderClickOpensRootGit(t *testing.T) {
 	}
 
 	tm := sized(routerAt(root))
-	tm = pump(tm, tea.MouseClickMsg{X: 5, Y: 0, Button: tea.MouseLeft})
+	projectRoot := tm.(core.Router).Top()
+	click := tea.MouseClickMsg{X: 5, Y: 0, Button: tea.MouseLeft}
+	tm = pump(tm, click)
 	if _, ok := tm.(core.Router).Top().(*components.PickerScreen); !ok {
 		t.Fatalf("a header click should open the project repo's Git page (PickerScreen), got %T", tm.(core.Router).Top())
 	}
 	if out := view(tm); !strings.Contains(out, "Git") ||
 		!strings.Contains(out, "Status") || !strings.Contains(out, "Diff") {
 		t.Errorf("a header click should open the root's Git menu with git commands:\n%s", out)
+	}
+	menu := tm.(core.Router).Top()
+	for range 3 {
+		tm = pump(tm, click)
+	}
+	if tm.(core.Router).Top() != menu {
+		t.Fatal("repeated header clicks should keep the existing Git menu")
+	}
+	tm = pump(tm, keyMsg("esc"))
+	if tm.(core.Router).Top() != projectRoot {
+		t.Fatal("one Escape after repeated clicks should return to the Project root")
+	}
+
+	// Reopen and enter Diff, then confirm the header leaves the child screen alone.
+	tm = pump(tm, click)
+	menu = tm.(core.Router).Top()
+	tm = pump(tm, keyMsg("down"))
+	tm = pump(tm, keyMsg("down"))
+	tm = pump(tm, keyMsg("enter"))
+	child := tm.(core.Router).Top()
+	if child == menu {
+		t.Fatal("setup: Diff should open a child screen")
+	}
+	tm = pump(tm, click)
+	if tm.(core.Router).Top() != child {
+		t.Fatal("a header click should leave a deeper Git screen unchanged")
+	}
+	tm = pump(tm, keyMsg("esc"))
+	tm = pump(tm, keyMsg("esc"))
+	if tm.(core.Router).Top() != projectRoot {
+		t.Fatal("two Escapes should return from Diff to the Project root")
+	}
+
+	tm = pump(tm, keyMsg("enter")) // the selected addon's submenu
+	submenu := tm.(core.Router).Top()
+	if submenu == projectRoot {
+		t.Fatal("setup: Enter should open the addon's submenu")
+	}
+	tm = pump(tm, click)
+	if tm.(core.Router).Top() != submenu {
+		t.Fatal("a header click should leave an unrelated submenu unchanged")
 	}
 }
