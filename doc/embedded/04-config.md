@@ -8,6 +8,7 @@ gdaddon keeps everything of its own under `~/.gdaddon`, created on first run.
 ~/.gdaddon/
   config/config.yml    archive dir, theme, last search source
   config/sources.yml   search sources and per-host VCS rules
+  hooks/config.yml     optional Git action commands (see Git action hooks)
   archive/             downloaded package zips
   plugins.yml          your global addon list
   bin/                 the gdaddon binary, when install.sh put it here

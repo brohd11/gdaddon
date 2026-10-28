@@ -6,6 +6,9 @@ import (
 	"github.com/brohd11/gitstack/repoui"
 )
 
+// GitHookApp selects gdaddon's user commands for the shared Git screens.
+func (*Ctx) GitHookApp() string { return "gdaddon" }
+
 // refreshGitChecks recomputes each present checkout's dirty state and divergence (local
 // reads, no network).
 func (c *Ctx) refreshGitChecks(statuses []addon.Status) {

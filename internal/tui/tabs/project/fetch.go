@@ -29,5 +29,5 @@ func fetchAllCmd(sh *core.Shared) tea.Cmd {
 			repos = append(repos, *root)
 		}
 		return repos
-	})
+	}, c.GitHookApp())
 }

@@ -135,11 +135,32 @@ func TestBootstrapRunsForSubcommands(t *testing.T) {
 		}
 	}
 
-	if err := bootstrap(listCmd, nil); err != nil {
+	previousFirstRun := firstRun
+	t.Cleanup(func() { firstRun = previousFirstRun })
+	if err := rootCmd.PersistentPreRunE(listCmd, nil); err != nil {
 		t.Fatalf("bootstrap: %v", err)
+	}
+	if !firstRun {
+		t.Fatal("bootstrap must sample first-run state before creating configs")
 	}
 	if _, err := os.Stat(filepath.Join(home, ".gdaddon", "config")); err != nil {
 		t.Errorf("bootstrap should have created ~/.gdaddon/config: %v", err)
+	}
+	hooksPath := filepath.Join(home, ".gdaddon", "hooks", "config.yml")
+	if _, err := os.Stat(hooksPath); err != nil {
+		t.Fatalf("bootstrap should have created hook config: %v", err)
+	}
+	if err := os.Remove(hooksPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := rootCmd.PersistentPreRunE(listCmd, nil); err != nil {
+		t.Fatal(err)
+	}
+	if firstRun {
+		t.Fatal("recreating hook config must not trigger first-run onboarding")
+	}
+	if _, err := os.Stat(hooksPath); err != nil {
+		t.Fatalf("bootstrap should recreate deleted hook config: %v", err)
 	}
 }
 

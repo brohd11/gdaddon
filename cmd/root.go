@@ -7,6 +7,7 @@ import (
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/config"
 	"github.com/brohd11/gdaddon/internal/tui"
+	"github.com/brohd11/gitstack/repo"
 
 	"github.com/spf13/cobra"
 )
@@ -52,6 +53,11 @@ func bootstrap(cmd *cobra.Command, args []string) error {
 		for _, path := range created {
 			fmt.Fprintf(os.Stderr, "wrote default config to %s\n", path)
 		}
+	}
+	if created, path, err := repo.EnsureHooks("gdaddon"); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "could not prepare hook config: %v\n", err)
+	} else if created {
+		fmt.Fprintf(cmd.ErrOrStderr(), "wrote default config to %s\n", path)
 	}
 	// Ship a .gitignore so the OS binary (~/.gdaddon/bin) isn't committed if the
 	// user version-controls ~/.gdaddon. Non-fatal; existing files are left alone.
