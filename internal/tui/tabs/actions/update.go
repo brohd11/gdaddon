@@ -22,9 +22,10 @@ const updateResolveTimeout = 60 * time.Second
 // updatePlansMsg carries the update plans, ambiguous skips, and any error (which must not
 // read as "up to date").
 type updatePlansMsg struct {
-	plans   []addon.UpdatePlan
-	skipped []addon.SkippedUpdate
-	err     error
+	plans    []addon.UpdatePlan
+	skipped  []addon.SkippedUpdate
+	err      error
+	stampErr error
 }
 
 // newUpdateAllLoading fetches release listings off the UI thread, logs ambiguous skips,
@@ -36,6 +37,9 @@ func newUpdateAllLoading(sh *core.Shared) *components.LoadingScreen {
 		m, ok := msg.(updatePlansMsg)
 		if !ok {
 			return core.Action{}
+		}
+		if m.stampErr != nil {
+			sh.Log(m.stampErr.Error())
 		}
 		if m.err != nil {
 			return core.Seq(core.SetStatusAndLog("update check failed: "+m.err.Error()), core.Pop())
@@ -65,8 +69,9 @@ func resolveUpdatePlansCmd(manifestPath, projectRoot string) func(context.Contex
 		return func() tea.Msg {
 			ctx, cancel := context.WithTimeout(parent, updateResolveTimeout)
 			defer cancel()
+			_, stampErr := addon.BeginUpdateCheck(projectRoot, time.Now(), true)
 			plans, skipped, err := addon.ResolveUpdatePlans(ctx, manifestPath, projectRoot)
-			return updatePlansMsg{plans: plans, skipped: skipped, err: err}
+			return updatePlansMsg{plans: plans, skipped: skipped, err: err, stampErr: stampErr}
 		}
 	}
 }

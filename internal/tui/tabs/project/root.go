@@ -101,12 +101,16 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	}
 	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
-		// Re-run the update check against the refreshed manifest; the markers
-		// fill back in when its results broadcast.
+		// Local state always refreshes; release checks share the editor's daily limit.
 		return core.Seq(s.reload(sh), core.Async(checkUpdatesCmd(sh)))
 	case updateChecksReady:
-		c.SetUpdateChecks(p.checks)
-		s.screen.SetItems(projectListItems(sh, s.sort))
+		if p.checks != nil {
+			c.SetUpdateChecks(p.checks)
+			s.screen.SetItems(projectListItems(sh, s.sort))
+		}
+		if p.stampErr != nil {
+			return core.SetStatusAndLog(p.stampErr.Error())
+		}
 	case appctx.GitRefresh:
 		// A batch git operation finished: recompute the local git state (no network update check).
 		return s.reload(sh)

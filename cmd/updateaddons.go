@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/brohd11/gdaddon/internal/addon"
 
@@ -39,6 +40,9 @@ func runUpdateAddons(cmd *cobra.Command, args []string) error {
 	manifest, err := discoverManifest(projectRoot)
 	if err != nil {
 		return err
+	}
+	if _, err := addon.BeginUpdateCheck(projectRoot, time.Now(), true); err != nil {
+		fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}
 	plans, skipped, err := addon.ResolveUpdatePlans(context.Background(), manifest, projectRoot)
 	if err != nil {

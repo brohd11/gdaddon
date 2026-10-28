@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/brohd11/gdaddon/internal/addon"
 
@@ -17,13 +19,14 @@ var (
 
 var listCmd = &cobra.Command{
 	Use:   "list [project_root]",
-	Short: "Print the manifest's install status without changing anything",
+	Short: "Print the manifest's install status",
 	Long: `List inspects the project's addon manifest and reports each entry's state
 (missing / installed / mismatch / unversioned / branch_changed / invalid) with its
 local and pinned versions.
 
 Everything it reads is local and instant, so it never touches the network — unless
---updates is passed, which additionally checks each addon for a newer release.
+--updates is passed, which additionally checks each addon for a newer release
+and records the attempt in the project's shared daily check timestamp.
 
   --json      emit a JSON array for tools to parse instead of the table
   --updates   also resolve each addon's update state (network)
@@ -51,6 +54,11 @@ func runListCmd(cmd *cobra.Command, args []string) error {
 
 // runList inspects the manifest and prints each addon's state and version.
 func runList(projectRoot string, asJSON, withUpdates bool) error {
+	if withUpdates {
+		if _, err := addon.BeginUpdateCheck(projectRoot, time.Now(), true); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+		}
+	}
 	_, statuses, err := inspectManifest(projectRoot)
 	if err != nil {
 		return err

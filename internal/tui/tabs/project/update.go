@@ -15,7 +15,8 @@ import (
 // updateChecksReady carries update-check results to the Project root as a broadcast, so the
 // markers appear even from another tab.
 type updateChecksReady struct {
-	checks map[string]addon.UpdateInfo
+	checks   map[string]addon.UpdateInfo
+	stampErr error
 }
 
 // updateCheckTimeout caps the whole batch of release-listing fetches so a slow or
@@ -30,11 +31,18 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 	manifestPath, projectRoot := c.ManifestPath, c.ProjectRoot
 	gen := c.UpdateGen.Add(1)
 	return func() tea.Msg {
-		if c.UpdateGen.Load() != gen {
+		if c.UpdateGen.Load() != gen || manifestPath == "" {
+			return nil
+		}
+		begin, stampErr := addon.BeginUpdateCheck(projectRoot, time.Now(), false)
+		if !begin {
 			return nil
 		}
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
+			if stampErr != nil {
+				return core.PropagateAll(updateChecksReady{stampErr: stampErr})
+			}
 			return nil
 		}
 
@@ -42,6 +50,6 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 		defer cancel()
 
 		checks := addon.CheckUpdates(ctx, statuses)
-		return core.PropagateAll(updateChecksReady{checks: checks})
+		return core.PropagateAll(updateChecksReady{checks: checks, stampErr: stampErr})
 	}
 }

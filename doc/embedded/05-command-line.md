@@ -104,6 +104,18 @@ reads is local and instant.
   that touches the network, and it works with or without `--json` — the plain table
   grows an `update=` column.
 
+Automatic TUI update checks share a rolling 24-hour limit with the Godot editor
+plugin, recorded in `.godot/addons/gdaddon/last_check` as decimal Unix seconds.
+The stamp is written before checking, so failed attempts also count. TUI refreshes
+still inspect local state, and skipped checks keep any update results already held
+in the session. The stamp stores no results, so a fresh session that skips checking
+has unknown update status.
+
+`list --updates`, `update-addons`, and TUI Update All always check immediately and
+renew that stamp. Individual addon actions do not renew the project-wide stamp.
+Plain `list` does not read or write it. Timestamp write failures are reported without
+blocking the check; CLI diagnostics go to stderr, keeping JSON output clean.
+
 ## update-addons
 
 Resolves an update plan for every installed addon with a newer release and installs
