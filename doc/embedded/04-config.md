@@ -79,3 +79,14 @@ the `~/.gdaddon/bin` copy the Godot EditorPlugin launches:
 ```
 BIN_DIR="$HOME/.gdaddon/bin" curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh
 ```
+
+### GitHub search filters
+
+GitHub search offers optional Owner (user or organization login), License (a key such
+as `mit` or `apache-2.0`), and Include forks controls. An owner is enough to search
+without query text. Include forks starts off and includes originals alongside forks
+when enabled. Submitted filters are remembered for this session only.
+
+Search rules can declare `query_syntax: github` to enable these controls. Existing
+rules using `https://api.github.com/search/repositories` are recognized automatically;
+no source-file regeneration is needed. Other sources do not receive these filters.

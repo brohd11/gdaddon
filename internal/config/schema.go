@@ -63,6 +63,7 @@ type ArchiveSpec struct {
 // SearchRule fetches and parses a results page. URL is a template ({query}, {page},
 // {godot_version}); extraction uses dotted JSON paths.
 type SearchRule struct {
+	QuerySyntax string     `yaml:"query_syntax,omitempty"`
 	URL         string     `yaml:"url"`
 	PageBase    int        `yaml:"page_base,omitempty"`     // value of {page} for the first page (0 or 1)
 	OmitIfEmpty []string   `yaml:"omit_if_empty,omitempty"` // drop these query params when their value is empty

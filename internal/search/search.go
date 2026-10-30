@@ -41,7 +41,7 @@ type Detail struct {
 // Asset Library returns only a small legacy set without it. Sources may ignore it.
 type Source interface {
 	Name() string // display label for the source selector
-	Search(ctx context.Context, query, godotVersion string, page int) (*Page, error)
+	Search(ctx context.Context, request Request) (*Page, error)
 	Detail(ctx context.Context, id string) (*Detail, error) // resolves the repo URL for prefill
 }
 
@@ -62,4 +62,17 @@ func Sources() []Source {
 		}
 	}
 	return append(srcs, assetStore{})
+}
+
+// Request carries filters through search and pagination.
+type Request struct {
+	Query, GodotVersion, Owner, License string
+	Page                                int
+	IncludeForks                        bool
+}
+
+// Capabilities identifies filters supported by a source.
+type Capabilities interface {
+	GitHubSearch() bool
+	GodotFilter() bool
 }

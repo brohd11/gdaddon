@@ -25,7 +25,7 @@ func searchItems() []list.Item {
 			Desc: "search a Godot asset source for an addon to add",
 			Pick: func(sh *core.Shared) core.Action {
 				c := appctx.Of(sh)
-				return core.Push(newQueryScreen(defaultSource(), detectGodotVersion(c.ProjectRoot), c.LastSearchQuery))
+				return core.Push(queryForm(defaultSource(), searchpkg.Request{Query: c.LastSearchQuery, GodotVersion: detectGodotVersion(c.ProjectRoot), Owner: c.LastSearchOwner, License: c.LastSearchLicense, IncludeForks: c.LastSearchForks}, "query"))
 			},
 		},
 	}

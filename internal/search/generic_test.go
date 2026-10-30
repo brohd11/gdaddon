@@ -51,7 +51,7 @@ func TestConfigSourceSearchAndDetail(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 
-	page, err := src.Search(context.Background(), "dialogue", "", 1)
+	page, err := src.Search(context.Background(), Request{Query: "dialogue", Page: 1})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -88,5 +88,26 @@ func TestConfigSourceValidate(t *testing.T) {
 		if err := (configSource{cfg: c}).validate(); err == nil {
 			t.Errorf("case %d: expected validation error, got nil", i)
 		}
+	}
+}
+
+func TestGitHubFilters(t *testing.T) {
+	for _, forks := range []bool{false, true} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			want := "dialogue user:godotengine license:mit"
+			if forks {
+				want += " fork:true"
+			}
+			if got := r.URL.Query().Get("q"); got != want {
+				t.Errorf("query = %q, want %q", got, want)
+			}
+			w.Write([]byte(`{"items":[]}`))
+		}))
+		src := configSource{cfg: config.SourceConfig{Search: &config.SearchRule{URL: srv.URL + "?q={query}", ResultsPath: "items", QuerySyntax: "github"}}}
+		_, err := src.Search(context.Background(), Request{Query: "dialogue", Owner: " godotengine ", License: " mit ", IncludeForks: forks})
+		if err != nil {
+			t.Fatal(err)
+		}
+		srv.Close()
 	}
 }

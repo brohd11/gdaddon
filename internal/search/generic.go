@@ -3,6 +3,8 @@ package search
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strings"
 
 	"github.com/brohd11/gdaddon/internal/config"
 	"github.com/brohd11/gdaddon/internal/restrule"
@@ -33,8 +35,21 @@ func (s configSource) validate() error {
 	return nil
 }
 
-func (s configSource) Search(ctx context.Context, query, godotVersion string, page int) (*Page, error) {
+func (s configSource) Search(ctx context.Context, request Request) (*Page, error) {
 	r := s.cfg.Search
+	query, godotVersion, page := request.Query, request.GodotVersion, request.Page
+	if s.GitHubSearch() {
+		if v := strings.TrimSpace(request.Owner); v != "" {
+			query += " user:" + v
+		}
+		if v := strings.TrimSpace(request.License); v != "" {
+			query += " license:" + v
+		}
+		if request.IncludeForks {
+			query += " fork:true"
+		}
+		query = strings.TrimSpace(query)
+	}
 	endpoint := renderSearchURL(r.URL, query, godotVersion, page, r.PageBase, r.OmitIfEmpty)
 
 	var root any
@@ -96,4 +111,12 @@ func (s configSource) Detail(ctx context.Context, id string) (*Detail, error) {
 		DownloadURL: restrule.GetPathString(root, r.DownloadURLPath),
 		Description: restrule.GetPathString(root, r.DescriptionPath),
 	}, nil
+}
+
+func (s configSource) GitHubSearch() bool {
+	u, err := url.Parse(s.cfg.Search.URL)
+	return s.cfg.Search.QuerySyntax == "github" || (err == nil && u.Hostname() == "api.github.com" && u.Path == "/search/repositories")
+}
+func (s configSource) GodotFilter() bool {
+	return strings.Contains(s.cfg.Search.URL, "{godot_version}")
 }

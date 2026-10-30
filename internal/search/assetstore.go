@@ -32,7 +32,8 @@ func (assetStore) AssetURL(id string) string { return store.AssetURL(id) }
 
 // Search queries /api/v1/search/query/ (type=0: addons). Pages are 1-based and omitted on
 // the first, so page+1 is sent only past it. godotVersion filters compatibility.
-func (assetStore) Search(ctx context.Context, query, godotVersion string, page int) (*Page, error) {
+func (assetStore) Search(ctx context.Context, request Request) (*Page, error) {
+	query, godotVersion, page := request.Query, request.GodotVersion, request.Page
 	endpoint := assetStoreBase + "/api/v1/search/query/?query=" + url.QueryEscape(query) + "&type=0"
 	if page > 0 {
 		endpoint += "&page=" + strconv.Itoa(page+1)
@@ -123,3 +124,6 @@ func (assetStore) Detail(ctx context.Context, id string) (*Detail, error) {
 
 	return d, nil
 }
+
+func (assetStore) GitHubSearch() bool { return false }
+func (assetStore) GodotFilter() bool  { return true }

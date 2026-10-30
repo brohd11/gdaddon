@@ -33,7 +33,10 @@ type Ctx struct {
 	projectLoaded   bool
 
 	// LastSearchQuery keeps the search form filled across navigation (session only).
-	LastSearchQuery string
+	LastSearchQuery   string
+	LastSearchOwner   string
+	LastSearchLicense string
+	LastSearchForks   bool
 
 	// Compact is the session list density shared through ListDensity (true is one row per
 	// item), saved by bubblestack.Run.

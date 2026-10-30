@@ -16,6 +16,7 @@ func DefaultSources() []SourceConfig {
 			Name: "GitHub",
 			Type: "json",
 			Search: &SearchRule{
+				QuerySyntax: "github",
 				URL:         "https://api.github.com/search/repositories?q={query}&per_page=20&page={page}",
 				PageBase:    1,
 				ResultsPath: "items",

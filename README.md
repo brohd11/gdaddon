@@ -1,5 +1,10 @@
 ## gdaddon - TUI addon manager for Godot
 
+Package and repo manager made for Godot.
+
+Designed to work with standard addon project structure, but also supports submodules structure.
+
+
 ![gdaddon interface](doc/gdaddon.jpg)
 
 ### Features

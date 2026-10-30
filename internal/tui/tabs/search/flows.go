@@ -38,38 +38,62 @@ type detailMsg struct {
 // and a note with the Godot version filter. The form variable is declared first because
 // the Source row's handler anchors the menu to it.
 func newQueryScreen(src searchpkg.Source, godotVer, lastQuery string) *components.FormScreen {
+	return queryForm(src, searchpkg.Request{Query: lastQuery, GodotVersion: godotVer}, "query")
+}
+
+func queryForm(src searchpkg.Source, draft searchpkg.Request, focus string) *components.FormScreen {
 	cur := src
 	var form *components.FormScreen
+	var captureDraft func() searchpkg.Request
 	source := components.NewPickField("source", "Source:  ",
 		func() string { return cur.Name() },
-		func(sh *core.Shared) (core.Action, bool) { return core.Push(sourceMenu(sh, form, &cur)), true })
+		func(sh *core.Shared) (core.Action, bool) {
+			return core.Push(sourceMenu(sh, form, &cur, captureDraft)), true
+		})
 	query := components.NewTextField("query", "Query:   ", "search terms (e.g. dialogue)")
-	query.SetValue(lastQuery)
+	query.SetValue(draft.Query)
+	owner := components.NewTextField("owner", "Owner:   ", "GitHub user or organization")
+	owner.SetValue(draft.Owner)
+	license := components.NewTextField("license", "License: ", "e.g. mit or apache-2.0")
+	license.SetValue(draft.License)
+	forks := components.NewCheckField("forks", "Include forks", draft.IncludeForks)
+	capture := func() searchpkg.Request {
+		draft.Query = strings.TrimSpace(query.Value())
+		draft.Owner = strings.TrimSpace(owner.Value())
+		draft.License = strings.TrimSpace(license.Value())
+		draft.IncludeForks = forks.Checked()
+		return draft
+	}
+	fields := []components.FormField{components.NewHeading("Search assets"), components.NewSpacer(), source, query}
+	caps, _ := src.(searchpkg.Capabilities)
+	if caps != nil && caps.GitHubSearch() {
+		fields = append(fields, owner, license, forks)
+	}
+	if caps != nil && caps.GodotFilter() {
+		fields = append(fields, components.NewSpacer(), components.NewNote("  filtering by Godot "+draft.GodotVersion))
+	}
+	captureDraft = capture
 
 	form = components.NewForm(components.FormOpts{
-		Crumb: "Search",
-		Fields: []components.FormField{
-			components.NewHeading("Search assets"),
-			components.NewSpacer(),
-			source,
-			query,
-			components.NewSpacer(),
-			components.NewNote("  filtering by Godot " + godotVer),
-		},
-		Focus: "query",
+		Crumb:  "Search",
+		Fields: fields,
+		Focus:  focus,
 		Help: []key.Binding{
 			core.Hint("field", core.Keys.PrevField, core.Keys.NextField),
 			core.Hint("go", core.Keys.Select),
 			core.Hint("cancel", core.Keys.Back),
 		},
 		OnSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
-			q := strings.TrimSpace(f.Value("query"))
-			if q == "" {
+			req := capture()
+			q := req.Query
+			if q == "" && (caps == nil || !caps.GitHubSearch() || req.Owner == "") {
 				return core.Action{}
 			}
-			appctx.Of(sh).LastSearchQuery = q
+			c := appctx.Of(sh)
+			c.LastSearchQuery = q
+			c.LastSearchOwner, c.LastSearchLicense, c.LastSearchForks = req.Owner, req.License, req.IncludeForks
 			_ = config.SaveLastSource(cur.Name()) // best-effort, like SaveTheme
-			return core.Push(newSearchLoading(cur, q, godotVer, 0))
+			return core.Push(newSearchLoading(cur, req))
 		},
 	})
 	return form
@@ -79,7 +103,7 @@ func newQueryScreen(src searchpkg.Source, godotVer, lastQuery string) *component
 
 // sourceMenu opens the sources as a dropdown under the Source row; the choice is written
 // through dst and the menu pops itself.
-func sourceMenu(sh *core.Shared, form *components.FormScreen, dst *searchpkg.Source) *components.MenuScreen {
+func sourceMenu(sh *core.Shared, form *components.FormScreen, dst *searchpkg.Source, capture func() searchpkg.Request) *components.MenuScreen {
 	srcs := searchpkg.Sources()
 	items := make([]components.MenuItem, 0, len(srcs))
 	cursor := 0
@@ -92,7 +116,10 @@ func sourceMenu(sh *core.Shared, form *components.FormScreen, dst *searchpkg.Sou
 		items = append(items, components.MenuItem{
 			Label: src.Name(),
 			Hint:  hint,
-			Pick:  func(sh *core.Shared) core.Action { *dst = src; return core.Pop() },
+			Pick: func(sh *core.Shared) core.Action {
+				*dst = src
+				return core.Seq(core.Pop(), core.Replace(queryForm(src, capture(), "source")))
+			},
 		})
 	}
 	// The key is the literal newQueryScreen registers, so the miss is unreachable; the
@@ -108,10 +135,10 @@ func sourceMenu(sh *core.Shared, form *components.FormScreen, dst *searchpkg.Sou
 
 // ---------- search loading + results ----------
 
-func newSearchLoading(src searchpkg.Source, query, godotVer string, page int) *components.LoadingScreen {
+func newSearchLoading(src searchpkg.Source, request searchpkg.Request) *components.LoadingScreen {
 	cmd := func(ctx context.Context) tea.Cmd {
 		return func() tea.Msg {
-			res, err := src.Search(ctx, query, godotVer, page)
+			res, err := src.Search(ctx, request)
 			return searchResultMsg{res: res, err: err}
 		}
 	}
@@ -125,18 +152,18 @@ func newSearchLoading(src searchpkg.Source, query, godotVer string, page int) *c
 		}
 		if len(m.res.Results) == 0 {
 			return core.Seq(
-				core.SetStatusAndLog(fmt.Sprintf("no results for %q", query)),
+				core.SetStatusAndLog(fmt.Sprintf("no results for %q", request.Query)),
 				core.Pop(),
 			)
 		}
-		return core.Replace(newResultsPicker(src, query, godotVer, m.res))
+		return core.Replace(newResultsPicker(src, request, m.res))
 	}
 	return components.NewLoadingScreen(src.Name(), "searching…", cmd, onResult)
 }
 
 // newResultsPicker shows one page of results. Each row hands off to the asset
 // detail fetch; PageNext/PagePrev page within the bounds reported by the source.
-func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchpkg.Page) *components.PickerScreen {
+func newResultsPicker(src searchpkg.Source, request searchpkg.Request, res *searchpkg.Page) *components.PickerScreen {
 	items := make([]list.Item, 0, len(res.Results))
 	for _, r := range res.Results {
 		r := r
@@ -153,12 +180,12 @@ func newResultsPicker(src searchpkg.Source, query, godotVer string, res *searchp
 		switch {
 		case core.MatchKey(k, core.Keys.PageNext):
 			if res.Page+1 < res.Pages {
-				return core.Replace(newSearchLoading(src, query, godotVer, res.Page+1)), true
+				return core.Replace(newSearchLoading(src, paged(request, res.Page+1))), true
 			}
 			return core.Action{}, true
 		case core.MatchKey(k, core.Keys.PagePrev):
 			if res.Page > 0 {
-				return core.Replace(newSearchLoading(src, query, godotVer, res.Page-1)), true
+				return core.Replace(newSearchLoading(src, paged(request, res.Page-1))), true
 			}
 			return core.Action{}, true
 		}
@@ -243,3 +270,5 @@ func newInstallMenu(src searchpkg.Source, d *searchpkg.Detail) core.Action {
 	}
 	return core.Replace(components.NewPicker(items, components.PickerOpts{Crumb: "Install", Title: title}))
 }
+
+func paged(r searchpkg.Request, page int) searchpkg.Request { r.Page = page; return r }
