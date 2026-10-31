@@ -20,6 +20,9 @@ const projectTitle = "Project"
 type projectState struct {
 	screen *components.RootListScreen
 	sort   appctx.SortMode
+	order  []string
+	rows   map[string]list.Item
+	shown  map[string]bool
 }
 
 func NewProjectScreen(sh *core.Shared) *components.RootListScreen {
@@ -44,7 +47,7 @@ func NewProjectScreen(sh *core.Shared) *components.RootListScreen {
 	opts.Init = checkUpdatesCmd
 	opts.OnKey = s.onKey
 	opts.Receive = s.receive
-	s.screen = components.NewRootList(projectListItems(sh, s.sort), opts)
+	s.screen = components.NewRootList(s.rebuildItems(sh), opts)
 	return s.screen
 }
 
@@ -54,7 +57,7 @@ func (s *projectState) onKey(sh *core.Shared, k string, _ list.Item) (core.Actio
 	switch {
 	case core.MatchKey(k, appctx.AppKeys.Sort):
 		appctx.CycleSort(s.screen.List(), &s.sort, projectSortModes, projectTitle,
-			func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })
+			func(appctx.SortMode) []list.Item { return s.rebuildItems(sh) })
 		return core.Action{}, true
 	case core.MatchKey(k, appctx.AppKeys.Fetch):
 		cmd, started := fetchAllCmd(sh)
@@ -88,12 +91,22 @@ func RootGitAction(sh *core.Shared) core.Action {
 // arrives. Status and focus are composed by the caller.
 func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	c := appctx.Of(sh)
+	if ready, handled := c.ListUpdates.Receive(payload); handled {
+		if ready {
+			s.publish(sh)
+		}
+		return core.Action{}
+	}
 	if act, ok := c.Refresh.Receive(payload); ok {
 		return act
 	}
 	if handled, changed, act := c.ApplyRefreshResult(payload); handled {
 		if changed {
-			s.screen.SetItems(projectListItems(sh, s.sort))
+			if !c.Refresh.Running() {
+				s.rebuild(sh)
+			} else {
+				return core.Seq(act, c.ListUpdates.Request())
+			}
 		}
 		return act
 	}
@@ -104,7 +117,7 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	case updateChecksReady:
 		if p.checks != nil {
 			c.SetUpdateChecks(p.checks)
-			s.screen.SetItems(projectListItems(sh, s.sort))
+			s.rebuild(sh)
 		}
 		if p.stampErr != nil {
 			return core.SetStatusAndLog(p.stampErr.Error())
@@ -116,7 +129,7 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 		if c.RefreshRepo(p) {
 			return s.reload(sh)
 		}
-		s.screen.SetItems(projectListItems(sh, s.sort))
+		s.rebuild(sh)
 	case repoui.FetchDoneMsg:
 		if !c.Fetch.Complete(p) {
 			return core.Action{}
@@ -139,8 +152,59 @@ func (s *projectState) reload(sh *core.Shared) core.Action {
 	ranks := statusRanks(sh)
 	act := c.StartProjectRefresh()
 	c.RankSnap = ranks
-	s.screen.SetItems(projectListItems(sh, s.sort))
+	// New entries have no prior rank; freeze their initial position until completion too.
+	for _, status := range c.ProjectStatuses() {
+		if _, ok := ranks[status.Addon.Name]; !ok {
+			ranks[status.Addon.Name] = attentionRank(rowFor(c, status))
+		}
+	}
+	s.rebuild(sh)
 	return act
+}
+
+func (s *projectState) rebuildItems(sh *core.Shared) []list.Item {
+	c := appctx.Of(sh)
+	c.ListUpdates.Reset()
+	clear(c.DirtyProjectRows)
+	rows := projectRows(sh, s.sort)
+	s.order = make([]string, 0, len(rows))
+	s.rows = make(map[string]list.Item, len(rows))
+	s.shown = make(map[string]bool, len(rows))
+	for _, row := range rows {
+		name := row.s.Addon.Name
+		s.order = append(s.order, name)
+		s.rows[name] = addonItem(row)
+	}
+	for _, row := range visibleRows(rows, s.sort) {
+		s.shown[row.s.Addon.Name] = true
+	}
+	return s.projectItems()
+}
+
+func (s *projectState) rebuild(sh *core.Shared) { s.screen.SetItems(s.rebuildItems(sh)) }
+
+func (s *projectState) projectItems() []list.Item {
+	items := make([]list.Item, 0, len(s.order))
+	for _, key := range s.order {
+		if s.shown[key] {
+			items = append(items, s.rows[key])
+		}
+	}
+	return items
+}
+
+func (s *projectState) publish(sh *core.Shared) {
+	c := appctx.Of(sh)
+	for name := range c.DirtyProjectRows {
+		if status, ok := c.ProjectStatus(name); ok {
+			row := rowFor(c, status)
+			s.rows[name] = addonItem(row)
+			s.shown[name] = s.sort != appctx.SortStatusInstalled || row.s.Present() || row.unseen
+		}
+	}
+	c.ListUpdates.Reset()
+	clear(c.DirtyProjectRows)
+	s.screen.SetItems(s.projectItems())
 }
 
 // inspect uses the project's cached inspection so redraws do not query every repo.

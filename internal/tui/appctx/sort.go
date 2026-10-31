@@ -39,9 +39,6 @@ func SortTitle(base string, m SortMode) string {
 // CycleSort is components.CycleSort retitling via the local SortTitle (above) instead
 // of the shared one, so the gdaddon-owned mode gets its label.
 func CycleSort(l *list.Model, mode *SortMode, modes []SortMode, base string, items func(SortMode) []list.Item) {
-	sel := SelectedTitle(l)
-	*mode = NextSort(*mode, modes)
-	components.SetListItems(l, items(*mode))
-	SelectByTitle(l, sel)
+	components.CycleSort(l, mode, modes, base, items)
 	l.Title = SortTitle(base, *mode)
 }

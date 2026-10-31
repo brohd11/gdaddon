@@ -32,6 +32,7 @@ type Ctx struct {
 	// Shared local inspection used by row rendering and git-menu scopes.
 	projectStatuses []addon.Status
 	projectLoaded   bool
+	projectIndex    map[string]int
 
 	// LastSearchQuery keeps the search form filled across navigation (session only).
 	LastSearchQuery   string
@@ -74,6 +75,9 @@ type Ctx struct {
 	// Refresh tracks the async project reload (StartProjectRefresh). It lives here, not on
 	// the Project root, because roots are rebuilt while results are in flight.
 	Refresh components.Refresh
+	// DirtyProjectRows records accepted inspections waiting for list publication.
+	ListUpdates      components.UpdateBatch
+	DirtyProjectRows map[string]bool
 	// Pending marks entries, by name, whose inspection the running Refresh is re-reading;
 	// their rows show the cached state muted. RootPending is the same for RootRepo.
 	Pending     map[string]bool
@@ -135,6 +139,9 @@ func (c *Ctx) loadArchive() {
 }
 
 func (c *Ctx) loadProject() {
+	defer c.indexProject()
+	c.ListUpdates.Reset()
+	c.DirtyProjectRows = make(map[string]bool)
 	c.projectLoaded = true
 	c.projectStatuses = nil
 	c.Pending, c.unseen, c.RootPending = nil, nil, false
@@ -200,6 +207,23 @@ func (c *Ctx) ProjectStatuses() []addon.Status {
 		c.loadProject()
 	}
 	return c.projectStatuses
+}
+
+func (c *Ctx) indexProject() {
+	c.projectIndex = make(map[string]int, len(c.projectStatuses))
+	for i, s := range c.projectStatuses {
+		c.projectIndex[s.Addon.Name] = i
+	}
+}
+
+// ProjectStatus looks up one cached inspection without scanning the project slice.
+func (c *Ctx) ProjectStatus(name string) (addon.Status, bool) {
+	statuses := c.ProjectStatuses()
+	i, ok := c.projectIndex[name]
+	if !ok {
+		return addon.Status{}, false
+	}
+	return statuses[i], true
 }
 
 // noteLoadErr records a failure for DrainLoadErrs; a missing file is a valid empty state

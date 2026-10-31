@@ -32,11 +32,15 @@ type rootDescribedMsg struct {
 // (cheap), keeps each known entry's cached inspection and git markers so rows can show
 // them muted, adds a placeholder for new entries, and marks everything Pending.
 func (c *Ctx) beginProject() {
+	defer c.indexProject()
+	c.ListUpdates.Reset()
+	c.DirtyProjectRows = make(map[string]bool)
 	c.projectLoaded = true
 	prev := make(map[string]addon.Status, len(c.projectStatuses))
 	for _, s := range c.projectStatuses {
 		prev[s.Addon.Name] = s
 	}
+	previousUnseen := c.unseen
 	c.ProjectAddons, c.projectStatuses = nil, nil
 	c.Pending = map[string]bool{}
 	c.unseen = map[string]bool{}
@@ -78,6 +82,8 @@ func (c *Ctx) beginProject() {
 		s, ok := prev[a.Name]
 		if !ok {
 			s = addon.Status{Addon: a}
+		}
+		if !ok || previousUnseen[a.Name] {
 			c.unseen[a.Name] = true
 		}
 		s.Addon = a
@@ -128,16 +134,17 @@ func (c *Ctx) StartProjectRefresh() core.Action {
 func (c *Ctx) ApplyRefreshResult(payload any) (handled, changed bool, act core.Action) {
 	switch m := payload.(type) {
 	case addonInspectedMsg:
+		name := m.status.Addon.Name
+		i, known := c.projectIndex[name]
+		if c.Refresh.Stale(m.gen) || !known || !c.Pending[name] {
+			return true, false, core.Action{}
+		}
 		ok, act := c.Refresh.Land(m.gen)
 		if !ok {
 			return true, false, act
 		}
-		name := m.status.Addon.Name
-		for i := range c.projectStatuses {
-			if c.projectStatuses[i].Addon.Name == name {
-				c.projectStatuses[i] = m.status
-			}
-		}
+		c.projectStatuses[i] = m.status
+		c.DirtyProjectRows[name] = true
 		if m.status.Addon.IsGitWorkdir() {
 			c.setGitState(name, m.dirty, m.sync)
 		} else {
@@ -148,13 +155,16 @@ func (c *Ctx) ApplyRefreshResult(payload any) (handled, changed bool, act core.A
 		c.finishProject()
 		return true, true, act
 	case rootDescribedMsg:
+		if c.Refresh.Stale(m.gen) || !c.RootPending {
+			return true, false, core.Action{}
+		}
 		ok, act := c.Refresh.Land(m.gen)
 		if !ok {
 			return true, false, act
 		}
 		c.RootRepo, c.RootPending = m.root, false
 		c.finishProject()
-		return true, true, act
+		return true, !c.Refresh.Running(), act
 	}
 	return false, false, core.Action{}
 }

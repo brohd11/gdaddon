@@ -13,8 +13,6 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repoui"
-
-	"charm.land/bubbles/v2/list"
 )
 
 // ---------- browse rows ----------
@@ -90,7 +88,7 @@ func addonDesc(s addon.Status) string {
 func addonItem(r rowData) components.Item {
 	s := r.s
 	if r.unseen {
-		return components.Item{Name: s.Addon.Label(), Desc: "refreshing…", Pending: true}
+		return components.Item{Key: s.Addon.Name, Name: s.Addon.Label(), Desc: "refreshing…", Pending: true}
 	}
 	var pick func(*core.Shared) core.Action
 	if s.Installable() {
@@ -122,7 +120,7 @@ func addonItem(r rowData) components.Item {
 	if r.pending {
 		desc += " · refreshing…"
 	}
-	return components.Item{Name: s.Addon.Label() + rowMarker(r), Desc: desc, Pending: r.pending, Pick: pick, Keys: keys}
+	return components.Item{Key: s.Addon.Name, Name: s.Addon.Label() + rowMarker(r), Desc: desc, Pending: r.pending, Pick: pick, Keys: keys}
 }
 
 // depsNeedAttention reports whether any dependency needs attention, which drives the
@@ -201,9 +199,9 @@ type rowData struct {
 	rank            *int
 }
 
-// projectListItems builds a row per addon, with markers, in mode order. The project root
-// has no row (it is in the header).
-func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
+// projectRows builds sorted row data, including hidden entries: later inspections
+// can make them visible without needing to sort again. The project root has no row.
+func projectRows(sh *core.Shared, mode appctx.SortMode) []rowData {
 	c := appctx.Of(sh)
 	statuses := inspect(sh)
 	rows := make([]rowData, len(statuses))
@@ -213,13 +211,8 @@ func projectListItems(sh *core.Shared, mode appctx.SortMode) []list.Item {
 			rows[i].rank = &n
 		}
 	}
-	rows = visibleRows(rows, mode)
 	sortRows(rows, mode)
-	items := make([]list.Item, len(rows))
-	for i, r := range rows {
-		items[i] = addonItem(r)
-	}
-	return items
+	return rows
 }
 
 // rowFor pairs an inspected addon with its cached warning flags and refresh state.
