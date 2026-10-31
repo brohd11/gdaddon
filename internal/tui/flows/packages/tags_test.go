@@ -1,7 +1,6 @@
 package packages
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -59,18 +58,18 @@ func TestBrowseTags(t *testing.T) {
 				t.Fatal("tag listing was not lazy")
 			}
 			// Tags is the first selectable row, before HEAD.
-			model, _ = model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			model, cmd := model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 			load, ok := model.(core.Router).Top().(*components.LoadingScreen)
 			if !ok || load.Label != "fetching tags…" {
 				t.Fatalf("top = %T", model.(core.Router).Top())
 			}
-			model, _ = model.Update(load.Run(context.Background())())
-			model, _ = model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+			model, _ = model.Update(cmd().(tea.BatchMsg)[1]())
+			model, cmd = model.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 			load, ok = model.(core.Router).Top().(*components.LoadingScreen)
 			if !ok || load.Label != "resolving tag…" {
 				t.Fatalf("top = %T", model.(core.Router).Top())
 			}
-			model, _ = model.Update(load.Run(context.Background())())
+			model, _ = model.Update(cmd().(tea.BatchMsg)[1]())
 			if published {
 				if selected != nil {
 					t.Fatal("published release should offer its build and source in the asset picker")
