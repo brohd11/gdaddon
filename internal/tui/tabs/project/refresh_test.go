@@ -12,7 +12,6 @@ import (
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	gitflow "github.com/brohd11/gdaddon/internal/tui/flows/git"
-	"github.com/brohd11/gitstack/repoui"
 )
 
 func TestTargetedRefreshThirtyRepos(t *testing.T) {
@@ -132,7 +131,7 @@ esac
 		t.Fatal("root action did not reload the whole project")
 	}
 	// Both batch completion forms retain full local refreshes.
-	for _, payload := range []any{appctx.GitRefresh{}, repoui.FetchDoneMsg{}} {
+	for _, payload := range []any{appctx.GitRefresh{}, queuedFetchCompletion(t, &c.Fetch)} {
 		t.Setenv("REFRESH_TEST_DIRTY", " M plugin.cfg")
 		drain(sh, screen, screen.Receive(sh, payload))
 		if !c.GitDirty["repo01"] {

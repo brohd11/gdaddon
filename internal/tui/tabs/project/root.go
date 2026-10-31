@@ -20,8 +20,6 @@ const projectTitle = "Project"
 type projectState struct {
 	screen *components.RootListScreen
 	sort   appctx.SortMode
-	// fetching prevents duplicate fetch-all work until FetchDoneMsg arrives.
-	fetching bool
 }
 
 func NewProjectScreen(sh *core.Shared) *components.RootListScreen {
@@ -59,13 +57,13 @@ func (s *projectState) onKey(sh *core.Shared, k string, _ list.Item) (core.Actio
 			func(m appctx.SortMode) []list.Item { return projectListItems(sh, m) })
 		return core.Action{}, true
 	case core.MatchKey(k, appctx.AppKeys.Fetch):
-		if s.fetching {
+		cmd, started := fetchAllCmd(sh)
+		if !started {
 			return core.SetStatus("fetch already running"), true
 		}
-		s.fetching = true
 		return core.Seq(
 			core.SetStatus("fetching git checkouts…"),
-			core.Async(fetchAllCmd(sh)),
+			core.Async(cmd),
 		), true
 	case core.MatchKey(k, appctx.AppKeys.GitAll):
 		return core.Push(gitflow.AllRepos(sh)), true
@@ -120,9 +118,11 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 		}
 		s.screen.SetItems(projectListItems(sh, s.sort))
 	case repoui.FetchDoneMsg:
+		if !c.Fetch.Complete(p) {
+			return core.Action{}
+		}
 		// The refs are current: re-inspect so ahead/behind markers appear, rebuild the roots, and
 		// log the per-repo results.
-		s.fetching = false
 		return core.Seq(
 			s.reload(sh),
 			core.RefreshRoots(),

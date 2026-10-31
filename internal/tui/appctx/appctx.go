@@ -14,6 +14,7 @@ import (
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 	"github.com/brohd11/gitstack/repo"
+	"github.com/brohd11/gitstack/repoui"
 )
 
 // Ctx is the consumer context stored on core.Shared.App. Tabs recover it with Of.
@@ -67,6 +68,8 @@ type Ctx struct {
 	// RootRepo is the project root's own checkout (nil if none), re-described each loadProject
 	// for the header, the fetch key and the batch menu's include-root toggle.
 	RootRepo *repo.Repo
+	// Fetch belongs to the app session, surviving root rebuilds and navigation.
+	Fetch repoui.FetchState
 
 	// Refresh tracks the async project reload (StartProjectRefresh). It lives here, not on
 	// the Project root, because roots are rebuilt while results are in flight.
