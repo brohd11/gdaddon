@@ -19,6 +19,7 @@ func TestVersionEditorMenu(t *testing.T) {
 		want       bool
 	}{
 		{"plugin", "plugin.cfg", addon.KindPackage, addon.StateInstalled, true},
+		{"package", "package.cfg", addon.KindPackage, addon.StateInstalled, true},
 		{"library", "addon.cfg", addon.KindPackage, addon.StateUnversioned, true},
 		{"stamped", "version.cfg", addon.KindPackage, addon.StateMismatch, true},
 		{"clone", "plugin.cfg", addon.KindClone, addon.StateInstalled, true},

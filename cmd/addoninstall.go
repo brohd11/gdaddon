@@ -36,8 +36,8 @@ Name a repo to install one addon, or pass --all to install everything the
 manifest already lists.
 
 A repo is named as owner/repo, or host/owner/repo for a host other than
-github.com — the same spec a plugin.cfg/addon.cfg/version.cfg 'require' or 'deps'
-entry uses, and the one PackageExporter builds against. An optional @tag installs
+github.com — the same spec a plugin.cfg/package.cfg 'require' or 'deps' entry
+uses, and the one PackageExporter builds against. An optional @tag installs
 that tag's source; @latest is the newest published non-prerelease, which is also
 what you get with no @ref at all.
 
@@ -52,7 +52,8 @@ branch. A clone is only ever asked for here: a declared 'require' cannot.
 The install location is worked out from the downloaded package: a repo whose
 root holds a plugin.cfg is installed whole, a repo shipping an addons/ folder
 has its plugin folders mirrored under the project's addons/, and anything else
-is located by its plugin.cfg/addon.cfg/version.cfg files. An addon can override this by
+is located by its plugin.cfg/package.cfg files (addon.cfg/version.cfg are still
+read as legacy). An addon can override this by
 declaring dir="addons/whatever" in its own config.
 
 The project root is the git toplevel unless --root says otherwise (this command

@@ -29,6 +29,14 @@ func TestPluginCfgPath(t *testing.T) {
 		}
 	})
 
+	t.Run("package.cfg only", func(t *testing.T) {
+		dir := t.TempDir()
+		write(dir, "package.cfg")
+		if !hasPluginCfg(dir) || filepath.Base(pluginCfgPath(dir)) != "package.cfg" {
+			t.Errorf("package.cfg not detected")
+		}
+	})
+
 	t.Run("addon.cfg only", func(t *testing.T) {
 		dir := t.TempDir()
 		write(dir, "addon.cfg")
@@ -53,16 +61,20 @@ func TestPluginCfgPath(t *testing.T) {
 		}
 	})
 
-	t.Run("plugin.cfg beats addon.cfg beats version.cfg", func(t *testing.T) {
+	t.Run("plugin.cfg beats package.cfg beats addon.cfg beats version.cfg", func(t *testing.T) {
 		dir := t.TempDir()
 		write(dir, "addon.cfg")
 		write(dir, "version.cfg")
 		if filepath.Base(pluginCfgPath(dir)) != "addon.cfg" {
 			t.Errorf("addon.cfg should be preferred over version.cfg")
 		}
+		write(dir, "package.cfg")
+		if filepath.Base(pluginCfgPath(dir)) != "package.cfg" {
+			t.Errorf("package.cfg should be preferred over addon.cfg")
+		}
 		write(dir, "plugin.cfg")
 		if filepath.Base(pluginCfgPath(dir)) != "plugin.cfg" {
-			t.Errorf("plugin.cfg should be preferred over addon.cfg")
+			t.Errorf("plugin.cfg should be preferred over package.cfg")
 		}
 	})
 }
@@ -72,6 +84,8 @@ func TestCfgSection(t *testing.T) {
 		{"addon section", "[addon]\nversion=\"1.0.0\"\n", "1.0.0"},
 		{"plugin section", "[plugin]\nversion=\"2.0.0\"\n", "2.0.0"},
 		{"addon wins over plugin", "[plugin]\nversion=\"2.0.0\"\n[addon]\nversion=\"1.0.0\"\n", "1.0.0"},
+		{"package section", "[package]\nversion=\"3.0.0\"\n", "3.0.0"},
+		{"package wins over addon and plugin", "[package]\nversion=\"3.0.0\"\n[plugin]\nversion=\"2.0.0\"\n[addon]\nversion=\"1.0.0\"\n", "3.0.0"},
 	}
 	for _, file := range pluginCfgNames {
 		for _, c := range cases {
@@ -103,6 +117,39 @@ func TestCfgSectionMerge(t *testing.T) {
 				t.Errorf("name = %q, want x from [addon]", got)
 			}
 		})
+	}
+}
+
+// [package] overrides key by key: keys it lacks still come from [addon], then [plugin].
+func TestCfgSectionPackageMerge(t *testing.T) {
+	dir := t.TempDir()
+	body := "[plugin]\nname=\"base\"\nversion=\"1.0.0\"\npath=\"addons/p\"\n[addon]\nname=\"legacy\"\nversion=\"2.0.0\"\n[package]\nversion=\"3.0.0\"\n"
+	if err := os.WriteFile(filepath.Join(dir, "plugin.cfg"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := getLocalPluginVersion(dir); got != "3.0.0" {
+		t.Errorf("version = %q, want 3.0.0 from [package]", got)
+	}
+	if got := getLocalPluginName(dir); got != "legacy" {
+		t.Errorf("name = %q, want legacy from [addon]", got)
+	}
+	if got := installDir(dir); got != "addons/p" {
+		t.Errorf("path = %q, want addons/p from [plugin]", got)
+	}
+}
+
+func TestDependenciesFromPackageSection(t *testing.T) {
+	dir := t.TempDir()
+	body := "[plugin]\nrequire=[\"a/old\"]\n[package]\nrequire=[\"owner/repo\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "package.cfg"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	deps, err := Dependencies(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deps) != 1 || deps[0].Repo != "repo" {
+		t.Fatalf("deps = %+v, want only owner/repo from [package] require", deps)
 	}
 }
 

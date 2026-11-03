@@ -17,7 +17,7 @@ type ConfigVersion struct {
 	Version string
 }
 
-// ReadConfigVersion reads an addon's effective version, including [addon] overrides.
+// ReadConfigVersion reads an addon's effective version, including [package]/[addon] overrides.
 // A missing version is empty; a missing config returns os.ErrNotExist.
 func ReadConfigVersion(dir string) (ConfigVersion, error) {
 	path := pluginCfgPath(dir)
@@ -32,22 +32,29 @@ func ReadConfigVersion(dir string) (ConfigVersion, error) {
 	return ConfigVersion{Path: path, Version: version}, err
 }
 
-// configVersion also identifies where a missing version belongs: [addon] if present,
-// otherwise [plugin]. Loading with the inspection parser keeps read semantics aligned.
+// configVersion also identifies where a missing version belongs: the first of [package],
+// [addon] present, otherwise [plugin]. Loading with the inspection parser keeps read
+// semantics aligned.
 func configVersion(data []byte) (*ini.File, string, string, error) {
 	cfg, err := parseConfig(data)
 	if err != nil {
 		return nil, "", "", err
 	}
-	section := "plugin"
-	if s, err := cfg.GetSection("addon"); err == nil {
-		section = "addon"
+	section := ""
+	for _, name := range []string{"package", "addon", "plugin"} {
+		s, err := cfg.GetSection(name)
+		if err != nil {
+			continue
+		}
 		if s.HasKey("version") {
-			return cfg, strings.Trim(strings.TrimSpace(s.Key("version").String()), `'"`), section, nil
+			return cfg, strings.Trim(strings.TrimSpace(s.Key("version").String()), `'"`), name, nil
+		}
+		if section == "" && name != "plugin" {
+			section = name
 		}
 	}
-	if s, err := cfg.GetSection("plugin"); err == nil && s.HasKey("version") {
-		return cfg, strings.Trim(strings.TrimSpace(s.Key("version").String()), `'"`), "plugin", nil
+	if section == "" {
+		section = "plugin"
 	}
 	return cfg, "", section, nil
 }

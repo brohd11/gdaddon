@@ -100,11 +100,11 @@ func TestInstallZipTopLevelFolder(t *testing.T) {
 			// The godot-tree-sitter-gd release layout: the zip's top level IS addons/, so
 			// nothing is unwrapped and the namespace level sits under the anchor. The addon
 			// is the config-bearing leaf, not the namespace — and the namespace must not be
-			// stamped with a synthetic version.cfg that would hide the leaf from the scan.
+			// stamped with a synthetic package.cfg that would hide the leaf from the scan.
 			name:     "namespace under a top-level addons/",
 			files:    map[string]string{"addons/addon_lib/tree_sitter_gd/version.cfg": cfg},
 			wantPath: "addons/addon_lib/tree_sitter_gd",
-			absent:   "addons/addon_lib/version.cfg",
+			absent:   "addons/addon_lib/package.cfg",
 		},
 	}
 

@@ -4,8 +4,10 @@ An addon can declare that it needs other addons, and gdaddon will help you get t
 
 ## Declaring them
 
-An addon's author adds a `require` line to its `plugin.cfg`, `addon.cfg` or `version.cfg`,
-under an `[addon]` or `[plugin]` section (keys in `[addon]` override the same keys in `[plugin]`):
+An addon's author adds a `require` line to its `plugin.cfg` or `package.cfg` (legacy
+`addon.cfg`/`version.cfg` are still read), under a `[package]` or `[plugin]` section. Keys
+in `[package]` override the same keys in `[plugin]`; the legacy `[addon]` section is still
+read, between the two:
 
 ```
 require=["owner/repo@v1.0.0", "owner/other"]

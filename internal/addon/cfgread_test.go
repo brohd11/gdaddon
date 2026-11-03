@@ -9,7 +9,7 @@ import (
 
 func TestConfigMultilineMetadata(t *testing.T) {
 	for _, filename := range pluginCfgNames {
-		for _, section := range []string{"plugin", "addon"} {
+		for _, section := range []string{"plugin", "addon", "package"} {
 			for _, key := range []string{"require", "deps"} {
 				t.Run(filename+"/"+section+"/"+key, func(t *testing.T) {
 					dir := t.TempDir()

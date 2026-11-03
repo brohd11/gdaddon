@@ -85,7 +85,7 @@ MyAddon:
   duplicates.
 - **`path`** — the install directory, relative to the project root. You usually don't
   need to set this by hand. gdaddon derives it from the package's own
-  `plugin.cfg`/`addon.cfg`/`version.cfg` (an author-declared `dir=` key, else `addons/<name>`) and
+  `plugin.cfg`/`package.cfg` (an author-declared `dir=` key, else `addons/<name>`) and
   writes the resolved value back on install. Set it explicitly only when the layout is
   hard to infer — for example submodule-style repos where the plugin folder name isn't
   obvious. An explicit `path` always wins.
@@ -131,9 +131,10 @@ can find them and bring them under management.
 
 **Actions → Scan installed** walks the project root (up to 4 levels, skipping
 dotfolders like `.godot`/`.git`) for every top-level plugin folder, i.e. any directory
-containing a `plugin.cfg`, `addon.cfg` or `version.cfg`. It stops descending once it finds one, so a
-nested sub-addon is reported as part of its parent rather than on its own. The scan
-lists only plugins that **aren't already tracked** by a manifest entry's path.
+containing a `plugin.cfg` or `package.cfg` (or a legacy `addon.cfg`/`version.cfg`). It stops
+descending once it finds one, so a nested sub-addon is reported as part of its parent rather
+than on its own. The scan lists only plugins that **aren't already tracked** by a manifest
+entry's path.
 
 For each found plugin it tries to suggest a source url if possible:
 
@@ -208,7 +209,7 @@ pick exactly what to install:
 - a locally **archived** copy (see [Archiving](#archiving)).
 
 gdaddon downloads/clones, derives the install directory from the package's own
-`plugin.cfg`/`addon.cfg`/`version.cfg`, unpacks it into place, and then pins the result back into
+`plugin.cfg`/`package.cfg`, unpacks it into place, and then pins the result back into
 the manifest — url, resolved path, installed version, and release tag. A clone records
 the canonical `.git` url and tracked branch instead of a version, so re-cloning targets
 the right branch; a commit-pinned package records its `commit` sha (and carries no
@@ -226,7 +227,8 @@ one-button "set up this project's addons" operation.
 Addons can declare their own dependencies, and gdaddon reads them so a plugin's
 requirements come along with it.
 
-An installed addon declares dependencies in its `plugin.cfg`, `addon.cfg` or `version.cfg`:
+An installed addon declares dependencies in its `plugin.cfg` or `package.cfg` (legacy
+`addon.cfg`/`version.cfg` are still read), in `[package]` or `[plugin]`:
 
 ```ini
 [plugin]

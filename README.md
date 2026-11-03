@@ -10,7 +10,7 @@ Designed to work with standard addon project structure, but also supports submod
 ### Features
  - Project manifest - one button to install all logged plugins to pinned version
  - Update Check - checks for new releases of all your plugins
- - Declare dependencies - reads from plugin.cfg, addon.cfg or version.cfg, see below
+ - Declare dependencies - reads from plugin.cfg or package.cfg, see below
  - Search - query Github, Asset Store, Asset Lib to add directly to your project
  - Global manifest - quickly add your favorite addons to your project
  - Addon sets - save a collection of addons that can be added together
@@ -73,8 +73,10 @@ github.com/user/repo:
 ```
 
 ### Dependency Management
-If your addon relies on third party content, you can define those in its `plugin.cfg`,
-`addon.cfg` or `version.cfg`, under an `[addon]` or `[plugin]` section (keys in `[addon]` override the same keys in `[plugin]`):
+If your addon relies on third party content, you can define those in its `plugin.cfg`
+or `package.cfg` (legacy `addon.cfg`/`version.cfg` are still read), under a `[package]` or
+`[plugin]` section. Keys in `[package]` override the same keys in `[plugin]`; the legacy
+`[addon]` section is still read, between the two:
 ```
 [plugin]
 name="My Plugin"
