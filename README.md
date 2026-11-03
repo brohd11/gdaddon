@@ -2,6 +2,9 @@
 
 Package and repo manager made for Godot.
 
+gdaddon installs packages; [gdpackage](https://github.com/brohd11/godot-gdpackage) authors, tests
+and releases them.
+
 Designed to work with standard addon project structure, but also supports submodules structure.
 
 
@@ -87,7 +90,7 @@ require=[
     "user/lsp/release@v1.0.0:*.zip",  # ... picked by glob when it uploads several
 ]
 ```
-A spec is `owner/repo[/release][@ref[:glob]]`, the same grammar PackageExporter builds
+A spec is `owner/repo[/release][@ref[:glob]]`, the same grammar gdpackage builds
 against and the same text `gdaddon install` takes: a plain tag is its source, `/release`
 its uploaded asset. A `require` can't ask for a clone — clone what you're working on at
 install time (`gdaddon install owner/repo/clone@main`). See the [docs](doc/docs.md) for

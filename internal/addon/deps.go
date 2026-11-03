@@ -18,7 +18,7 @@ const LatestTag = "latest"
 // the single definition shared by the spec parser and ResolveVersion.
 func IsLatestTag(ref string) bool { return strings.EqualFold(ref, LatestTag) }
 
-// Dependency is one parsed plugin.cfg dependency, in PackageExporter's require grammar
+// Dependency is one parsed plugin.cfg dependency, in gdpackage's require grammar
 // `[host/]owner/repo[/source|/release][@<ref>[:<glob>]]` (github.com unless the first of
 // three or more segments has a dot):
 //   - `owner/repo@v1.0.0` is that tag's source (`/source` says the same);
@@ -71,7 +71,7 @@ func Dependencies(addonDir string) ([]Dependency, error) {
 
 // parseDependencyList parses a Godot bracketed, comma-separated, optionally quoted list of
 // specs, skipping malformed items. A declared `/clone` is skipped too: a build can't read a
-// branch, so PackageExporter skips it and the two tools must agree on what a cfg requires.
+// branch, so gdpackage skips it and the two tools must agree on what a cfg requires.
 func parseDependencyList(raw string) []Dependency {
 	raw = strings.TrimSpace(raw)
 	raw = strings.TrimPrefix(raw, "[")
@@ -107,7 +107,7 @@ const (
 )
 
 // legacyClonePrefix is the old `clone:owner/repo` spelling. It is read as plain source, as
-// PackageExporter reads it, so an old cfg means the same thing to both tools.
+// gdpackage reads it, so an old cfg means the same thing to both tools.
 const legacyClonePrefix = "clone:"
 
 func parseDependency(item string, allowClone bool) (Dependency, bool) {

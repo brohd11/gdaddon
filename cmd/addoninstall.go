@@ -37,7 +37,7 @@ manifest already lists.
 
 A repo is named as owner/repo, or host/owner/repo for a host other than
 github.com — the same spec a plugin.cfg/package.cfg 'require' or 'deps' entry
-uses, and the one PackageExporter builds against. An optional @tag installs
+uses, and the one gdpackage builds against. An optional @tag installs
 that tag's source; @latest is the newest published non-prerelease, which is also
 what you get with no @ref at all.
 

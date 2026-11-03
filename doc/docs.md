@@ -240,7 +240,7 @@ require=["owner/repo@v1.0.0", "other/repo", "third/ext/release@v2.0.0:*-linux.zi
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 including when its list is empty.
 
-Each spec is `owner/repo[/release][@ref[:glob]]`, the grammar PackageExporter builds
+Each spec is `owner/repo[/release][@ref[:glob]]`, the grammar gdpackage builds
 against (host defaults to `github.com`; write `host/owner/repo` for another, where the
 first segment counts as a host only when it has a dot). `@` always names the ref:
 
@@ -255,10 +255,10 @@ first segment counts as a host only when it has a dot). `@` always names the ref
   publishing a literal `latest` tag cannot be pinned to it by name.
 - no `@ref` — unpinned; the repo is recorded for you to pin later.
 
-A `require` cannot ask for a live checkout: a build reads tags, so PackageExporter skips
+A `require` cannot ask for a live checkout: a build reads tags, so gdpackage skips
 `/clone` and so does gdaddon. Clone at install time instead —
 `gdaddon install owner/repo/clone@main`, or **Clone** in the TUI. The older
-`clone:owner/repo` prefix is read as plain source, as PackageExporter reads it.
+`clone:owner/repo` prefix is read as plain source, as gdpackage reads it.
 
 When an addon is installed, gdaddon reads its declared dependencies, resolves each against
 your manifest, and flags the addon `⚠ [missing deps]` if any required dependency is absent.

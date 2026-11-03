@@ -16,7 +16,7 @@ require=["owner/repo@v1.0.0", "owner/other"]
 The existing `deps` spelling remains valid. If both keys are present, `require` wins,
 even when its list is empty.
 
-A spec is `owner/repo[/release][@ref]`, the same grammar PackageExporter builds
+A spec is `owner/repo[/release][@ref]`, the same grammar gdpackage builds
 against, so one `require` line means the same thing to both. The host defaults to
 github.com; write `host/owner/repo` for anything else (a first segment is a host only when
 it has a dot).
@@ -30,7 +30,7 @@ it has a dot).
 | `owner/repo` | any version — recorded unpinned for you to pin |
 
 A plain tag is the tag's **source**: the repo as it was at that tag, which is what
-PackageExporter reads when it builds. `/source` says the same thing explicitly. A tag
+gdpackage reads when it builds. `/source` says the same thing explicitly. A tag
 needs no published release, and an uploaded build does not replace it.
 
 `/release` is for what can't be used from source — a GDExtension, or a third-party zip.
@@ -44,11 +44,11 @@ The local package archive is checked first, allowing saved packages to work offl
 ### Clones are an install-time choice
 
 A `require` can't ask for a live checkout: a build reads a tag, never a branch, so
-PackageExporter skips a `/clone` spec and so does gdaddon. Clone what you are working on
+gdpackage skips a `/clone` spec and so does gdaddon. Clone what you are working on
 when you install it — `gdaddon install owner/repo/clone@main`, or **Clone** in the TUI. A
 repo can list those commands in a "for development" section of its readme.
 
-The older `clone:owner/repo` prefix is read as plain source, as PackageExporter reads it.
+The older `clone:owner/repo` prefix is read as plain source, as gdpackage reads it.
 
 A clone entry satisfies any requirement on its repo: it is a checkout being worked on, so
 gdaddon doesn't compare its branch against the required tag.
