@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -38,6 +39,11 @@ func TestSetConfigVersionPreservesFile(t *testing.T) {
 				if err := os.WriteFile(path, []byte(tc.body), 0o640); err != nil {
 					t.Fatal(err)
 				}
+				// Compare against the written mode: Windows reports 0666/0444, not Unix bits.
+				before, err := os.Stat(path)
+				if err != nil {
+					t.Fatal(err)
+				}
 				cfg, err := ReadConfigVersion(dir)
 				if err != nil || cfg.Path != path || cfg.Version != tc.current {
 					t.Fatalf("ReadConfigVersion = %+v, %v; want version %q", cfg, err, tc.current)
@@ -50,8 +56,11 @@ func TestSetConfigVersionPreservesFile(t *testing.T) {
 					t.Fatalf("saved config = %q, %v; want %q", got, err, tc.want)
 				}
 				info, err := os.Stat(path)
-				if err != nil || info.Mode().Perm() != 0o640 {
-					t.Fatalf("permissions changed: %v, %v", info, err)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if info.Mode().Perm() != before.Mode().Perm() {
+					t.Fatalf("permissions changed: %v -> %v", before.Mode().Perm(), info.Mode().Perm())
 				}
 				cfg, err = ReadConfigVersion(dir)
 				if err != nil || cfg.Version != tc.next {
@@ -159,6 +168,9 @@ func TestSetConfigVersionSymlink(t *testing.T) {
 }
 
 func TestSetConfigVersionWriteFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permissions don't block file creation on Windows")
+	}
 	if os.Geteuid() == 0 {
 		t.Skip("root bypasses directory permissions")
 	}
