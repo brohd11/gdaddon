@@ -56,8 +56,10 @@ is located by its plugin.cfg/package.cfg files (addon.cfg/version.cfg are still
 read as legacy). An addon can override this by
 declaring dir="addons/whatever" in its own config.
 
-The project root is the git toplevel unless --root says otherwise (this command
-takes it as a flag because its argument is the repo). Naming one addon creates
+Manifest discovery starts at the git toplevel unless --root says otherwise.
+The manifest's project_root is relative to its directory (default: that directory).
+This command takes the discovery directory as a flag because its argument is the repo.
+Naming one addon creates
 a manifest if the project has none; --all requires one to already exist.
 
 Dependencies are declared by the addon's own author and followed transitively, so
@@ -92,7 +94,7 @@ const stoppedMsg = "\nstopped at your request; remaining dependencies were not i
 func init() {
 	f := addonInstallCmd.Flags()
 	f.BoolVar(&addonInstallAll, "all", false, "install every addon the manifest lists, instead of one named repo")
-	f.StringVar(&addonInstallRoot, "root", "", "project root (default: the git toplevel, else the current directory)")
+	f.StringVar(&addonInstallRoot, "root", "", "manifest search directory (default: the git toplevel, else the current directory)")
 	f.StringVar(&addonInstallAsset, "asset", "", "pick a /release asset by name (substring) when the release ships several")
 	f.StringVar(&addonInstallName, "name", "", "manifest entry name (default: derived from the repo)")
 	f.BoolVar(&addonInstallNoDeps, "no-deps", false, "don't install declared dependencies")
@@ -121,6 +123,11 @@ func runAddonInstall(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	m, err := addon.LoadManifest(manifestPath)
+	if err != nil {
+		return err
+	}
+	projectRoot = m.ProjectRoot
 
 	ctx := context.Background()
 	entry, err := resolveEntry(ctx, spec)
@@ -196,7 +203,7 @@ func runInstallAll() error {
 	if err != nil {
 		return err
 	}
-	manifest, statuses, err := inspectManifest(projectRoot)
+	manifest, projectRoot, statuses, err := inspectManifest(projectRoot)
 	if err != nil {
 		return err
 	}

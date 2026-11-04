@@ -265,6 +265,9 @@ func RemoveEntry(manifestPath, name string) error {
 // findEntryBlock returns the column-0 key line of entry name and the exclusive end of its
 // indented block; ok is false when absent. Every in-place writer uses it.
 func findEntryBlock(lines []string, name string) (keyIdx, end int, ok bool) {
+	if name == projectRootKey {
+		return 0, 0, false
+	}
 	keyIdx = -1
 	for i, ln := range lines {
 		if isEntryKey(ln, name) {

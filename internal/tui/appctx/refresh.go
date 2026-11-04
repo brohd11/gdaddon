@@ -32,6 +32,8 @@ type rootDescribedMsg struct {
 // (cheap), keeps each known entry's cached inspection and git markers so rows can show
 // them muted, adds a placeholder for new entries, and marks everything Pending.
 func (c *Ctx) beginProject() {
+	addons, err := c.readProject()
+	c.noteLoadErr("manifest", err)
 	defer c.indexProject()
 	c.ListUpdates.Reset()
 	c.DirtyProjectRows = make(map[string]bool)
@@ -57,8 +59,6 @@ func (c *Ctx) beginProject() {
 		clear(c.GitSync)
 		return
 	}
-	addons, err := addon.Parse(c.ManifestPath)
-	c.noteLoadErr("manifest", err)
 	c.ProjectAddons = addons
 	if err != nil {
 		return
@@ -120,9 +120,7 @@ func (c *Ctx) StartProjectRefresh() core.Action {
 			return nil
 		}
 		m := rootDescribedMsg{gen: gen}
-		if root, ok := repo.DescribeRoot(projectRoot); ok {
-			m.root = &root
-		}
+		m.root = describeProjectRepo(projectRoot)
 		return core.PropagateAll(m)
 	})
 	return core.Seq(act, core.Async(core.BoundedBatch(maxInspect, cmds...)))

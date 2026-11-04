@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/config"
+	"gopkg.in/yaml.v3"
 )
 
 // SetsDir is ~/.gdaddon/sets: manifest-shaped files of plugins to import into a project.
@@ -56,8 +57,8 @@ func ListSets() ([]string, error) {
 // CreateSet creates an empty set, refusing to overwrite.
 func CreateSet(name string) (string, error) { return CreateSetFrom(name, "") }
 
-// CreateSetFrom creates a set seeded with a verbatim copy of the manifest at fromPath
-// (empty when ""), refusing to overwrite.
+// CreateSetFrom copies addon entries from fromPath (empty when ""), refusing to
+// overwrite. Project settings are omitted so sets can be reused in another project.
 func CreateSetFrom(name, fromPath string) (string, error) {
 	path, err := SetPath(name)
 	if err != nil {
@@ -78,6 +79,10 @@ func CreateSetFrom(name, fromPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	data, err = withoutProjectRoot(data)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
@@ -85,6 +90,35 @@ func CreateSetFrom(name, fromPath string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// withoutProjectRoot removes the metadata block without reserializing entries,
+// preserving their comments, quoting and formatting.
+func withoutProjectRoot(data []byte) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return data, nil
+	}
+	fields := doc.Content[0].Content
+	for i := 0; i < len(fields); i += 2 {
+		if fields[i].Value != projectRootKey {
+			continue
+		}
+		lines := strings.SplitAfter(string(data), "\n")
+		start, end := fields[i].Line-1, len(lines)
+		if i+2 < len(fields) {
+			next := fields[i+2]
+			end = next.Line - 1
+			if next.HeadComment != "" {
+				end -= strings.Count(next.HeadComment, "\n") + 1
+			}
+		}
+		return []byte(strings.Join(append(lines[:start], lines[end:]...), "")), nil
+	}
+	return data, nil
 }
 
 // DeleteSet removes the set file named name.

@@ -58,7 +58,7 @@ func TestProjectRootAsyncCallbacks(t *testing.T) {
 	root.List().SetFilterText("alpha")
 	root.SetCompact(true)
 	checks := map[string]addon.UpdateInfo{"alpha": {State: addon.UpdateAvailable, LatestTag: "v2"}}
-	root.Receive(sh, updateChecksReady{checks: checks})
+	root.Receive(sh, updateChecksReady{gen: c.UpdateGen.Load(), checks: checks})
 	if c.UpdateChecks["alpha"].LatestTag != "v2" || len(root.List().VisibleItems()) != 1 || !root.Compact() {
 		t.Fatal("async results must update the cache without dropping filter or density")
 	}
@@ -66,6 +66,12 @@ func TestProjectRootAsyncCallbacks(t *testing.T) {
 	root.Receive(sh, appctx.GitRefresh{})
 	if c.UpdateGen.Load() != before {
 		t.Fatal("a local Git refresh must not schedule a network update check")
+	}
+	// A queued release check from before a root change must not restore old markers.
+	c.UpdateGen.Add(1)
+	root.Receive(sh, updateChecksReady{gen: before, checks: map[string]addon.UpdateInfo{"alpha": {LatestTag: "stale"}}})
+	if c.UpdateChecks["alpha"].LatestTag == "stale" {
+		t.Fatal("accepted update results from a superseded project root")
 	}
 }
 

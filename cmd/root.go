@@ -91,14 +91,26 @@ func isFirstRun() bool {
 // the TUI logs, one per stdout line.
 func stdoutReport(format string, a ...any) { fmt.Printf(format+"\n", a...) }
 
-// inspectManifest finds the manifest under projectRoot and inspects every entry.
-func inspectManifest(projectRoot string) (string, []addon.Status, error) {
-	manifest, err := discoverManifest(projectRoot)
+// inspectManifest discovers a manifest and inspects entries against its resolved root.
+func inspectManifest(searchRoot string) (string, string, []addon.Status, error) {
+	manifest, m, err := discoverProject(searchRoot)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
-	statuses, err := addon.Inspect(manifest, projectRoot)
-	return manifest, statuses, err
+	statuses := make([]addon.Status, 0, len(m.Addons))
+	for _, a := range m.Addons {
+		statuses = append(statuses, addon.InspectOne(a, m.ProjectRoot))
+	}
+	return manifest, m.ProjectRoot, statuses, nil
+}
+
+func discoverProject(searchRoot string) (string, addon.Manifest, error) {
+	path, err := discoverManifest(searchRoot)
+	if err != nil {
+		return "", addon.Manifest{}, err
+	}
+	m, err := addon.LoadManifest(path)
+	return path, m, err
 }
 
 // discoverManifest finds the manifest under the project root, or errors when there is none.

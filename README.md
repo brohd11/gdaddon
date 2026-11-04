@@ -125,15 +125,19 @@ gdaddon install user/repo-name/clone               # live git checkout, default 
 gdaddon install user/repo-name/clone@dev           # live git checkout, branch dev
 ```
 
-The project root is the git toplevel (or `--root`), and a manifest is created if there
-isn't one — so this works in a fresh project. Other flags: `--asset` to pick a release
+Manifest discovery starts at the git toplevel (or `--root`), and a manifest is created
+there if none exists. The project directory defaults to the manifest's directory;
+set top-level `project_root: godot` to target a nested `godot/` project, or
+`project_root: ..` for a manifest stored under the project's `tools/` directory.
+Addon paths are relative to that resolved project directory.
+Other flags: `--asset` to pick a release
 asset when a release ships several, `--name` to record it under a different name, and
 `--no-deps` to skip dependency resolution.
 
 ### The full command line
 
 ```bash
-gdaddon                       # the TUI (project root: the git toplevel, or name one)
+gdaddon                       # the TUI (search starts at the git toplevel, or name a directory)
 gdaddon install --all         # install everything the manifest lists, plus declared deps
 gdaddon install owner/repo    # install one addon, plus its declared deps
 gdaddon list                  # the manifest's install status
@@ -145,7 +149,7 @@ gdaddon repos -- git status   # run a command in every git repo under the projec
 ```
 
 `update` is the gdaddon binary; `update-addons` is the Godot addons. Everything else is
-project-scoped and takes the project root as an optional argument (`install` takes it as
+project-scoped and takes the manifest search directory as an optional argument (`install` takes it as
 `--root`, since its argument is the repo).
 
 

@@ -14,8 +14,11 @@ addon on a fresh checkout is one action, and so is updating them.
 
 ## Starting up
 
-Run `gdaddon` in your project (or `gdaddon /path/to/project`). It finds the project root
-from git, then looks for an `addon_manifest.yml` underneath it.
+Run `gdaddon` in your project (or `gdaddon /path/to/project`). It searches for an
+`addon_manifest.yml` under the supplied directory, defaulting to the Git root.
+The project directory defaults to the manifest's own directory; a top-level
+`project_root` can redirect it, for example `project_root: godot` when the manifest
+sits above `godot/project.godot`. See Manifest format for more examples.
 
 No manifest yet? Actions ▸ Create manifest writes one. The row disappears once it exists.
 

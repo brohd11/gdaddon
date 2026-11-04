@@ -2,6 +2,38 @@
 
 `addon_manifest.yml` is the source of truth: one entry per addon, in plain YAML.
 
+## Project root
+
+An optional top-level `project_root` sets the project directory relative to the
+manifest's directory. Omitting it, setting `""`, or setting `.` uses the manifest's
+directory. Paths may include `..`; absolute paths and non-string values are errors.
+
+For a repository containing `rust/` and `godot/project.godot`, keep the manifest
+at the repository root and write:
+
+```yaml
+project_root: godot
+
+github.com/user/my_addon:
+    url: https://github.com/user/my_addon.git
+    path: addons/my_addon
+```
+
+This addon installs to `godot/addons/my_addon`. A manifest stored at
+`res://tools/addon_manifest.yml` instead uses `project_root: ..` to target the Godot
+project directory. The setting controls installation, status, dependencies,
+updates, scanning, and removal, as well as project information and local files
+such as `.gitignore` and `.godot/addons/gdaddon/last_check`.
+
+The CLI argument (or `install --root`) selects the manifest search directory.
+Once found, the manifest determines the project directory. Git actions use its
+enclosing repository. Discovery keeps using the original search directory.
+
+Existing manifests in subfolders now default to their own directory; add
+`project_root: ..` (or the appropriate relative path) to keep their former target.
+Changing the setting does not move existing installed files. Project-root settings
+are omitted when exporting a reusable set and are not imported with addon entries.
+
 ## An entry
 
 ```

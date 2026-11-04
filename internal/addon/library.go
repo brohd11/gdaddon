@@ -129,6 +129,24 @@ func UpsertEntry(manifestPath string, a Addon) error {
 
 // CreateManifest creates an empty manifest (and parent dirs), refusing to overwrite.
 func CreateManifest(path string) error {
+	return createManifest(path, nil)
+}
+
+// CreateProjectManifest creates a manifest that targets projectRoot even when the
+// manifest is stored in a subdirectory of that project.
+func CreateProjectManifest(path, projectRoot string) error {
+	rel, err := filepath.Rel(filepath.Dir(path), projectRoot)
+	if err != nil {
+		return err
+	}
+	var data []byte
+	if rel != "." {
+		data = []byte(projectRootKey + ": " + quoteYAML(filepath.ToSlash(rel)) + "\n")
+	}
+	return createManifest(path, data)
+}
+
+func createManifest(path string, data []byte) error {
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("%s already exists", filepath.Base(path))
 	} else if !os.IsNotExist(err) {
@@ -137,7 +155,7 @@ func CreateManifest(path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte{}, 0o644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 // ErrNameTaken marks a key already used by a different repo's entry, so front-ends can
@@ -152,6 +170,9 @@ var ErrNameTaken = errors.New("that name is taken by another entry")
 //
 // An empty path is omitted. An existing key is an error.
 func AddEntry(manifestPath, name, url, path string) error {
+	if name == projectRootKey {
+		return fmt.Errorf("%q is reserved for manifest settings", name)
+	}
 	if name == "" || url == "" {
 		return fmt.Errorf("plugin name and url are required")
 	}

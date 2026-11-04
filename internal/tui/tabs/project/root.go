@@ -115,6 +115,9 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 		// Local state always refreshes; release checks share the editor's daily limit.
 		return core.Seq(s.reload(sh), core.Async(checkUpdatesCmd(sh)))
 	case updateChecksReady:
+		if p.gen != c.UpdateGen.Load() {
+			return core.Action{}
+		}
 		if p.checks != nil {
 			c.SetUpdateChecks(p.checks)
 			s.rebuild(sh)

@@ -31,7 +31,8 @@ and records the attempt in the project's shared daily check timestamp.
   --json      emit a JSON array for tools to parse instead of the table
   --updates   also resolve each addon's update state (network)
 
-The project root defaults to the git toplevel, else the current directory.`,
+Manifest discovery starts at the git toplevel, else the current directory.
+The manifest's project_root is relative to its directory (default: that directory).`,
 	Args:          cobra.MaximumNArgs(1),
 	SilenceUsage:  true,
 	SilenceErrors: false,
@@ -53,15 +54,15 @@ func runListCmd(cmd *cobra.Command, args []string) error {
 }
 
 // runList inspects the manifest and prints each addon's state and version.
-func runList(projectRoot string, asJSON, withUpdates bool) error {
+func runList(searchRoot string, asJSON, withUpdates bool) error {
+	_, projectRoot, statuses, err := inspectManifest(searchRoot)
+	if err != nil {
+		return err
+	}
 	if withUpdates {
 		if _, err := addon.BeginUpdateCheck(projectRoot, time.Now(), true); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 		}
-	}
-	_, statuses, err := inspectManifest(projectRoot)
-	if err != nil {
-		return err
 	}
 	if asJSON {
 		return printListJSON(statuses, projectRoot, withUpdates)
@@ -107,7 +108,7 @@ type listEntryJSON struct {
 	DisplayName   string `json:"display_name,omitempty"`
 	State         string `json:"state"` // missing/installed/mismatch/unversioned/branch_changed/invalid
 	Kind          string `json:"kind"`  // package/clone/submodule
-	Path          string `json:"path"`  // manifest-relative
+	Path          string `json:"path"`  // relative to the resolved project root
 	FullPath      string `json:"full_path"`
 	LocalVersion  string `json:"local_version"`
 	PinnedVersion string `json:"pinned_version"`

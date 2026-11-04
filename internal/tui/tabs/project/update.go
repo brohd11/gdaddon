@@ -15,6 +15,7 @@ import (
 // updateChecksReady carries update-check results to the Project root as a broadcast, so the
 // markers appear even from another tab.
 type updateChecksReady struct {
+	gen      int64
 	checks   map[string]addon.UpdateInfo
 	stampErr error
 }
@@ -41,7 +42,7 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
 			if stampErr != nil {
-				return core.PropagateAll(updateChecksReady{stampErr: stampErr})
+				return core.PropagateAll(updateChecksReady{gen: gen, stampErr: stampErr})
 			}
 			return nil
 		}
@@ -50,6 +51,6 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 		defer cancel()
 
 		checks := addon.CheckUpdates(ctx, statuses)
-		return core.PropagateAll(updateChecksReady{checks: checks, stampErr: stampErr})
+		return core.PropagateAll(updateChecksReady{gen: gen, checks: checks, stampErr: stampErr})
 	}
 }

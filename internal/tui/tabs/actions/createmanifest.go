@@ -49,7 +49,7 @@ func newCreateManifestForm(sh *core.Shared) *components.FormScreen {
 				)
 			}
 			target := filepath.Join(dir, "addon_manifest.yml")
-			if err := addon.CreateManifest(target); err != nil {
+			if err := addon.CreateProjectManifest(target, root); err != nil {
 				return core.SeqErr(err, core.Async(f.Focus("dir")))
 			}
 			// Show the Project tab and asynchronously re-scan the paths, which finds the new manifest

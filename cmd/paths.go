@@ -9,7 +9,7 @@ import (
 	"github.com/brohd11/gitstack/repo"
 )
 
-// resolveRoot resolves the Godot project root for the TUI: the optional [project_root]
+// resolveRoot resolves the manifest search directory for the TUI: the optional [project_root]
 // arg, else the git toplevel, else (after asking on stdin) the current directory. An
 // empty root with a nil error means the user declined.
 func resolveRoot(args []string) (string, error) {

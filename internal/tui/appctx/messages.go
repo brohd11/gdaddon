@@ -3,6 +3,7 @@ package appctx
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/brohd11/bubblestack/core"
+	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gitstack/repoui"
 )
 
@@ -50,14 +51,23 @@ type GitRefresh = repoui.RefreshMsg
 // GitRepoRefresh identifies the single checkout changed by a git task.
 type GitRepoRefresh = repoui.RepoRefreshMsg
 
-// RefreshPaths re-runs Scan after the paths may have changed. Async, it scans in a cmd
-// and then broadcasts PathRefresh, so receivers see the new paths; sync, it scans inline
-// without a broadcast.
+type pathsFound struct {
+	path string
+	err  error
+}
+
+// RefreshPaths discovers paths off the UI thread when async, then applies them
+// through Ctx.Receive before broadcasting PathRefresh. Sync scans inline.
 func RefreshPaths(sh *core.Shared, async bool) tea.Cmd {
 	if async {
+		c := Of(sh)
+		root := c.SearchRoot
+		if root == "" {
+			root = c.ProjectRoot
+		}
 		return func() tea.Msg {
-			Of(sh).Scan()
-			return core.PropagateAll(PathRefresh{})
+			path, err := addon.FindManifest(root)
+			return core.PropagateAll(pathsFound{path: path, err: err})
 		}
 	}
 	Of(sh).Scan()

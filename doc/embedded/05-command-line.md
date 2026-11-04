@@ -14,9 +14,15 @@ gdaddon repos -- <command>    run a command in every git repo under the project
 The one pair worth learning: **`update` is the gdaddon binary, `update-addons` is the
 Godot addons.** `update` behaves the same here as in every other brohd11 app.
 
-Each project-scoped command takes the project root as an optional argument
-(`gdaddon list /path/to/proj`), defaulting to the git toplevel, else the current
-directory. `install` takes it as `--root` instead, because its argument is the repo.
+Each project-scoped command accepts an optional manifest search directory.
+For example: `gdaddon list /path/to/proj`.
+
+Discovery defaults to the Git root, or the current directory outside Git.
+The install command takes the search directory as a flag: `--root <dir>`.
+
+After discovery, the manifest's top-level `project_root` sets the project directory
+relative to the manifest. Omitting it, an empty string, and a dot all mean the
+manifest's own directory. Addon paths are relative to this resolved directory.
 
 ## install
 
@@ -91,7 +97,7 @@ use the Git actions, or a terminal.
 - `--name <name>` — record the entry under a name other than the one derived from the
   repo. Needed when that name is already taken by a different repo.
 - `--no-deps` — skip declared dependencies, in either form.
-- `--root <dir>` — the project root, when it isn't the git toplevel.
+- `--root <dir>` — where to search for the manifest, when it isn't the git toplevel.
 
 ## list
 

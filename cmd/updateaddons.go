@@ -19,7 +19,8 @@ release and installs them, reporting progress as it goes.
 A locked entry is never updated, and an addon whose release ships several packages is
 skipped with a note (there is no way to pick between them without a user).
 
-The project root defaults to the git toplevel, else the current directory.
+Manifest discovery starts at the git toplevel, else the current directory.
+The manifest's project_root is relative to its directory (default: that directory).
 
 This updates Godot addons. To update the gdaddon binary itself, see 'gdaddon update'.`,
 	Args:          cobra.MaximumNArgs(1),
@@ -37,10 +38,11 @@ func runUpdateAddons(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	manifest, err := discoverManifest(projectRoot)
+	manifest, m, err := discoverProject(projectRoot)
 	if err != nil {
 		return err
 	}
+	projectRoot = m.ProjectRoot
 	if _, err := addon.BeginUpdateCheck(projectRoot, time.Now(), true); err != nil {
 		fmt.Fprintln(cmd.ErrOrStderr(), err)
 	}

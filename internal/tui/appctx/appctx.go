@@ -21,6 +21,7 @@ import (
 type Ctx struct {
 	Version       string // the running binary's version, for the self-update check
 	ManifestPath  string
+	SearchRoot    string // stable discovery directory, independent of manifest settings
 	ProjectRoot   string
 	ManifestRel   string // ManifestPath relative to ProjectRoot, for display
 	ProjectName   string
@@ -66,7 +67,7 @@ type Ctx struct {
 	// OrphanDeps marks is_dependency entries nothing installed requires, by name.
 	OrphanDeps map[string]bool
 
-	// RootRepo is the project root's own checkout (nil if none), re-described each loadProject
+	// RootRepo is the checkout enclosing the project root (nil if none), re-described each loadProject
 	// for the header, the fetch key and the batch menu's include-root toggle.
 	RootRepo *repo.Repo
 	// Fetch belongs to the app session, surviving root rebuilds and navigation.
@@ -111,7 +112,7 @@ func NewDeferred(projectRoot, version string) *Ctx {
 }
 
 func newCtx(projectRoot, version string) *Ctx {
-	c := &Ctx{ProjectRoot: projectRoot, Version: version}
+	c := &Ctx{SearchRoot: projectRoot, ProjectRoot: projectRoot, Version: version}
 	c.Scan()
 	c.loadGlobal()
 	c.loadArchive()
@@ -139,6 +140,8 @@ func (c *Ctx) loadArchive() {
 }
 
 func (c *Ctx) loadProject() {
+	addons, err := c.readProject()
+	c.noteLoadErr("manifest", err)
 	defer c.indexProject()
 	c.ListUpdates.Reset()
 	c.DirtyProjectRows = make(map[string]bool)
@@ -146,11 +149,7 @@ func (c *Ctx) loadProject() {
 	c.projectStatuses = nil
 	c.Pending, c.unseen, c.RootPending = nil, nil, false
 	// Describe the root repo even without a manifest, so the header stays current.
-	if root, ok := repo.DescribeRoot(c.ProjectRoot); ok {
-		c.RootRepo = &root
-	} else {
-		c.RootRepo = nil
-	}
+	c.RootRepo = describeProjectRepo(c.ProjectRoot)
 	if c.ManifestPath == "" {
 		c.ProjectAddons = nil
 		c.DepStatuses = nil
@@ -159,8 +158,6 @@ func (c *Ctx) loadProject() {
 		c.GitSync = nil
 		return
 	}
-	addons, err := addon.Parse(c.ManifestPath)
-	c.noteLoadErr("manifest", err)
 	c.ProjectAddons = addons
 	// Inspect the parsed entries once and share the statuses between caches and
 	// row rendering. A failed parse leaves no statuses to inspect.
@@ -247,13 +244,51 @@ func (c *Ctx) DrainLoadErrs() []string {
 // Project list to render.
 func (c *Ctx) SetUpdateChecks(m map[string]addon.UpdateInfo) { c.UpdateChecks = m }
 
-// Scan finds the manifest under the project root and derives the display fields, at
+// Scan finds the manifest under the original search directory and derives the display fields, at
 // construction and via RefreshPaths. A missing manifest leaves them empty (the header
 // shows a hint).
 func (c *Ctx) Scan() {
-	path, err := addon.FindManifest(c.ProjectRoot)
+	if c.SearchRoot == "" {
+		c.SearchRoot = c.ProjectRoot
+	}
+	path, err := addon.FindManifest(c.SearchRoot)
+	c.applyScan(path, err)
+}
+
+func (c *Ctx) applyScan(path string, err error) {
 	c.noteLoadErr("manifest search", err)
 	c.ManifestPath = path
+	_, err = c.readProject()
+	c.noteLoadErr("manifest", err)
+}
+
+// readProject reloads root settings whenever entries are refreshed, including
+// hand edits. Discovery always stays anchored to SearchRoot.
+func (c *Ctx) readProject() ([]addon.Addon, error) {
+	if c.SearchRoot == "" {
+		c.SearchRoot = c.ProjectRoot
+	}
+	root := c.SearchRoot
+	var addons []addon.Addon
+	if c.ManifestPath != "" {
+		m, err := addon.LoadManifest(c.ManifestPath)
+		if err != nil {
+			return nil, err
+		}
+		root, addons = m.ProjectRoot, m.Addons
+	}
+	if root != c.ProjectRoot {
+		// Retire work tied to the old directory before publishing the new root.
+		c.Refresh.Start(0)
+		c.UpdateGen.Add(1)
+		c.ProjectRoot = root
+		c.projectLoaded = false
+		c.ProjectAddons, c.projectStatuses, c.projectIndex = nil, nil, nil
+		c.Pending, c.unseen = nil, nil
+		c.GitDirty, c.GitSync = nil, nil
+		c.DepStatuses, c.OrphanDeps, c.UpdateChecks = nil, nil, nil
+		c.RootRepo, c.RootPending, c.RankSnap = nil, false, nil
+	}
 	switch {
 	case c.ManifestPath == "":
 		c.ManifestRel = ""
@@ -265,6 +300,21 @@ func (c *Ctx) Scan() {
 		c.ManifestRel = rel
 	}
 	c.ProjectName, c.HasProject = addon.ProjectName(c.ProjectRoot)
+	return addons, nil
+}
+
+// describeProjectRepo keeps root Git actions on the enclosing checkout when the
+// Godot project lives in a repository subdirectory.
+func describeProjectRepo(projectRoot string) *repo.Repo {
+	if root, ok := repo.DescribeRoot(projectRoot); ok {
+		return &root
+	}
+	if dir, ok := repo.RepoRoot(projectRoot); ok {
+		if root, ok := repo.DescribeRoot(dir); ok {
+			return &root
+		}
+	}
+	return nil
 }
 
 // Of recovers the gdaddon context from a Shared. Tabs call c := appctx.Of(sh) to
@@ -276,6 +326,10 @@ func Of(sh *core.Shared) *Ctx { return core.App[Ctx](sh) }
 // reloads are shown here, since App is notified last.
 func (c *Ctx) Receive(sh *core.Shared, payload any) core.Action {
 	acts := []core.Action{core.OnThemeChange(payload)}
+	if paths, ok := payload.(pathsFound); ok {
+		c.applyScan(paths.path, paths.err)
+		acts = append(acts, core.PropagateAll(PathRefresh{}))
+	}
 	for _, e := range c.DrainLoadErrs() {
 		acts = append(acts, core.SetStatusAndLog(e))
 	}

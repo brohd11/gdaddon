@@ -52,7 +52,7 @@ func (c *Ctx) setGitState(name string, dirty bool, sync addon.GitSync) {
 // change the manifest or package layout, so they report full and the caller starts a
 // whole-project refresh.
 func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) (full bool) {
-	if msg.Targets(c.ProjectRoot) {
+	if msg.Targets(c.ProjectRoot) || (c.RootRepo != nil && msg.Targets(c.RootRepo.Dir)) {
 		return true
 	}
 	statuses := c.ProjectStatuses()
@@ -80,7 +80,7 @@ func (c *Ctx) RefreshRepo(msg repoui.RepoRefreshMsg) (full bool) {
 		c.recordGitState(s)
 	}
 	if c.RootRepo != nil && msg.Affects(c.RootRepo.Dir) {
-		root, ok := repo.DescribeRoot(c.ProjectRoot)
+		root, ok := repo.DescribeRoot(c.RootRepo.Dir)
 		c.RootRepo = nil
 		if ok {
 			c.RootRepo = &root

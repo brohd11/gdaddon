@@ -163,16 +163,41 @@ func (s Status) Present() bool {
 	return s.State == StateInstalled || s.State == StateMismatch || s.State == StateUnversioned || s.State == StateBranchChanged
 }
 
-// Parse reads and unmarshals the manifest into a name-sorted slice.
-func Parse(manifestPath string) ([]Addon, error) {
+const projectRootKey = "project_root"
+
+// Manifest holds project settings and name-sorted addon entries. ProjectRoot is an
+// absolute path, resolved relative to the manifest's directory.
+type Manifest struct {
+	ProjectRoot string
+	Addons      []Addon
+}
+
+// LoadManifest reads project settings separately from the flat addon mapping.
+// An omitted or empty project_root means the manifest's directory.
+func LoadManifest(manifestPath string) (Manifest, error) {
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf("could not read %s: %w", manifestPath, err)
+		return Manifest{}, fmt.Errorf("could not read %s: %w", manifestPath, err)
 	}
 
-	var raw map[string]Addon
+	var raw map[string]yaml.Node
 	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("could not parse YAML: %w", err)
+		return Manifest{}, fmt.Errorf("could not parse %s: %w", manifestPath, err)
+	}
+	root := ""
+	if node, ok := raw[projectRootKey]; ok {
+		if node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
+			return Manifest{}, fmt.Errorf("%s: project_root must be a relative path string", manifestPath)
+		}
+		root = node.Value
+		if filepath.IsAbs(root) {
+			return Manifest{}, fmt.Errorf("%s: project_root must be relative to the manifest directory", manifestPath)
+		}
+		delete(raw, projectRootKey)
+	}
+	root, err = filepath.Abs(filepath.Join(filepath.Dir(manifestPath), root))
+	if err != nil {
+		return Manifest{}, fmt.Errorf("%s: could not resolve project_root: %w", manifestPath, err)
 	}
 
 	names := make([]string, 0, len(raw))
@@ -183,11 +208,22 @@ func Parse(manifestPath string) ([]Addon, error) {
 
 	addons := make([]Addon, 0, len(raw))
 	for _, name := range names {
-		a := raw[name]
+		node := raw[name]
+		var a Addon
+		if err := node.Decode(&a); err != nil {
+			return Manifest{}, fmt.Errorf("%s: addon %q: %w", manifestPath, name, err)
+		}
 		a.Name = name
 		addons = append(addons, a)
 	}
-	return addons, nil
+	return Manifest{ProjectRoot: root, Addons: addons}, nil
+}
+
+// Parse reads only addon entries, for callers such as global lists and sets that
+// do not use project settings.
+func Parse(manifestPath string) ([]Addon, error) {
+	m, err := LoadManifest(manifestPath)
+	return m.Addons, err
 }
 
 // Inspect parses the manifest and computes each addon's local state against
