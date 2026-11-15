@@ -32,14 +32,15 @@ func (r *versionRoot) Receive(_ *core.Shared, payload any) core.Action {
 	return core.Action{}
 }
 
-func versionRouter(f *components.FormScreen) (core.Router, *versionRoot, *core.Shared) {
+func versionRouter(f *components.FormScreen) (core.Router, *versionRoot, *core.Shared, *components.PickerScreen) {
 	sh := core.NewShared(nil)
 	sh.Chrome = &core.Chrome{Status: components.NewStatusLine()}
 	root := &versionRoot{PickerScreen: components.NewPicker(nil, components.PickerOpts{})}
 	r := core.NewRouter(sh, []core.TabEntry{{Title: "Test", New: func(*core.Shared) core.Screen { return root }}})
-	m, _ := r.Update(core.Push(components.NewPicker(nil, components.PickerOpts{})))
+	submenu := components.NewPicker(nil, components.PickerOpts{})
+	m, _ := r.Update(core.Push(submenu))
 	m, _ = m.Update(core.Push(f))
-	return m.(core.Router), root, sh
+	return m.(core.Router), root, sh, submenu
 }
 
 func TestVersionFormPrefill(t *testing.T) {
@@ -83,10 +84,10 @@ func TestVersionFormSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, root, _ := versionRouter(f)
+	r, root, _, submenu := versionRouter(f)
 	m, _ := r.Update(tuitest.KeyMsg("enter"))
-	if m.(core.Router).Top() != root || root.dirty != 1 {
-		t.Fatal("save must broadcast ProjectDirty and close the form and submenu")
+	if m.(core.Router).Top() != submenu || root.dirty != 1 {
+		t.Fatal("save must broadcast ProjectDirty and return to the original submenu")
 	}
 	got, _ := os.ReadFile(path)
 	if string(got) != strings.Replace(body, "0.1.0", "0.1.1", 1) {
@@ -105,7 +106,7 @@ func TestVersionFormCancelAndErrors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r, root, sh := versionRouter(f)
+			r, root, sh, submenu := versionRouter(f)
 			switch mode {
 			case "blank":
 				f.SetValue("version", "")
@@ -135,7 +136,7 @@ func TestVersionFormCancelAndErrors(t *testing.T) {
 				t.Fatal("cancel or failed save must not broadcast a change")
 			}
 			if mode == "cancel" {
-				if m.(core.Router).Top() == f || m.(core.Router).Top() == root {
+				if m.(core.Router).Top() != submenu {
 					t.Fatal("cancel must return to the submenu")
 				}
 			} else if m.(core.Router).Top() != f || !strings.Contains(sh.Chrome.Status.View(), "error:") {

@@ -48,7 +48,7 @@ func New(dir, label string) (*components.FormScreen, error) {
 			return core.Seq(
 				core.SetStatusAndLog(label+": version updated"),
 				core.PropagateAll(appctx.ProjectDirty{}),
-				core.Pop(2),
+				core.Pop(1),
 			)
 		},
 	}), nil
