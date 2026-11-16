@@ -26,8 +26,8 @@ manifest's own directory. Addon paths are relative to this resolved directory.
 
 ## install
 
-`gdaddon install owner/repo` downloads the source of that addon's latest release, records it in the
-project's manifest, and installs the dependencies it declares — and theirs, and so on.
+`gdaddon install owner/repo` downloads the source of that addon's latest release (its newest Git tag
+if it has no releases), records it in the project's manifest, and installs the dependencies it declares — and theirs, and so on.
 Only that closure is touched: an unrelated entry sitting uninstalled in your manifest
 stays uninstalled. `--all` does the whole manifest instead; that's the equivalent of
 Actions ▸ Install All + Deps.

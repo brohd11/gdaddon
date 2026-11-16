@@ -39,7 +39,8 @@ A repo is named as owner/repo, or host/owner/repo for a host other than
 github.com — the same spec a plugin.cfg/package.cfg 'require' or 'deps' entry
 uses, and the one gdpackage builds against. An optional @tag installs
 that tag's source; @latest is the newest published non-prerelease, which is also
-what you get with no @ref at all.
+what you get with no @ref at all. A repo with no releases falls back to its
+newest Git tag.
 
 Append /release to install the tag's uploaded release asset instead (needed for
 GDExtension and other prebuilt packages); a release shipping several assets is
@@ -76,7 +77,7 @@ discovers.
   gdaddon install --all --trust-deps               # ... and don't ask about deps
   gdaddon install brohd11/my-addon
   gdaddon install brohd11/my-addon@v1.2.0          # the tag's source
-  gdaddon install brohd11/my-addon@latest          # newest release's tag, pinned
+  gdaddon install brohd11/my-addon@latest          # newest release's tag (or newest tag), pinned
   gdaddon install brohd11/my-ext/release@v1.2.0    # the uploaded release asset
   gdaddon install brohd11/my-ext/release@v1.2.0:*-linux.zip
   gdaddon install codeberg.org/someone/their-addon

@@ -26,7 +26,7 @@ it has a dot).
 | `owner/repo@v1.0.0` | v1.0.0's source, or newer |
 | `owner/repo/release@v1.0.0` | v1.0.0's uploaded release asset |
 | `owner/repo/release@v1.0.0:*-linux.zip` | the upload matching the glob |
-| `owner/repo@latest` | the newest published non-prerelease, pinned when it's recorded |
+| `owner/repo@latest` | the newest published non-prerelease (or newest Git tag if there are no releases), pinned when it's recorded |
 | `owner/repo` | any version — recorded unpinned for you to pin |
 
 A plain tag is the tag's **source**: the repo as it was at that tag, which is what
@@ -55,8 +55,8 @@ gdaddon doesn't compare its branch against the required tag.
 
 ### The reserved word
 
-`latest` is reserved. It resolves to the newest published non-prerelease **when the entry
-is recorded**, and the manifest stores the tag it resolved to, not the word — so the entry
+`latest` is reserved. It resolves to the newest published non-prerelease — or, for a repo
+with no releases, its newest Git tag — **when the entry is recorded**, and the manifest stores the tag it resolved to, not the word — so the entry
 is a real pin and moving it forward stays an explicit act (`gdaddon update-addons`). A repo
 that publishes a literal rolling tag named `latest` can't be pinned to it by name; the
 reserved meaning wins.

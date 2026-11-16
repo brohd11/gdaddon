@@ -117,7 +117,7 @@ along with the dependencies that addon declares (and theirs, and so on). Unlike
 "Install All + Deps", nothing else in the manifest is touched.
 
 ```bash
-gdaddon install user/repo-name                     # latest release's source
+gdaddon install user/repo-name                     # latest release's source (newest tag if none)
 gdaddon install user/repo-name@v1.2.0              # a specific tag's source
 gdaddon install user/repo-name/release@v1.2.0      # its uploaded release asset
 gdaddon install codeberg.org/someone/their-addon   # a host other than github.com

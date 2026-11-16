@@ -250,8 +250,8 @@ first segment counts as a host only when it has a dot). `@` always names the ref
   from source (GDExtension, third-party zips). There is no fallback to source.
   `/release@v1.0.0:*-linux.zip` picks among several uploads by glob, which survives a tag
   bump; git forbids `:` in tags, so the split is unambiguous.
-- `@latest` — the newest published non-prerelease, resolved and pinned when the entry is
-  recorded, so the manifest holds a real tag rather than the word. It is reserved: a repo
+- `@latest` — the newest published non-prerelease (the newest Git tag when the repo has
+  no releases), resolved and pinned when the entry is recorded, so the manifest holds a real tag rather than the word. It is reserved: a repo
   publishing a literal `latest` tag cannot be pinned to it by name.
 - no `@ref` — unpinned; the repo is recorded for you to pin later.
 

@@ -13,7 +13,8 @@ import (
 
 // ResolveVersion finds the release d names: a `/release` tag among published releases only,
 // any other tag among git tags (its source package). No tag, or LatestTag, is the newest
-// published non-prerelease either way, decided here only.
+// published non-prerelease either way, decided here only. A repo with no releases at all
+// falls back to its newest git tag's source; a `/release` has nothing to fall back to.
 func ResolveVersion(ctx context.Context, d Dependency) (source.Release, error) {
 	if d.Tag != "" && !d.WantsLatest() {
 		if !d.Release {
@@ -29,7 +30,30 @@ func ResolveVersion(ctx context.Context, d Dependency) (source.Release, error) {
 	if err != nil {
 		return source.Release{}, err
 	}
+	if len(listing.Releases) == 0 {
+		return latestTag(ctx, d)
+	}
 	return SelectRelease(listing.Releases, "")
+}
+
+// latestTag is ResolveVersion's fallback for a repo with no releases: the newest
+// non-prerelease git tag as a source package. Releases win whenever any exist, so an
+// unpublished tag never shadows one (and update checks, which read releases, agree).
+func latestTag(ctx context.Context, d Dependency) (source.Release, error) {
+	if d.Release {
+		return source.Release{}, fmt.Errorf("no releases found; drop /release to install the newest tag's source")
+	}
+	if !source.SupportsTags(d.RepoURL) {
+		return source.Release{}, fmt.Errorf("no releases found")
+	}
+	tags, err := source.Tags(ctx, d.RepoURL)
+	if err != nil {
+		return source.Release{}, err
+	}
+	if rel, ok := LatestRelease(tags); ok {
+		return rel, nil
+	}
+	return source.Release{}, fmt.Errorf("no releases or Git tags found")
 }
 
 // PickDepAsset picks what d installs from rel without a user: the generated source archive,
