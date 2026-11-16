@@ -190,7 +190,9 @@ func LoadManifest(manifestPath string) (Manifest, error) {
 			return Manifest{}, fmt.Errorf("%s: project_root must be a relative path string", manifestPath)
 		}
 		root = node.Value
-		if filepath.IsAbs(root) {
+		// filepath.IsAbs alone misses rooted paths without a volume on Windows ("/tmp",
+		// `\tmp`) and volume-relative ones ("C:dir"), which Join would silently nest.
+		if filepath.IsAbs(root) || filepath.VolumeName(root) != "" || path.IsAbs(filepath.ToSlash(root)) {
 			return Manifest{}, fmt.Errorf("%s: project_root must be relative to the manifest directory", manifestPath)
 		}
 		delete(raw, projectRootKey)
