@@ -5,7 +5,6 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,10 +29,7 @@ type sourcesFile struct {
 	Sources []SourceConfig `yaml:"sources"`
 }
 
-// BinSubdir is the ~/.gdaddon subdirectory the installers put the binary in.
-const BinSubdir = "bin"
-
-// Dir is ~/.gdaddon, the home for the config dir, bin/, and the default archive. The
+// Dir is ~/.gdaddon, the home for the config dir and the default archive. The
 // ~/.<app> convention itself is goutil/configdir's; this pins gdaddon's own name.
 func Dir() (string, error) {
 	return configdir.Dir("gdaddon")
@@ -69,28 +65,6 @@ func Ensure() (created []string, err error) {
 	}
 	slices.Sort(created)
 	return created, nil
-}
-
-// EnsureGitignore writes ~/.gdaddon/.gitignore ignoring bin/ when none exists (the folder
-// is meant to be committable, the binary is not). An existing file is left alone.
-func EnsureGitignore() (created bool, path string, err error) {
-	base, err := Dir()
-	if err != nil {
-		return false, "", err
-	}
-	path = filepath.Join(base, ".gitignore")
-	if _, err := os.Stat(path); err == nil {
-		return false, path, nil // already present — never overwrite the user's file
-	} else if !os.IsNotExist(err) {
-		return false, path, err
-	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return false, path, err
-	}
-	if err := os.WriteFile(path, []byte(BinSubdir+"/\n"), 0o644); err != nil {
-		return false, path, err
-	}
-	return true, path, nil
 }
 
 // Load reads ~/.gdaddon/config/config.yml. A missing file is not an error — it

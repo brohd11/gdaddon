@@ -23,9 +23,6 @@ $Supported  = 'windows-amd64'
 function Write-PostInstallNote {
     Write-Host "Run '$Binary' in a Godot project to manage its addons."
     Write-Host "Later updates: '$Binary update'."
-    Write-Host ""
-    Write-Host "To also place a copy where the Godot EditorPlugin looks for it (~/.gdaddon/bin):"
-    Write-Host ('  $env:BIN_DIR = "$env:USERPROFILE\.gdaddon\bin"; irm https://raw.githubusercontent.com/' + $Repo + '/main/install.ps1 | iex')
 }
 # ---- end config ----
 

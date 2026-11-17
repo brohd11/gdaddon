@@ -11,12 +11,10 @@ gdaddon keeps everything of its own under `~/.gdaddon`, created on first run.
   hooks/config.yml     optional Git action commands (see Git action hooks)
   archive/             downloaded package zips
   plugins.yml          your global addon list
-  bin/                 the gdaddon binary, when install.sh put it here
 ```
 
 Both config files are written once, with defaults, and then left alone — they're yours to
-edit, and gdaddon reads whatever it finds. The folder is safe to commit: the shipped
-`.gitignore` excludes `bin/` (delete that line if you want the binary in there too).
+edit, and gdaddon reads whatever it finds. The folder is safe to commit.
 
 ## config.yml
 
@@ -73,12 +71,7 @@ and installs it in place, over wherever this binary lives. gdaddon also checks o
 startup and drops a line in the status bar when one is waiting. A self-update doesn't
 change the process already running, so relaunch to pick it up.
 
-Placing the binary in the first place is `install.sh`'s job, not gdaddon's — including
-the `~/.gdaddon/bin` copy the Godot EditorPlugin launches:
-
-```
-BIN_DIR="$HOME/.gdaddon/bin" curl -fsSL https://raw.githubusercontent.com/brohd11/gdaddon/main/install.sh | sh
-```
+Placing the binary in the first place is `install.sh`'s job, not gdaddon's.
 
 ### GitHub search filters
 
