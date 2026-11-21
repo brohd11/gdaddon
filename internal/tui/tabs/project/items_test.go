@@ -6,6 +6,26 @@ import (
 	"github.com/brohd11/gdaddon/internal/addon"
 )
 
+func TestAddonDescInstalledVersion(t *testing.T) {
+	for _, tc := range []struct {
+		local string
+		want  string
+	}{
+		{"12.1.0", "✓ installed v12.1.0"},
+		{"v12.1.0", "✓ installed v12.1.0"},
+		{"V12.1.0", "✓ installed V12.1.0"},
+		{"12.1.0-rc.1+build", "✓ installed v12.1.0-rc.1+build"},
+		{"1.2", "✓ installed v1.2"},
+		{"nobodywho-godot-v12.1.0", "✓ installed nobodywho-godot-v12.1.0"},
+		{"", "✓ installed"},
+	} {
+		s := addon.Status{State: addon.StateInstalled, LocalVersion: tc.local}
+		if got := addonDesc(s); got != tc.want {
+			t.Errorf("addonDesc with version %q = %q, want %q", tc.local, got, tc.want)
+		}
+	}
+}
+
 // TestRowMarker covers the warning suffix a row's name carries, including the case that
 // motivated the git-sync work: several warnings on one checkout compose into one bracket.
 func TestRowMarker(t *testing.T) {

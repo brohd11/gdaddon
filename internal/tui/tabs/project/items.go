@@ -9,6 +9,7 @@ import (
 	"github.com/brohd11/gdaddon/internal/source"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	"github.com/brohd11/gdaddon/internal/tui/sysopen"
+	"github.com/brohd11/gdaddon/internal/version"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -60,7 +61,14 @@ func addonDesc(s addon.Status) string {
 			desc = "• not installed"
 		}
 	case addon.StateInstalled:
-		desc = fmt.Sprintf("✓ installed v%s", s.LocalVersion)
+		desc = "✓ installed"
+		local := s.LocalVersion
+		if local != "" {
+			if !strings.HasPrefix(local, "v") && !strings.HasPrefix(local, "V") && version.IsValid(local) {
+				local = "v" + local
+			}
+			desc += " " + local
+		}
 	case addon.StateUnversioned:
 		desc = "✓ installed (no version pinned)"
 	case addon.StateMismatch:
