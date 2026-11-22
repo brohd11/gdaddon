@@ -19,7 +19,7 @@ func TestSubcommandsRegistered(t *testing.T) {
 	}
 	sort.Strings(got)
 	// cobra adds `completion`/`help` lazily during Execute, so they aren't here.
-	want := []string{"install", "list", "repos", "update", "update-addons"}
+	want := []string{"install", "list", "plugin", "repos", "update", "update-addons"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("subcommands =\n got %v\nwant %v", got, want)
 	}

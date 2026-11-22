@@ -18,12 +18,22 @@ Everything else is a subcommand, each one non-interactive and safe for scripting
 gdaddon list                # print the manifest's install status, then exit
 gdaddon install --all       # install/update everything in the manifest, plus declared deps
 gdaddon install owner/repo  # install one addon, plus its declared deps
+gdaddon plugin install     # latest companion editor plugin; run in the Godot project root
 gdaddon update-addons       # update installed addons to their latest release
 gdaddon update              # update the gdaddon binary itself
 ```
 
 Note the split: `update` is about the gdaddon binary (as in every brohd11 app),
 `update-addons` is about the Godot addons in the project.
+
+`gdaddon plugin install` downloads the latest stable release ZIP from
+[gdaddon-editor-plugin](https://github.com/brohd11/gdaddon-editor-plugin) into
+`addons/gdaddon/`. It requires `project.godot` in the current directory, accepts
+no directory argument, and does not search parents or use an addon manifest.
+Enable **gdaddon** in Project Settings > Plugins after installation. Rerun the
+command to refresh the plugin independently of the binary; use `--force` to
+replace an unrelated destination or a newer installed version. It honors the
+`gitignore_installs` setting and does not register the plugin or resolve dependencies.
 
 `list` also has a machine-parseable mode for tools (e.g. a Godot editor plugin)
 that drive `gdaddon` and render their own UI from its output:

@@ -23,9 +23,16 @@ Designed to work with standard addon project structure, but also supports submod
 ### Examples
 Installing 25 addons: [here](https://youtu.be/1EIBzfUs50g)
 
-#### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-EditorPlugin)
+#### [gdaddon - EditorPlugin](https://github.com/brohd11/gdaddon-editor-plugin)
 This is the Godot EditorPlugin companion to gdaddon. Currently, it runs a check for updates on installed addons
 and alerts if any are available.
+
+Run `gdaddon plugin install` in the directory containing `project.godot` to download
+the latest stable release into `addons/gdaddon/`, then enable **gdaddon** in
+Project Settings > Plugins. Run the same command again to refresh it independently
+of the gdaddon binary. It does not read, create, or modify an addon manifest.
+It honors `gitignore_installs`; use `--force` to replace an unrelated destination
+or a newer installed plugin.
 
 ## Quick Start
 
@@ -140,6 +147,7 @@ asset when a release ships several, `--name` to record it under a different name
 gdaddon                       # the TUI (search starts at the git toplevel, or name a directory)
 gdaddon install --all         # install everything the manifest lists, plus declared deps
 gdaddon install owner/repo    # install one addon, plus its declared deps
+gdaddon plugin install       # latest companion editor plugin; run in the Godot project root
 gdaddon list                  # the manifest's install status
 gdaddon list --json           # the same, as JSON for tools to parse
 gdaddon list --updates        # also check each addon for a newer release (network)
@@ -148,9 +156,10 @@ gdaddon update                # update the gdaddon binary itself
 gdaddon repos -- git status   # run a command in every git repo under the project
 ```
 
-`update` is the gdaddon binary; `update-addons` is the Godot addons. Everything else is
-project-scoped and takes the manifest search directory as an optional argument (`install` takes it as
-`--root`, since its argument is the repo).
+`update` is the gdaddon binary; `update-addons` is the Godot addons. Manifest commands
+take the search directory as an optional argument (`install` takes it as `--root`,
+since its argument is the repo). `plugin install` requires `project.godot` in the
+current directory and accepts no directory argument.
 
 
 More docs can be found [here](doc/docs.md)

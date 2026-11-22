@@ -5,6 +5,7 @@ Everything gdaddon does outside this TUI is a subcommand, one per job.
 ```
 gdaddon install --all         install everything the manifest lists, plus declared deps
 gdaddon install owner/repo    install one addon, plus its declared deps
+gdaddon plugin install       download the companion editor plugin into this Godot project
 gdaddon list                  print the manifest's install status
 gdaddon update-addons         update installed addons to their latest release
 gdaddon update                update the gdaddon binary itself
@@ -14,7 +15,7 @@ gdaddon repos -- <command>    run a command in every git repo under the project
 The one pair worth learning: **`update` is the gdaddon binary, `update-addons` is the
 Godot addons.** `update` behaves the same here as in every other brohd11 app.
 
-Each project-scoped command accepts an optional manifest search directory.
+Manifest commands accept an optional manifest search directory.
 For example: `gdaddon list /path/to/proj`.
 
 Discovery defaults to the Git root, or the current directory outside Git.
@@ -98,6 +99,24 @@ use the Git actions, or a terminal.
   repo. Needed when that name is already taken by a different repo.
 - `--no-deps` — skip declared dependencies, in either form.
 - `--root <dir>` — where to search for the manifest, when it isn't the git toplevel.
+
+## plugin install
+
+Run `gdaddon plugin install` from the directory containing `project.godot` to
+download the latest stable release ZIP of
+[the companion editor plugin](https://github.com/brohd11/gdaddon-editor-plugin)
+into `addons/gdaddon/`. Enable **gdaddon** in Project Settings > Plugins afterward.
+
+Run it in the project root. It accepts no directory argument and has no `--root`
+flag. It does not search parents or read, create, or
+modify an addon manifest, register a global addon, or install dependencies.
+
+Run it again to refresh the plugin independently of the gdaddon binary version.
+An unrelated destination or a newer installed version requires `--force` to replace.
+Obsolete files are removed; Godot-generated `.uid` and `.import` sidecars for
+retained files stay. Symlinked install paths are refused even with `--force`.
+The existing `gitignore_installs` setting controls whether `/addons/gdaddon/` is
+added to the project's `.gitignore`.
 
 ## list
 
