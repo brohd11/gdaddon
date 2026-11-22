@@ -63,6 +63,7 @@ func (c *Ctx) beginProject() {
 	if err != nil {
 		return
 	}
+	c.notePins(addons)
 	// Drop git markers of entries no longer in the manifest.
 	names := make(map[string]bool, len(addons))
 	for _, a := range addons {

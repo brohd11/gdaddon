@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync/atomic"
 
 	"github.com/brohd11/gdaddon/internal/addon"
@@ -50,6 +51,12 @@ type Ctx struct {
 	UpdateChecks map[string]addon.UpdateInfo
 	// UpdateGen numbers update checks so one superseded before it starts skips its fetches.
 	UpdateGen atomic.Int64
+	// pinBaseline is each entry's addon.UpdatePinKey as of the last async reload, and
+	// pinChanged the entries whose key changed since, awaiting a targeted update re-check
+	// (TakePinChanged). Kept apart from projectStatuses because a synchronous
+	// RefreshProject can re-read the manifest before the reload compares.
+	pinBaseline map[string]string
+	pinChanged  []addon.Addon
 
 	// DepStatuses caches each addon's declared dependencies and their state by name
 	// (recomputed locally in loadProject), for the missing-deps marker, the Dependencies row
@@ -163,6 +170,9 @@ func (c *Ctx) loadProject() {
 	// row rendering. A failed parse leaves no statuses to inspect.
 	var statuses []addon.Status
 	if err == nil {
+		if c.pinBaseline == nil {
+			c.pinBaseline = pinKeys(addons)
+		}
 		for _, a := range addons {
 			statuses = append(statuses, addon.InspectOne(a, c.ProjectRoot))
 		}
@@ -244,6 +254,67 @@ func (c *Ctx) DrainLoadErrs() []string {
 // Project list to render.
 func (c *Ctx) SetUpdateChecks(m map[string]addon.UpdateInfo) { c.UpdateChecks = m }
 
+// MergeUpdateChecks stores re-check results for entries whose pin still has the key that
+// was checked (keys by name); a result for an entry edited again since is dropped. It
+// reports whether anything was stored.
+func (c *Ctx) MergeUpdateChecks(checks map[string]addon.UpdateInfo, keys map[string]string) bool {
+	stored := false
+	for name, info := range checks {
+		i, ok := c.projectIndex[name]
+		if !ok || addon.UpdatePinKey(c.projectStatuses[i].Addon) != keys[name] {
+			continue
+		}
+		if c.UpdateChecks == nil {
+			c.UpdateChecks = make(map[string]addon.UpdateInfo)
+		}
+		c.UpdateChecks[name] = info
+		stored = true
+	}
+	return stored
+}
+
+// TakePinChanged returns the entries whose update pin changed since the previous reload
+// and clears the list.
+func (c *Ctx) TakePinChanged() []addon.Addon {
+	changed := c.pinChanged
+	c.pinChanged = nil
+	return changed
+}
+
+// notePins compares addons with pinBaseline: an entry that is new or whose pin changed
+// loses its cached update result (the marker described the old pin) and is queued for a
+// targeted re-check; results for removed entries are dropped. The first call only records
+// the baseline, leaving the initial check to the daily one.
+func (c *Ctx) notePins(addons []addon.Addon) {
+	keys := pinKeys(addons)
+	if c.pinBaseline == nil {
+		c.pinBaseline = keys
+		return
+	}
+	for _, a := range addons {
+		if c.pinBaseline[a.Name] == keys[a.Name] {
+			continue
+		}
+		delete(c.UpdateChecks, a.Name)
+		c.pinChanged = slices.DeleteFunc(c.pinChanged, func(p addon.Addon) bool { return p.Name == a.Name })
+		c.pinChanged = append(c.pinChanged, a)
+	}
+	for name := range c.UpdateChecks {
+		if _, ok := keys[name]; !ok {
+			delete(c.UpdateChecks, name)
+		}
+	}
+	c.pinBaseline = keys
+}
+
+func pinKeys(addons []addon.Addon) map[string]string {
+	keys := make(map[string]string, len(addons))
+	for _, a := range addons {
+		keys[a.Name] = addon.UpdatePinKey(a)
+	}
+	return keys
+}
+
 // Scan finds the manifest under the original search directory and derives the display fields, at
 // construction and via RefreshPaths. A missing manifest leaves them empty (the header
 // shows a hint).
@@ -288,6 +359,7 @@ func (c *Ctx) readProject() ([]addon.Addon, error) {
 		c.GitDirty, c.GitSync = nil, nil
 		c.DepStatuses, c.OrphanDeps, c.UpdateChecks = nil, nil, nil
 		c.RootRepo, c.RootPending, c.RankSnap = nil, false, nil
+		c.pinBaseline, c.pinChanged = nil, nil
 	}
 	switch {
 	case c.ManifestPath == "":

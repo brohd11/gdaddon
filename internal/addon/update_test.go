@@ -109,3 +109,41 @@ func TestCurrentByVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdatePinKey(t *testing.T) {
+	base := Addon{Name: "a", URL: "https://github.com/u/r", Tag: "v1", Version: "1", Path: "addons/a"}
+	key := UpdatePinKey(base)
+	same := base
+	same.Path, same.Display, same.Dependency = "addons/b", "Other", true
+	if UpdatePinKey(same) != key {
+		t.Fatal("fields CheckUpdate ignores changed the key")
+	}
+	for name, edit := range map[string]func(*Addon){
+		"url":     func(a *Addon) { a.URL += "x" },
+		"tag":     func(a *Addon) { a.Tag = "v2" },
+		"version": func(a *Addon) { a.Version = "2" },
+		"commit":  func(a *Addon) { a.Commit = "abc" },
+		"kind":    func(a *Addon) { a.Kind = KindClone },
+		"lock":    func(a *Addon) { a.Lock = true },
+	} {
+		a := base
+		edit(&a)
+		if UpdatePinKey(a) == key {
+			t.Errorf("%s change kept the key", name)
+		}
+	}
+}
+
+func TestCheckUpdatesOfKeysByName(t *testing.T) {
+	_, calls := tagInstallHTTP(t)
+	got := CheckUpdatesOf(context.Background(), []Addon{
+		{Name: "locked", URL: "https://github.com/u/r", Lock: true},
+		{Name: "nourl"},
+	})
+	if len(got) != 2 || got["locked"].State != UpdateLocked || got["nourl"].State != UpdateUnknown {
+		t.Fatalf("checks = %+v", got)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("unexpected requests %v", calls)
+	}
+}

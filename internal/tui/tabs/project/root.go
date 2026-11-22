@@ -112,8 +112,10 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 	}
 	switch p := payload.(type) {
 	case appctx.ProjectDirty, appctx.PathRefresh:
-		// Local state always refreshes; release checks share the editor's daily limit.
-		return core.Seq(s.reload(sh), core.Async(checkUpdatesCmd(sh)))
+		// Local state always refreshes; release checks share the editor's daily limit, except
+		// for entries whose pin just changed. reload must run first: it queues those.
+		reload := s.reload(sh)
+		return core.Seq(reload, core.Async(checkUpdatesCmd(sh)), core.Async(recheckChangedCmd(sh)))
 	case updateChecksReady:
 		if p.gen != c.UpdateGen.Load() {
 			return core.Action{}
@@ -124,6 +126,10 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 		}
 		if p.stampErr != nil {
 			return core.SetStatusAndLog(p.stampErr.Error())
+		}
+	case updateRecheckReady:
+		if p.root == c.ProjectRoot && c.MergeUpdateChecks(p.checks, p.keys) {
+			s.rebuild(sh)
 		}
 	case appctx.GitRefresh:
 		// A batch git operation finished: recompute the local git state (no network update check).

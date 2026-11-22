@@ -3,6 +3,8 @@ package addon
 import (
 	"context"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/brohd11/gdaddon/internal/source"
@@ -226,28 +228,61 @@ const maxConcurrentChecks = 8
 // forInstalled runs fn concurrently (capped) over installed, url-bearing addons and
 // collects the kept results, in no particular order. fn honors ctx.
 func forInstalled[T any](statuses []Status, fn func(a Addon, local string) (T, bool)) []T {
+	var kept []Status
+	for _, s := range statuses {
+		if s.Present() && s.Addon.URL != "" {
+			kept = append(kept, s)
+		}
+	}
+	return forEachCapped(kept, func(s Status) (T, bool) { return fn(s.Addon, s.LocalVersion) })
+}
+
+// forEachCapped runs fn over items with at most maxConcurrentChecks at once and collects
+// the kept results, in no particular order.
+func forEachCapped[E, T any](items []E, fn func(E) (T, bool)) []T {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, maxConcurrentChecks)
 	var out []T
-	for _, s := range statuses {
-		if !s.Present() || s.Addon.URL == "" {
-			continue
-		}
+	for _, item := range items {
 		wg.Add(1)
-		go func(a Addon, local string) {
+		go func(item E) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			if v, ok := fn(a, local); ok {
+			if v, ok := fn(item); ok {
 				mu.Lock()
 				out = append(out, v)
 				mu.Unlock()
 			}
-		}(s.Addon, s.LocalVersion)
+		}(item)
 	}
 	wg.Wait()
 	return out
+}
+
+// UpdatePinKey joins every manifest field CheckUpdate reads, so two entries with equal
+// keys get the same update result. A changed key means a cached result is stale.
+func UpdatePinKey(a Addon) string {
+	return strings.Join([]string{a.URL, a.Tag, a.Version, a.Commit, string(a.Kind), strconv.FormatBool(a.Lock)}, "\x00")
+}
+
+// CheckUpdatesOf returns CheckUpdate for each of addons by name, from their manifest
+// fields alone; ctx bounds the batch. It backs the targeted re-check after an entry's pin
+// changes, where a fresh inspection may not have landed yet.
+func CheckUpdatesOf(ctx context.Context, addons []Addon) map[string]UpdateInfo {
+	type nameInfo struct {
+		name string
+		info UpdateInfo
+	}
+	results := forEachCapped(addons, func(a Addon) (nameInfo, bool) {
+		return nameInfo{a.Name, CheckUpdate(ctx, a)}, true
+	})
+	checks := make(map[string]UpdateInfo, len(results))
+	for _, r := range results {
+		checks[r.name] = r.info
+	}
+	return checks
 }
 
 // CheckUpdates returns each installed addon's CheckUpdate result by name; ctx bounds the

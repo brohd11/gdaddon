@@ -54,3 +54,33 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 		return core.PropagateAll(updateChecksReady{gen: gen, checks: checks, stampErr: stampErr})
 	}
 }
+
+// updateRecheckReady carries a targeted re-check's results: root and the checked pin keys
+// let the receiver drop results that a root change or a further edit made stale.
+type updateRecheckReady struct {
+	root   string
+	keys   map[string]string
+	checks map[string]addon.UpdateInfo
+}
+
+// recheckChangedCmd re-checks only the entries whose pin changed in the reload that just
+// began (nil when none did). The user changed them, so it skips the daily stamp: an
+// update or reinstall clears its marker without waiting a day.
+func recheckChangedCmd(sh *core.Shared) tea.Cmd {
+	c := appctx.Of(sh)
+	changed := c.TakePinChanged()
+	if len(changed) == 0 {
+		return nil
+	}
+	root := c.ProjectRoot
+	keys := make(map[string]string, len(changed))
+	for _, a := range changed {
+		keys[a.Name] = addon.UpdatePinKey(a)
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
+		defer cancel()
+		checks := addon.CheckUpdatesOf(ctx, changed)
+		return core.PropagateAll(updateRecheckReady{root: root, keys: keys, checks: checks})
+	}
+}
