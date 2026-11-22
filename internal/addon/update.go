@@ -9,8 +9,9 @@ import (
 	"github.com/brohd11/gdaddon/internal/version"
 )
 
-// UpdateState describes whether a newer release than the installed one is
-// available for an addon, as far as the repo's release listing can tell.
+// UpdateState describes whether a newer release than the installed one is available
+// for an addon, as far as the repo's release listing (and, for an entry installed from a
+// tag's source, its tag listing) can tell.
 type UpdateState int
 
 const (
@@ -67,8 +68,8 @@ func CheckUpdate(ctx context.Context, a Addon) UpdateInfo {
 	return UpdateInfo{State: state, LatestTag: latest.Tag}
 }
 
-// walkUpdate fetches the releases and classifies the pinned url against the latest,
-// returning that release. Anything undecidable (fetch error, no releases, branch url,
+// walkUpdate fetches the releases (plus git tags for a source-archive pin, see
+// withSourceTags) and classifies the pinned url against the latest, returning that release. Anything undecidable (fetch error, no releases, branch url,
 // uncomparable versions) is UpdateUnknown.
 func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 	// These exclusions apply equally to prompts and bulk update plans.
@@ -89,7 +90,8 @@ func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 		}
 	}
 
-	latest, ok := LatestRelease(listing.Releases)
+	releases := withSourceTags(ctx, a.URL, listing.Releases)
+	latest, ok := LatestRelease(releases)
 	if !ok {
 		return source.Release{}, UpdateUnknown
 	}
@@ -101,7 +103,7 @@ func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 	}
 	// A matched asset identifies the installed release, but does not prove it is
 	// older. Prefer that identity over potentially stale manifest metadata.
-	if installed, ok := releaseForURL(a.URL, listing.Releases); ok {
+	if installed, ok := releaseForURL(a.URL, releases); ok {
 		a.Tag = installed.Tag
 		a.Version = ""
 	}
@@ -112,6 +114,35 @@ func walkUpdate(ctx context.Context, a Addon) (source.Release, UpdateState) {
 		return latest, UpdateAvailable
 	}
 	return source.Release{}, UpdateUnknown
+}
+
+// withSourceTags adds the repo's unreleased git tags to releases when url is a tag's
+// generated source archive: an entry installed from source follows tags, while one pinned
+// to an uploaded asset follows releases only. The tags are used only when one of them
+// owns url, so a branch archive that looks like a tag's (Codeberg) never matches. A
+// failed tag fetch leaves releases unchanged.
+func withSourceTags(ctx context.Context, url string, releases []source.Release) []source.Release {
+	if !isSourceArchiveURL(url) || !source.SupportsTags(url) {
+		return releases
+	}
+	tags, err := source.Tags(ctx, url)
+	if err != nil {
+		return releases
+	}
+	if _, ok := releaseForURL(url, tags); !ok {
+		return releases
+	}
+	seen := make(map[string]bool, len(releases))
+	for _, rel := range releases {
+		seen[rel.Tag] = true
+	}
+	merged := append([]source.Release(nil), releases...)
+	for _, tag := range tags {
+		if !seen[tag.Tag] { // a published release keeps its prerelease flag and uploads
+			merged = append(merged, tag)
+		}
+	}
+	return merged
 }
 
 // releaseForURL identifies the release owning a pinned asset URL.

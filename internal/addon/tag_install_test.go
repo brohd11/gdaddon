@@ -161,7 +161,9 @@ func TestTagOnlyAddAndOfflineArchive(t *testing.T) {
 	}
 }
 
-func TestUnpublishedTagsDoNotChangeLatestOrUpdates(t *testing.T) {
+// TestUnpublishedTagsOnlyUpdateSourceInstalls: `latest` stays the newest published
+// release, but an entry installed from a tag's source follows newer unreleased tags.
+func TestUnpublishedTagsOnlyUpdateSourceInstalls(t *testing.T) {
 	bodies, calls := tagInstallHTTP(t)
 	publishSource(t, bodies, "child", `[]`)
 	bodies["/repos/u/child/releases"] = []byte(`[{"tag_name":"v1.0.0"}]`)
@@ -170,14 +172,14 @@ func TestUnpublishedTagsDoNotChangeLatestOrUpdates(t *testing.T) {
 	if err != nil || rel.Tag != "v1.0.0" {
 		t.Fatalf("latest=%+v, err=%v", rel, err)
 	}
-	for _, tag := range []string{"v1.0.0", "v2.0.0"} {
-		info := CheckUpdate(context.Background(), Addon{URL: "https://github.com/u/child/archive/refs/tags/" + tag + ".zip", Tag: tag})
-		if info.State != UpdateCurrent {
-			t.Errorf("update for %s = %+v", tag, info)
-		}
-	}
 	if calls["/repos/u/child/tags"] != 0 {
-		t.Fatal("latest/update fetched unpublished tags")
+		t.Fatal("latest fetched unpublished tags")
+	}
+	for tag, want := range map[string]UpdateState{"v1.0.0": UpdateAvailable, "v2.0.0": UpdateCurrent} {
+		info := CheckUpdate(context.Background(), Addon{URL: "https://github.com/u/child/archive/refs/tags/" + tag + ".zip", Tag: tag})
+		if info.State != want || info.LatestTag != "v2.0.0" {
+			t.Errorf("update for %s = %+v, want %v", tag, info, want)
+		}
 	}
 }
 

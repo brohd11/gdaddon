@@ -108,6 +108,8 @@ func TestUpdatesUseCompleteReleaseListing(t *testing.T) {
 				switch r.URL.Path {
 				case "/repos/u/r/releases":
 					header.Set("Link", `</page2>; rel="next"`)
+				case "/repos/u/r/tags":
+					body = `[]`
 				case "/page2":
 					if failure == "error" {
 						return nil, fmt.Errorf("page fetch failed")
@@ -155,6 +157,61 @@ func TestUpdateExclusionsApplyToPlans(t *testing.T) {
 			}
 			if len(calls) != 0 {
 				t.Fatalf("unexpected network requests=%v", calls)
+			}
+		})
+	}
+}
+
+func TestSourceInstallsFollowTags(t *testing.T) {
+	const gh = "https://github.com/u/r"
+	src := func(tag string) string { return gh + "/archive/refs/tags/" + tag + ".zip" }
+	upload := func(tag string) string { return gh + "/releases/download/" + tag + "/addon.zip" }
+	for _, tc := range []struct {
+		name     string
+		url      string
+		releases string
+		tags     string // "" = tag listing fails
+		want     UpdateState
+		latest   string
+		planURL  string
+	}{
+		{"tag-only newer tag", src("v0.1.0"), `[]`, `[{"name":"v0.2.0"},{"name":"v0.1.0"}]`, UpdateAvailable, "v0.2.0", src("v0.2.0")},
+		{"tag-only on newest", src("v0.2.0"), `[]`, `[{"name":"v0.2.0"},{"name":"v0.1.0"}]`, UpdateCurrent, "v0.2.0", ""},
+		{"release source sees newer tag", src("v1.0.0"),
+			`[{"tag_name":"v1.0.0","assets":[{"name":"addon.zip","browser_download_url":"` + upload("v1.0.0") + `"}]}]`,
+			`[{"name":"v1.1.0"},{"name":"v1.0.0"}]`, UpdateAvailable, "v1.1.0", src("v1.1.0")},
+		{"prerelease flag kept", src("v1.0.0"),
+			`[{"tag_name":"v2.0.0","prerelease":true},{"tag_name":"v1.0.0"}]`,
+			`[{"name":"v2.0.0"},{"name":"v1.0.0"}]`, UpdateCurrent, "v1.0.0", ""},
+		{"uploaded asset ignores tags", upload("v1.0.0"),
+			`[{"tag_name":"v1.0.0","assets":[{"name":"addon.zip","browser_download_url":"` + upload("v1.0.0") + `"}]}]`,
+			`[{"name":"v1.1.0"},{"name":"v1.0.0"}]`, UpdateCurrent, "v1.0.0", ""},
+		{"tag fetch fails", src("v0.1.0"), `[]`, "", UpdateUnknown, "", ""},
+		{"github branch archive", gh + "/archive/refs/heads/main.zip", `[]`, `[{"name":"v0.2.0"}]`, UpdateUnknown, "", ""},
+		{"codeberg branch archive", "https://codeberg.org/u/r/archive/main.zip", `[]`, `[{"name":"v0.2.0"}]`, UpdateUnknown, "", ""},
+		{"codeberg tag source", "https://codeberg.org/u/r/archive/v0.1.0.zip", `[]`, `[{"name":"v0.2.0"},{"name":"v0.1.0"}]`,
+			UpdateAvailable, "v0.2.0", "https://codeberg.org/u/r/archive/v0.2.0.zip"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bodies, _ := tagInstallHTTP(t)
+			for _, prefix := range []string{"/repos/u/r/", "/api/v1/repos/u/r/"} {
+				bodies[prefix+"releases"] = []byte(tc.releases)
+				if tc.tags != "" {
+					bodies[prefix+"tags"] = []byte(tc.tags)
+				}
+			}
+			a := Addon{URL: tc.url, Version: "0.1.0"}
+			info := CheckUpdate(context.Background(), a)
+			if info.State != tc.want || info.LatestTag != tc.latest {
+				t.Fatalf("check = %+v, want %v (%s)", info, tc.want, tc.latest)
+			}
+			plan, res := ResolveUpdate(context.Background(), a, a.Version)
+			if tc.planURL != "" {
+				if res != ResolvePlan || plan.NewTag != tc.latest || plan.Asset.URL != tc.planURL {
+					t.Fatalf("plan=%+v res=%v", plan, res)
+				}
+			} else if res != ResolveNone {
+				t.Fatalf("unexpected plan=%+v res=%v", plan, res)
 			}
 		})
 	}

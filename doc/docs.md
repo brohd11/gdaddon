@@ -302,6 +302,9 @@ prereleases). The result decorates the Project rows with `⚠ [update]`.
 
 - An addon pinned to a specific release asset is *current* when that asset belongs to the
   latest release, *outdated* when it belongs to an older one.
+- An addon installed from a tag's **source archive** (`@tag`, or a release's
+  "Source code.zip") also follows the repo's git tags, so a newer tag without a release
+  still flags an update. Addons pinned to an uploaded release asset follow releases only.
 - A bare repo/clone url (e.g. a scanned install with no asset to match) falls back to a
   semver `>=` comparison of the installed tag/version against the latest tag.
 - Branch-tracked installs and live clones follow a moving HEAD with no release tag to

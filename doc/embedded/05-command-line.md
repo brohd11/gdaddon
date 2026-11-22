@@ -39,8 +39,8 @@ the grammar. An optional `@tag` installs that tag's
 source; append `/release` for its uploaded release asset instead, which a GDExtension
 needs. Without a tag you get the latest published non-prerelease, which `@latest` also
 names explicitly. A leading `v` is optional on either side, so `@1.2.0` finds `v1.2.0`;
-exact names take precedence. Tags without releases never become automatic update
-candidates.
+exact names take precedence. A tag's source install is checked against newer tags as
+well as releases; an uploaded release asset only against releases.
 
 ```
 gdaddon install brohd11/Godot-Script-Tabs

@@ -35,7 +35,7 @@ func SupportsTags(rawURL string) bool {
 }
 
 // Tags lists git tags as generated source packages, kept apart from AvailableVersions so
-// unpublished tags never become update candidates.
+// unpublished tags become update candidates only for entries installed from source.
 func Tags(ctx context.Context, rawURL string) ([]Release, error) {
 	ref, err := parseRepoURL(rawURL)
 	if err != nil {
