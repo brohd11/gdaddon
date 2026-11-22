@@ -23,7 +23,8 @@ This addon installs to `godot/addons/my_addon`. A manifest stored at
 `res://tools/addon_manifest.yml` instead uses `project_root: ..` to target the Godot
 project directory. The setting controls installation, status, dependencies,
 updates, scanning, and removal, as well as project information and local files
-such as `.gitignore` and `.godot/addons/gdaddon/last_check`.
+such as `.gitignore`, `.godot/addons/gdaddon/last_check` and
+`.godot/addons/gdaddon/update_cache.json`.
 
 The CLI argument (or `install --root`) selects the manifest search directory.
 Once found, the manifest determines the project directory. Git actions use its

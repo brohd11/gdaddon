@@ -230,3 +230,93 @@ func TestRecheckDroppedAfterFurtherEdit(t *testing.T) {
 		})
 	}
 }
+
+// TestFreshSessionUsesSavedResults: when the daily limit skips the check, a new session
+// shows the saved results, re-checking (and re-saving) only entries whose pin changed
+// since they were saved; a due check saves what it finds.
+func TestFreshSessionUsesSavedResults(t *testing.T) {
+	for _, mode := range []string{"saved", "changed pin", "due"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("USERPROFILE", os.Getenv("HOME"))
+			t.Setenv("GITHUB_TOKEN", "test-token")
+			root := t.TempDir()
+			manifest := filepath.Join(root, "addon_manifest.yml")
+			asset := func(repo, tag string) string {
+				return "https://github.com/u/" + repo + "/releases/download/" + tag + "/addon.zip"
+			}
+			for _, name := range []string{"alpha", "beta"} {
+				plugin := filepath.Join(root, "addons", name)
+				if err := os.MkdirAll(plugin, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(plugin, "plugin.cfg"), []byte("[plugin]\nversion=\"1.0.0\"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := addon.AddEntry(manifest, name, asset(name, "v1.0.0"), "addons/"+name); err != nil {
+					t.Fatal(err)
+				}
+				if err := addon.UpdateEntry(manifest, name, "", "", "1.0.0", "v1.0.0"); err != nil {
+					t.Fatal(err)
+				}
+			}
+			m, err := addon.LoadManifest(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			saved := append([]addon.Addon(nil), m.Addons...)
+			if mode == "changed pin" {
+				for i := range saved {
+					if saved[i].Name == "alpha" {
+						saved[i].Tag = "v0.9.0" // saved before alpha's last install
+					}
+				}
+			}
+			avail := addon.UpdateInfo{State: addon.UpdateAvailable, LatestTag: "v2.0.0"}
+			if err := addon.SaveUpdateCache(root, saved, map[string]addon.UpdateInfo{"alpha": avail, "beta": avail}); err != nil {
+				t.Fatal(err)
+			}
+			if mode != "due" {
+				stamp := filepath.Join(root, ".godot", "addons", "gdaddon", "last_check")
+				if err := os.WriteFile(stamp, []byte(strconv.FormatInt(time.Now().Unix()-10, 10)), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var mu sync.Mutex
+			calls := map[string]int{}
+			transport := http.DefaultClient.Transport
+			t.Cleanup(func() { http.DefaultClient.Transport = transport })
+			http.DefaultClient.Transport = updateTransport(func(r *http.Request) (*http.Response, error) {
+				mu.Lock()
+				calls[r.URL.Path]++
+				mu.Unlock()
+				repo := strings.Split(r.URL.Path, "/")[3]
+				body := fmt.Sprintf(`[{"tag_name":"v1.0.0","assets":[{"name":"addon.zip","browser_download_url":%q}]}]`, asset(repo, "v1.0.0"))
+				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+			})
+			c := &appctx.Ctx{ProjectRoot: root, ManifestPath: manifest}
+			sh := core.NewShared(c)
+			screen := NewProjectScreen(sh)
+			drain(sh, screen, core.Async(checkUpdatesCmd(sh)))
+
+			current := addon.UpdateInfo{State: addon.UpdateCurrent, LatestTag: "v1.0.0"}
+			wantAlpha, wantBeta, wantCalls := avail, avail, map[string]int{}
+			switch mode {
+			case "changed pin":
+				wantAlpha, wantCalls = current, map[string]int{"/repos/u/alpha/releases": 1}
+			case "due":
+				wantAlpha, wantBeta = current, current
+				wantCalls = map[string]int{"/repos/u/alpha/releases": 1, "/repos/u/beta/releases": 1}
+			}
+			if c.UpdateChecks["alpha"] != wantAlpha || c.UpdateChecks["beta"] != wantBeta {
+				t.Fatalf("checks = %v", c.UpdateChecks)
+			}
+			if fmt.Sprint(calls) != fmt.Sprint(wantCalls) {
+				t.Fatalf("calls = %v, want %v", calls, wantCalls)
+			}
+			if cached, stale := addon.CachedUpdates(root, m.Addons); cached["alpha"] != wantAlpha || cached["beta"] != wantBeta || len(stale) != 0 {
+				t.Fatalf("saved results = %v, stale = %v", cached, stale)
+			}
+		})
+	}
+}

@@ -110,6 +110,15 @@ func TestExplicitProjectUpdateChecks(t *testing.T) {
 					t.Fatalf("update=%q, want %q", entries[0].Update, want)
 				}
 			}
+			if mode == "table" || mode == "json" {
+				m, err := addon.LoadManifest(manifest)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cached, _ := addon.CachedUpdates(root, m.Addons); cached["alpha"].State != addon.UpdateCurrent {
+					t.Fatalf("list --updates did not save its results: %v", cached)
+				}
+			}
 			if mode == "stamp failure" {
 				if !strings.Contains(diag, "could not save update check timestamp") {
 					t.Fatalf("missing stderr diagnostic: %q", diag)
@@ -146,6 +155,9 @@ func TestPlainListLeavesTimestampAlone(t *testing.T) {
 			}
 			if !existing && !os.IsNotExist(err) {
 				t.Fatalf("plain list created stamp: %q, %v", data, err)
+			}
+			if _, err := os.Stat(filepath.Join(filepath.Dir(stamp), "update_cache.json")); !os.IsNotExist(err) {
+				t.Fatalf("plain list wrote update results: %v", err)
 			}
 		}
 	}

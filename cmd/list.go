@@ -71,13 +71,13 @@ func runList(searchRoot string, asJSON, withUpdates bool) error {
 		fmt.Println("No addons found in YAML.")
 		return nil
 	}
-	printListTable(statuses, withUpdates)
+	printListTable(statuses, projectRoot, withUpdates)
 	return nil
 }
 
 // printListTable renders the status table, with an update= column under --updates.
-func printListTable(statuses []addon.Status, withUpdates bool) {
-	checks := resolveUpdateStates(statuses, withUpdates)
+func printListTable(statuses []addon.Status, projectRoot string, withUpdates bool) {
+	checks := resolveUpdateStates(statuses, projectRoot, withUpdates)
 	for _, s := range statuses {
 		ver := s.Addon.Version
 		if ver == "" {
@@ -171,12 +171,22 @@ func kindLabel(k addon.Kind) string {
 }
 
 // resolveUpdateStates resolves every addon's update state up front and concurrently
-// (only when asked, since it's network-bound), for the per-entry loops to read.
-func resolveUpdateStates(statuses []addon.Status, withUpdates bool) map[string]addon.UpdateInfo {
+// (only when asked, since it's network-bound), for the per-entry loops to read. The
+// results are saved for the TUI, which skips its own check when this one (the editor
+// plugin's) renewed the daily stamp.
+func resolveUpdateStates(statuses []addon.Status, projectRoot string, withUpdates bool) map[string]addon.UpdateInfo {
 	if !withUpdates {
 		return nil
 	}
-	return addon.CheckUpdates(context.Background(), statuses)
+	checks := addon.CheckUpdates(context.Background(), statuses)
+	addons := make([]addon.Addon, 0, len(statuses))
+	for _, s := range statuses {
+		addons = append(addons, s.Addon)
+	}
+	if err := addon.SaveUpdateCache(projectRoot, addons, checks); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+	}
+	return checks
 }
 
 // updateStateFor returns one addon's update state and latest tag. Lock needs no network,
@@ -195,7 +205,7 @@ func updateStateFor(s addon.Status, checks map[string]addon.UpdateInfo, withUpda
 // printListJSON prints the statuses as a JSON array ("[]" when empty), checking updates
 // over the network only with --updates.
 func printListJSON(statuses []addon.Status, projectRoot string, withUpdates bool) error {
-	checks := resolveUpdateStates(statuses, withUpdates)
+	checks := resolveUpdateStates(statuses, projectRoot, withUpdates)
 
 	// Orphan state is local (which is_dependency entries nothing installed still needs),
 	// computed once over the whole set and read per-entry below.

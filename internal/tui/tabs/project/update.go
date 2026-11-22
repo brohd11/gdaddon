@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"maps"
 	"time"
 
 	"github.com/brohd11/gdaddon/internal/addon"
@@ -25,11 +26,16 @@ type updateChecksReady struct {
 const updateCheckTimeout = 30 * time.Second
 
 // checkUpdatesCmd checks each installed addon for a newer release off the UI thread and
-// broadcasts the results. A check superseded before it starts (RefreshAll asks twice in
-// one tick) skips its network work.
+// broadcasts the results, saving them for later sessions. When the daily limit skips the
+// check and this session holds no results yet, it shows the saved ones instead,
+// re-checking only entries whose pin changed since they were saved. A check superseded
+// before it starts (RefreshAll asks twice in one tick) skips its network work.
 func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 	c := appctx.Of(sh)
 	manifestPath, projectRoot := c.ManifestPath, c.ProjectRoot
+	// Later skipped checks keep the session's results (and leave pin changes to
+	// recheckChangedCmd, so nothing is checked twice).
+	fromCache := c.UpdateChecks == nil
 	gen := c.UpdateGen.Add(1)
 	return func() tea.Msg {
 		if c.UpdateGen.Load() != gen || manifestPath == "" {
@@ -37,7 +43,10 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 		}
 		begin, stampErr := addon.BeginUpdateCheck(projectRoot, time.Now(), false)
 		if !begin {
-			return nil
+			if !fromCache {
+				return nil
+			}
+			return cachedUpdatesMsg(gen, manifestPath, projectRoot)
 		}
 		statuses, err := addon.Inspect(manifestPath, projectRoot)
 		if err != nil {
@@ -51,8 +60,35 @@ func checkUpdatesCmd(sh *core.Shared) tea.Cmd {
 		defer cancel()
 
 		checks := addon.CheckUpdates(ctx, statuses)
+		addons := make([]addon.Addon, 0, len(statuses))
+		for _, s := range statuses {
+			addons = append(addons, s.Addon)
+		}
+		if err := addon.SaveUpdateCache(projectRoot, addons, checks); err != nil && stampErr == nil {
+			stampErr = err
+		}
 		return core.PropagateAll(updateChecksReady{gen: gen, checks: checks, stampErr: stampErr})
 	}
+}
+
+// cachedUpdatesMsg loads the saved results for the manifest's entries, re-checking (and
+// re-saving) those whose pin changed since. The checks map is never nil, so the session
+// counts as holding results afterwards.
+func cachedUpdatesMsg(gen int64, manifestPath, projectRoot string) tea.Msg {
+	m, err := addon.LoadManifest(manifestPath)
+	if err != nil {
+		return nil
+	}
+	checks, stale := addon.CachedUpdates(projectRoot, m.Addons)
+	var saveErr error
+	if len(stale) > 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
+		defer cancel()
+		fresh := addon.CheckUpdatesOf(ctx, stale)
+		maps.Copy(checks, fresh)
+		saveErr = addon.MergeUpdateCache(projectRoot, stale, fresh)
+	}
+	return core.PropagateAll(updateChecksReady{gen: gen, checks: checks, stampErr: saveErr})
 }
 
 // updateRecheckReady carries a targeted re-check's results: root and the checked pin keys
@@ -81,6 +117,8 @@ func recheckChangedCmd(sh *core.Shared) tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
 		defer cancel()
 		checks := addon.CheckUpdatesOf(ctx, changed)
+		// Best effort: an unsaved result only costs the next session a re-check.
+		_ = addon.MergeUpdateCache(root, changed, checks)
 		return core.PropagateAll(updateRecheckReady{root: root, keys: keys, checks: checks})
 	}
 }

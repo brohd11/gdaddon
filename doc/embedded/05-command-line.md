@@ -133,8 +133,12 @@ Automatic TUI update checks share a rolling 24-hour limit with the Godot editor
 plugin, recorded in `.godot/addons/gdaddon/last_check` as decimal Unix seconds.
 The stamp is written before checking, so failed attempts also count. TUI refreshes
 still inspect local state, and skipped checks keep any update results already held
-in the session. The stamp stores no results, so a fresh session that skips checking
-has unknown update status.
+in the session. Results are saved in `.godot/addons/gdaddon/update_cache.json` by TUI
+checks and by `list --updates` (which the editor plugin runs), so a fresh session that
+skips checking shows the last saved results. Each result records the entry it was
+checked for: an entry re-pinned since (installed, updated, locked or edited) is
+re-checked on its own, in a fresh session or straight after the change, without
+waiting for the daily limit.
 
 `list --updates`, `update-addons`, and TUI Update All always check immediately and
 renew that stamp. Individual addon actions do not renew the project-wide stamp.
