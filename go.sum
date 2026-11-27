@@ -10,8 +10,8 @@ github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
 github.com/aymanbagabas/go-udiff v0.4.1 h1:OEIrQ8maEeDBXQDoGCbbTTXYJMYRCRO1fnodZ12Gv5o=
 github.com/aymanbagabas/go-udiff v0.4.1/go.mod h1:0L9PGwj20lrtmEMeyw4WKJ/TMyDtvAoK9bf2u/mNo3w=
-github.com/brohd11/bubblestack v0.3.1 h1:40mYglw+Sx77ny9/rt6h1VciJ0+kEhO6pV/Ha5HrNEQ=
-github.com/brohd11/bubblestack v0.3.1/go.mod h1:K3S2ch9QippNcsgBWrWVH7WtgXZH7t9ACowN+cv9qzc=
+github.com/brohd11/bubblestack v0.3.2 h1:Y1cypXHwLhKaUhOxs36lBE26I4zBDb/A86sw0KPR4UA=
+github.com/brohd11/bubblestack v0.3.2/go.mod h1:K3S2ch9QippNcsgBWrWVH7WtgXZH7t9ACowN+cv9qzc=
 github.com/brohd11/gitstack v0.2.6 h1:CPV1vFNPabpHwaMDgwdQJQK31KXO2pfz5pJrsPzYYRw=
 github.com/brohd11/gitstack v0.2.6/go.mod h1:s/FGstz2AzmX/8V5OQQNLBaEwhxxo5ftrDj6YiTAmYo=
 github.com/brohd11/goutil v0.2.1 h1:prc6cRp24rjHLopQLW11MOe0CGPsQa88lLFUa3Y/bm4=
