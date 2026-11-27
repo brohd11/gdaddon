@@ -10,7 +10,7 @@ gdaddon keeps everything of its own under `~/.gdaddon`, created on first run.
   config/sources.yml   search sources and per-host VCS rules
   hooks/config.yml     optional Git action commands (see Git action hooks)
   archive/             downloaded package zips
-  plugins.yml          your global addon list
+  plugins.yml          your global addon list (optional `category: "a/b"` folders it)
 ```
 
 Both config files are written once, with defaults, and then left alone — they're yours to

@@ -340,6 +340,12 @@ git-committable, so you can sync your library across machines.
   install path along as a remembered default.
 - **Use from Global**: select a plugin in the Global tab to open its submenu and import it
   into the current project's manifest.
+- **Organize with categories**: give an entry a `category: "tools/editor"` line (or use
+  the submenu's **Set Category**, or the Category field in **Edit Manifest**) and the Global
+  tab files it under nested folders, one per `/` segment. Folders start collapsed;
+  `enter`/`→` open them, `←` closes, and `/` filters across closed folders. Folds are kept
+  for the session. Plugins without a category sit at the top level, after the folders. The
+  category stays in the global list: importing to a project doesn't copy it.
 
 This makes it easy to add commonly used plugins, one by one. For multiple, however...
 

@@ -81,6 +81,18 @@ type Addon struct {
 	// Dependency marks an entry auto-added as another plugin's dependency, so OrphanDeps can
 	// flag it once nothing requires it. "Keep" clears it; export to global drops it.
 	Dependency bool `yaml:"is_dependency"`
+	// Category is a slash path ("tools/editor") used only to group the Global tab into
+	// folders. Import to a project and export to global don't carry it.
+	Category string `yaml:"category"`
+}
+
+// CategoryPath splits Category into its folder segments, dropping empty ones.
+func (a Addon) CategoryPath() []string {
+	norm := NormalizeCategory(a.Category)
+	if norm == "" {
+		return nil
+	}
+	return strings.Split(norm, "/")
 }
 
 // Label is the entry's display name: its declared name, else its Slug.

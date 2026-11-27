@@ -46,6 +46,10 @@ type Ctx struct {
 	// item), saved by bubblestack.Run.
 	Compact bool
 
+	// GlobalFolds is the Global tree's fold state for the session, kept here because a theme
+	// change reinstances every tab root. Use GlobalTreeFolds.
+	GlobalFolds *components.TreeFolds
+
 	// UpdateChecks caches per-addon update results by name, filled asynchronously and read by
 	// the Project list's marker. Missing keys mean UpdateUnknown.
 	UpdateChecks map[string]addon.UpdateInfo
@@ -199,6 +203,14 @@ func (c *Ctx) refreshDepChecks(statuses []addon.Status) {
 
 // RefreshGlobal reloads the cached global addon list from disk.
 func (c *Ctx) RefreshGlobal() { c.loadGlobal() }
+
+// GlobalTreeFolds returns the session's Global tree fold state, creating it on first use.
+func (c *Ctx) GlobalTreeFolds() *components.TreeFolds {
+	if c.GlobalFolds == nil {
+		c.GlobalFolds = components.NewTreeFolds()
+	}
+	return c.GlobalFolds
+}
 
 // RefreshArchive reloads the cached archived repo IDs from disk.
 func (c *Ctx) RefreshArchive() { c.loadArchive() }

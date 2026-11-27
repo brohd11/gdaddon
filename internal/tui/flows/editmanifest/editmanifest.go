@@ -1,7 +1,7 @@
 // Package editmanifest is the Edit Manifest flow: a form of an entry's raw fields (name,
-// url, path, version, tag, kind) written back to any flat manifest (project, global list,
-// or set). Blanking a field removes it (addon.EditEntry); kind is written with
-// addon.SetKind.
+// url, path, version, tag, kind; category in global mode) written back to any flat
+// manifest (project, global list, or set). Blanking a field removes it (addon.EditEntry);
+// kind and category are written with addon.SetKind and addon.SetCategory.
 package editmanifest
 
 import (
@@ -15,13 +15,16 @@ import (
 	"charm.land/bubbles/v2/key"
 )
 
+// CategoryPlaceholder is the hint on every category input.
+const CategoryPlaceholder = "e.g. tools/editor (blank to clear)"
+
 // New builds the Edit Manifest form for entry a. dirty is broadcast on save so the owning
 // tab reloads. The key is read-only (it is the entry's identity); the name is the editable
-// label. Global mode shows only name, url and path.
+// label. Global mode shows only name, url, path and category.
 func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *components.FormScreen {
-	nameF := components.NewTextField("name", "Name:    ", "(blank to clear)")
-	urlF := components.NewTextField("url", "URL:     ", "(blank to clear)")
-	pathF := components.NewTextField("path", "Path:    ", "(blank to clear)")
+	nameF := components.NewTextField("name", "Name:     ", "(blank to clear)")
+	urlF := components.NewTextField("url", "URL:      ", "(blank to clear)")
+	pathF := components.NewTextField("path", "Path:     ", "(blank to clear)")
 	nameF.SetValue(a.Display)
 	urlF.SetValue(a.URL)
 	pathF.SetValue(a.Path)
@@ -41,12 +44,16 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 
 	var versionF, tagF *components.TextField
 	var kindF *components.ToggleField
-	if !globalMode {
-		versionF = components.NewTextField("version", "Version: ", "(blank to clear)")
-		tagF = components.NewTextField("tag", "Tag:     ", "(blank to clear)")
+	if globalMode {
+		categoryF := components.NewTextField("category", "Category: ", CategoryPlaceholder)
+		categoryF.SetValue(a.Category)
+		fields = append(fields, categoryF)
+	} else {
+		versionF = components.NewTextField("version", "Version:  ", "(blank to clear)")
+		tagF = components.NewTextField("tag", "Tag:      ", "(blank to clear)")
 		versionF.SetValue(a.Version)
 		tagF.SetValue(a.Tag)
-		kindF = components.NewToggleField("kind", "Kind:    ", addon.KindOptions, "|")
+		kindF = components.NewToggleField("kind", "Kind:     ", addon.KindOptions, "|")
 		kindF.SetIndex(addon.KindIndex(a.Kind))
 		fields = append(fields, versionF, tagF, components.NewSpacer(), kindF)
 		help = []key.Binding{
@@ -76,7 +83,11 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 			if err := addon.SetDisplayName(manifestPath, a.Name, display); err != nil {
 				return core.SeqErr(err, core.Async(f.Focus("name")))
 			}
-			if !globalMode {
+			if globalMode {
+				if err := addon.SetCategory(manifestPath, a.Name, f.Value("category")); err != nil {
+					return core.SeqErr(err, core.Async(f.Focus("category")))
+				}
+			} else {
 				if err := addon.SetKind(manifestPath, a.Name, addon.ParseKind(kindF.Value())); err != nil {
 					return core.SeqErr(err, core.Async(f.Focus("url")))
 				}

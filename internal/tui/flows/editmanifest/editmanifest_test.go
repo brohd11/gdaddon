@@ -84,12 +84,17 @@ func TestGlobalEditRefreshesMemoryAndDropsStaleSubmenu(t *testing.T) {
 		New:   func(sh *core.Shared) core.Screen { return globaltab.NewGlobalScreen(sh) },
 	}})
 	root := r.Top()
-	r = submitEdit(t, r, editmanifest.New(globalPath, c.GlobalAddons[0], appctx.GlobalDirty{}, true), "https://github.com/owner/new")
+	form := editmanifest.New(globalPath, c.GlobalAddons[0], appctx.GlobalDirty{}, true)
+	form.SetValue("category", " tools// editor ")
+	r = submitEdit(t, r, form, "https://github.com/owner/new")
 
 	if r.Top() != root {
 		t.Fatalf("successful edit should return to refreshed global root, got %T", r.Top())
 	}
 	if got := c.GlobalAddons[0].URL; got != "https://github.com/owner/new" {
 		t.Fatalf("global cache was not refreshed after edit: got %q", got)
+	}
+	if got := c.GlobalAddons[0].Category; got != "tools/editor" {
+		t.Fatalf("global edit should write the normalized category, got %q", got)
 	}
 }

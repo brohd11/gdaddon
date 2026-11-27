@@ -220,6 +220,25 @@ func SetDisplayName(manifestPath, name, display string) error {
 	return setScalarField(manifestPath, name, "name", "name: "+quoteYAML(display), display != "")
 }
 
+// SetCategory writes `category: "<path>"` (normalized, see NormalizeCategory) or removes
+// it when the path is empty.
+func SetCategory(manifestPath, name, category string) error {
+	norm := NormalizeCategory(category)
+	return setScalarField(manifestPath, name, "category", "category: "+quoteYAML(norm), norm != "")
+}
+
+// NormalizeCategory trims each "/" segment and drops empty ones, so " tools//editor/ "
+// is "tools/editor".
+func NormalizeCategory(category string) string {
+	var segs []string
+	for _, seg := range strings.Split(category, "/") {
+		if seg = strings.TrimSpace(seg); seg != "" {
+			segs = append(segs, seg)
+		}
+	}
+	return strings.Join(segs, "/")
+}
+
 // quoteYAML renders s as a YAML double-quoted scalar, escaping the two characters that
 // would otherwise end it early, so arbitrary text round-trips back through Parse.
 func quoteYAML(s string) string {

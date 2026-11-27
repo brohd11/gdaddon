@@ -11,7 +11,6 @@ import (
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	"github.com/brohd11/gdaddon/internal/tui/tabs/actions"
 	"github.com/brohd11/gdaddon/internal/tui/tabs/archive"
-	"github.com/brohd11/gdaddon/internal/tui/tabs/global"
 	"github.com/brohd11/gdaddon/internal/tui/tabs/project"
 	"github.com/brohd11/gdaddon/internal/tui/tabs/search"
 	"github.com/brohd11/gdaddon/internal/tui/tabs/sets"
@@ -36,7 +35,6 @@ func TestAllRootListsShareDensityAndKeepCallbacks(t *testing.T) {
 		sort  bool
 	}{
 		{"Project", project.NewProjectScreen, appctx.ProjectDirty{}, true},
-		{"Global", global.NewGlobalScreen, appctx.GlobalDirty{}, true},
 		{"Sets", sets.NewSetsScreen, appctx.SetsDirty{}, true},
 		{"Archive", archive.NewArchiveScreen, appctx.ArchiveDirty{}, true},
 		{"Actions", actions.NewActionsScreen, appctx.PathRefresh{}, false},
