@@ -4,6 +4,7 @@ import (
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	gitflow "github.com/brohd11/gdaddon/internal/tui/flows/git"
+	"github.com/brohd11/gdaddon/internal/tui/widgets"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -16,19 +17,61 @@ import (
 // projectTitle is the browse list's base Title; the active sort mode is appended.
 const projectTitle = "Project"
 
-// projectState owns the Project tab's domain state; RootListScreen handles its UI.
+// projectState owns the Project tab's domain state; a RootListScreen or, in the optional
+// category view, a RootTreeScreen handles its UI. Exactly one of screen and tree is set.
 type projectState struct {
 	screen *components.RootListScreen
+	tree   *components.RootTreeScreen
 	sort   appctx.SortMode
 	order  []string
 	rows   map[string]list.Item
 	shown  map[string]bool
 }
 
+// NewProjectRoot builds the Project tab in the session's view: the list, or the category
+// tree when Ctx.ProjectTree is set (the View key flips it and rebuilds this root).
+func NewProjectRoot(sh *core.Shared) core.Screen {
+	if appctx.Of(sh).ProjectTree {
+		return NewProjectTreeScreen(sh)
+	}
+	return NewProjectScreen(sh)
+}
+
+// NewProjectScreen builds the Project tab's list view.
 func NewProjectScreen(sh *core.Shared) *components.RootListScreen {
-	s := &projectState{}
+	s := &projectState{sort: appctx.Of(sh).ProjectSort}
 	opts := appctx.RootListOpts(sh, appctx.SortTitle(projectTitle, s.sort))
-	opts.Help = []key.Binding{
+	opts.Help = projectHelp()
+	// Update markers arrive asynchronously; refresh broadcasts can start another check.
+	opts.Init = checkUpdatesCmd
+	opts.OnKey = s.onKey
+	opts.Receive = s.receive
+	s.screen = components.NewRootList(s.rebuildItems(sh), opts)
+	return s.screen
+}
+
+// NewProjectTreeScreen builds the Project tab's category view: the same rows, filed into
+// folders by each addon's global-list category (Ctx.GlobalCategory).
+func NewProjectTreeScreen(sh *core.Shared) *components.RootTreeScreen {
+	c := appctx.Of(sh)
+	s := &projectState{sort: c.ProjectSort}
+	s.tree = components.NewRootTree(nil, components.RootTreeOpts{
+		Title: appctx.SortTitle(projectTitle, s.sort),
+		Help:  projectHelp(),
+		Folds: c.ProjectTreeFolds(),
+		Init:  checkUpdatesCmd,
+		OnKey: func(sh *core.Shared, k string, _ components.TreeNode) (core.Action, bool) {
+			return s.onKey(sh, k, nil)
+		},
+		Receive: s.receive,
+	})
+	s.rebuild(sh)
+	return s.tree
+}
+
+// projectHelp is the (?) menu shared by both views.
+func projectHelp() []key.Binding {
+	return []key.Binding{
 		core.FullHint("sort", appctx.AppKeys.Sort),
 		core.FullHint("terminal", appctx.AppKeys.Terminal),
 		core.FullHint("term window", appctx.AppKeys.TerminalWindow),
@@ -42,13 +85,8 @@ func NewProjectScreen(sh *core.Shared) *components.RootListScreen {
 		core.FullHint("toggle log", core.Keys.Output),
 		core.FullHint("wrap log", core.Keys.Wrap),
 		core.FullHint("clear log", core.Keys.Clear),
+		core.FullHint("tree view", appctx.AppKeys.View),
 	}
-	// Update markers arrive asynchronously; refresh broadcasts can start another check.
-	opts.Init = checkUpdatesCmd
-	opts.OnKey = s.onKey
-	opts.Receive = s.receive
-	s.screen = components.NewRootList(s.rebuildItems(sh), opts)
-	return s.screen
 }
 
 // onKey adds project-wide commands. The component guards filter typing and falls
@@ -56,9 +94,24 @@ func NewProjectScreen(sh *core.Shared) *components.RootListScreen {
 func (s *projectState) onKey(sh *core.Shared, k string, _ list.Item) (core.Action, bool) {
 	switch {
 	case core.MatchKey(k, appctx.AppKeys.Sort):
-		appctx.CycleSort(s.screen.List(), &s.sort, projectSortModes, projectTitle,
-			func(appctx.SortMode) []list.Item { return s.rebuildItems(sh) })
+		if s.tree != nil {
+			s.sort = components.NextSort(s.sort, projectSortModes)
+			s.rebuild(sh)
+			s.tree.SetTitle(appctx.SortTitle(projectTitle, s.sort))
+		} else {
+			appctx.CycleSort(s.screen.List(), &s.sort, projectSortModes, projectTitle,
+				func(appctx.SortMode) []list.Item { return s.rebuildItems(sh) })
+		}
+		appctx.Of(sh).ProjectSort = s.sort
 		return core.Action{}, true
+	case core.MatchKey(k, appctx.AppKeys.View):
+		c := appctx.Of(sh)
+		c.ProjectTree = !c.ProjectTree
+		status := "list view"
+		if c.ProjectTree {
+			status = "tree view"
+		}
+		return core.Seq(core.SetStatus(status), core.RebuildRoot()), true
 	case core.MatchKey(k, appctx.AppKeys.Fetch):
 		cmd, started := fetchAllCmd(sh)
 		if !started {
@@ -131,6 +184,13 @@ func (s *projectState) receive(sh *core.Shared, payload any) core.Action {
 		if p.root == c.ProjectRoot && c.MergeUpdateChecks(p.checks, p.keys) {
 			s.rebuild(sh)
 		}
+	case appctx.GlobalDirty:
+		// Categories come from the global list. The Global tab reloads it on this same
+		// broadcast, but this tab may hear it first.
+		if s.tree != nil {
+			c.RefreshGlobal()
+			s.show(sh)
+		}
 	case appctx.GitRefresh:
 		// A batch git operation finished: recompute the local git state (no network update check).
 		return s.reload(sh)
@@ -190,7 +250,47 @@ func (s *projectState) rebuildItems(sh *core.Shared) []list.Item {
 	return s.projectItems()
 }
 
-func (s *projectState) rebuild(sh *core.Shared) { s.screen.SetItems(s.rebuildItems(sh)) }
+func (s *projectState) rebuild(sh *core.Shared) {
+	s.rebuildItems(sh)
+	s.show(sh)
+}
+
+// show paints the current rows into whichever view this state drives.
+func (s *projectState) show(sh *core.Shared) {
+	if s.tree != nil {
+		s.tree.SetNodes(s.treeNodes(sh))
+		return
+	}
+	s.screen.SetItems(s.projectItems())
+}
+
+// treeNodes files the shown rows by their global category. Rows keep the sort order inside
+// each folder; folders are by name, reversed only under Z→A.
+func (s *projectState) treeNodes(sh *core.Shared) []components.TreeNode {
+	c := appctx.Of(sh)
+	leaves := make([]widgets.CategoryLeaf, 0, len(s.order))
+	for _, name := range s.order {
+		item, ok := s.rows[name].(components.Item)
+		if !s.shown[name] || !ok {
+			continue
+		}
+		category := ""
+		if status, ok := c.ProjectStatus(name); ok {
+			category = c.GlobalCategory(status.Addon.URL)
+		}
+		leaves = append(leaves, widgets.CategoryLeaf{
+			ID:       projectLeafPrefix + name,
+			Category: category,
+			Item: components.CompactItem{
+				Name: item.Name, Suffix: item.Desc, Pending: item.Pending, Pick: item.Pick, Keys: item.Keys,
+			},
+		})
+	}
+	return widgets.CategoryTree(leaves, s.sort == appctx.SortReverse)
+}
+
+// projectLeafPrefix starts an addon leaf's node ID; folds follow IDs.
+const projectLeafPrefix = "addon:"
 
 func (s *projectState) projectItems() []list.Item {
 	items := make([]list.Item, 0, len(s.order))
@@ -213,7 +313,7 @@ func (s *projectState) publish(sh *core.Shared) {
 	}
 	c.ListUpdates.Reset()
 	clear(c.DirtyProjectRows)
-	s.screen.SetItems(s.projectItems())
+	s.show(sh)
 }
 
 // inspect uses the project's cached inspection so redraws do not query every repo.

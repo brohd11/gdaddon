@@ -11,6 +11,7 @@ import (
 
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/archive"
+	"github.com/brohd11/gdaddon/internal/source"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -49,6 +50,16 @@ type Ctx struct {
 	// GlobalFolds is the Global tree's fold state for the session, kept here because a theme
 	// change reinstances every tab root. Use GlobalTreeFolds.
 	GlobalFolds *components.TreeFolds
+	// globalCategories maps source.RepoID to category, built lazily from GlobalAddons.
+	globalCategories map[string]string
+
+	// ProjectTree shows the Project tab as a category tree instead of the list (session
+	// only; the b key flips it). ProjectFolds is that tree's fold state (use
+	// ProjectTreeFolds). ProjectSort is the tab's sort mode, kept here so switching views
+	// and theme rebuilds keep it.
+	ProjectTree  bool
+	ProjectFolds *components.TreeFolds
+	ProjectSort  SortMode
 
 	// UpdateChecks caches per-addon update results by name, filled asynchronously and read by
 	// the Project list's marker. Missing keys mean UpdateUnknown.
@@ -139,6 +150,26 @@ func (c *Ctx) loadGlobal() {
 	addons, err := addon.Parse(p)
 	c.noteLoadErr("global list", err)
 	c.GlobalAddons = addons
+	c.globalCategories = nil // rebuilt from GlobalAddons on the next GlobalCategory
+}
+
+// GlobalCategory is the category of the global entry for url's repo (matched by
+// source.RepoID, so url forms differ freely), or "" when it has none or isn't global.
+// Categories are set only in the global list; the Project tree reads them here.
+func (c *Ctx) GlobalCategory(url string) string {
+	if c.globalCategories == nil {
+		c.globalCategories = make(map[string]string, len(c.GlobalAddons))
+		for _, a := range c.GlobalAddons {
+			if id, err := source.RepoID(a.URL); err == nil && a.Category != "" {
+				c.globalCategories[id] = addon.NormalizeCategory(a.Category)
+			}
+		}
+	}
+	id, err := source.RepoID(url)
+	if err != nil {
+		return ""
+	}
+	return c.globalCategories[id]
 }
 
 func (c *Ctx) loadArchive() {
@@ -203,6 +234,14 @@ func (c *Ctx) refreshDepChecks(statuses []addon.Status) {
 
 // RefreshGlobal reloads the cached global addon list from disk.
 func (c *Ctx) RefreshGlobal() { c.loadGlobal() }
+
+// ProjectTreeFolds returns the session's Project tree fold state, creating it on first use.
+func (c *Ctx) ProjectTreeFolds() *components.TreeFolds {
+	if c.ProjectFolds == nil {
+		c.ProjectFolds = components.NewTreeFolds()
+	}
+	return c.ProjectFolds
+}
 
 // GlobalTreeFolds returns the session's Global tree fold state, creating it on first use.
 func (c *Ctx) GlobalTreeFolds() *components.TreeFolds {

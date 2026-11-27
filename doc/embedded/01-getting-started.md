@@ -24,7 +24,7 @@ No manifest yet? Actions ▸ Create manifest writes one. The row disappears once
 
 ## The tabs
 
-- Project — the addons in this project's manifest, with their install state
+- Project — the addons in this project's manifest, with their install state (`b` shows them foldered by global category)
 - Global — your personal list of addons, to pull into any project, foldered by category
 - Sets — named groups of addons you install together
 - Archive — package zips gdaddon has downloaded, reusable offline

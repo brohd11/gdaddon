@@ -345,7 +345,12 @@ git-committable, so you can sync your library across machines.
   tab files it under nested folders, one per `/` segment. Folders start collapsed;
   `enter`/`→` open them, `←` closes, and `/` filters across closed folders. Folds are kept
   for the session. Plugins without a category sit at the top level, after the folders. The
-  category stays in the global list: importing to a project doesn't copy it.
+  category lives only in the global list: importing to a project doesn't copy it.
+- **Project tree view**: press `b` on the Project tab to switch it between the list and
+  the same folder tree. Each project addon takes the category of its global entry
+  (matched by repo, whatever form the url takes); addons not in the global list sit at
+  the top level. The sort mode carries across the switch and orders the addons inside
+  each folder. The view lasts for the session; gdaddon always opens in the list.
 
 This makes it easy to add commonly used plugins, one by one. For multiple, however...
 

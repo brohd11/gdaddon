@@ -82,6 +82,15 @@ func TestGlobalTreeGroupsFoldsAndSorts(t *testing.T) {
 		t.Fatalf("opening tools: got %s, want %s", got, want)
 	}
 
+	for _, item := range s.Tree().List().VisibleItems() {
+		if row := item.(interface {
+			Title() string
+			SuffixText() string
+		}); row.Title() == "hammer" && row.SuffixText() != "owner/hammer" {
+			t.Fatalf("a GitHub leaf's suffix should be owner/repo, got %q", row.SuffixText())
+		}
+	}
+
 	// A theme change reinstances the root: folds live on the Ctx.
 	if got := rows(newSizedScreen(sh)); got != want {
 		t.Fatalf("a rebuilt root lost its folds: got %s", got)

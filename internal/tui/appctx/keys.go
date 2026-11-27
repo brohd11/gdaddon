@@ -17,6 +17,7 @@ type appKeyMap struct {
 	GitAll         key.Binding // open the project-wide (all-repos) Git page (Project)
 	RootGit        key.Binding // open the project repo's own Git page (Project)
 	Density        key.Binding // flip the session density shared by roots and standard pickers
+	View           key.Binding // switch the Project tab between list and category tree
 }
 
 // AppKeys is the active custom keymap. Edit a WithKeys list here to rebind; the
@@ -37,4 +38,5 @@ var AppKeys = appKeyMap{
 	RootGit: key.NewBinding(key.WithKeys("ctrl+v"), key.WithHelp("ctrl+v", "root git")),
 	// D, because the router consumes C (core.Keys.Clear) first.
 	Density: components.DefaultDensityKey,
+	View:    key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "tree view")),
 }

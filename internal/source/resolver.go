@@ -109,6 +109,19 @@ func RepoURL(rawURL string) (string, error) {
 	return fmt.Sprintf("https://%s/%s/%s", ref.Host, ref.Owner, ref.Repo), nil
 }
 
+// ShortRepo is a compact label for a repo url: "owner/repo" on GitHub,
+// "host/owner/repo" elsewhere, and the url minus its scheme when it is not a repo url.
+func ShortRepo(rawURL string) string {
+	ref, err := parseRepoURL(rawURL)
+	if err != nil {
+		return strings.TrimPrefix(strings.TrimPrefix(rawURL, "https://"), "http://")
+	}
+	if strings.EqualFold(ref.Host, "github.com") {
+		return ref.Owner + "/" + ref.Repo
+	}
+	return ref.Host + "/" + ref.Owner + "/" + ref.Repo
+}
+
 // vars builds the placeholder set for a vcs rule's URL templates.
 func vars(owner, repo, tag, branch string) map[string]string {
 	return map[string]string{"owner": owner, "repo": repo, "tag": tag, "branch": branch}

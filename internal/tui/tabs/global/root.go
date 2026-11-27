@@ -4,11 +4,12 @@ package global
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/source"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/widgets"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -42,11 +43,9 @@ const globalTitle = "Global Plugins"
 // state).
 var globalSortModes = []appctx.SortMode{appctx.SortAlpha, appctx.SortReverse}
 
-// Node ID prefixes keep a folder and a plugin with the same text apart; folds follow IDs.
-const (
-	folderIDPrefix = "cat:"
-	pluginIDPrefix = "plugin:"
-)
+// pluginIDPrefix starts a plugin leaf's node ID (folders use widgets.CategoryFolderPrefix);
+// folds follow IDs.
+const pluginIDPrefix = "plugin:"
 
 // NewGlobalScreen builds the Global tab. Folders start collapsed; the session's folds live
 // on the Ctx, so they survive the root being rebuilt.
@@ -89,87 +88,29 @@ func globalNodes(mode appctx.SortMode) []components.TreeNode {
 			Name: "(no global plugins yet)", Suffix: "add one via Actions → New Plugin → Global",
 		}}}
 	}
-	root := newFolder("", "")
+	reverse := mode == appctx.SortReverse
+	items := make([]globalItem, 0, len(addons))
 	for _, a := range addons {
-		g := globalItem{name: a.Name, display: a.Display, url: a.URL, path: a.Path, version: a.Version, tag: a.Tag, kind: a.Kind, category: a.Category}
-		f := root
-		for _, seg := range a.CategoryPath() {
-			f = f.child(seg)
-		}
-		f.leaves = append(f.leaves, g)
+		items = append(items, globalItem{name: a.Name, display: a.Display, url: a.URL, path: a.Path, version: a.Version, tag: a.Tag, kind: a.Kind, category: a.Category})
 	}
-	return root.nodes(mode == appctx.SortReverse)
-}
-
-// folder is one category level while building the tree.
-type folder struct {
-	name, id string
-	folders  map[string]*folder
-	leaves   []globalItem
-}
-
-func newFolder(name, id string) *folder {
-	return &folder{name: name, id: id, folders: map[string]*folder{}}
-}
-
-// child returns the named subfolder, creating it.
-func (f *folder) child(name string) *folder {
-	if c, ok := f.folders[name]; ok {
-		return c
-	}
-	id := name
-	if f.id != "" {
-		id = f.id + "/" + name
-	}
-	c := newFolder(name, id)
-	f.folders[name] = c
-	return c
-}
-
-// count is the number of plugins at and below f.
-func (f *folder) count() int {
-	n := len(f.leaves)
-	for _, c := range f.folders {
-		n += c.count()
-	}
-	return n
-}
-
-// nodes renders f's contents: subfolders first, then plugins, each by name (reverse flips).
-func (f *folder) nodes(reverse bool) []components.TreeNode {
-	less := func(a, b string) bool {
-		a, b = strings.ToLower(a), strings.ToLower(b)
+	sort.SliceStable(items, func(i, j int) bool {
+		a, b := strings.ToLower(items[i].label()), strings.ToLower(items[j].label())
 		if reverse {
 			return a > b
 		}
 		return a < b
-	}
-	subs := make([]*folder, 0, len(f.folders))
-	for _, c := range f.folders {
-		subs = append(subs, c)
-	}
-	sort.Slice(subs, func(i, j int) bool { return less(subs[i].name, subs[j].name) })
-	leaves := append([]globalItem(nil), f.leaves...)
-	sort.SliceStable(leaves, func(i, j int) bool { return less(leaves[i].label(), leaves[j].label()) })
-
-	out := make([]components.TreeNode, 0, len(subs)+len(leaves))
-	for _, c := range subs {
-		out = append(out, components.TreeNode{
-			ID:        folderIDPrefix + c.id,
-			Item:      components.CompactItem{Name: c.name, Suffix: strconv.Itoa(c.count())},
-			Children:  c.nodes(reverse),
-			Collapsed: true,
-		})
-	}
-	for _, g := range leaves {
-		out = append(out, components.TreeNode{
-			ID: pluginIDPrefix + g.name,
+	})
+	leaves := make([]widgets.CategoryLeaf, 0, len(items))
+	for _, g := range items {
+		leaves = append(leaves, widgets.CategoryLeaf{
+			ID:       pluginIDPrefix + g.name,
+			Category: g.category,
 			Item: components.CompactItem{
 				Name:   g.label(),
-				Suffix: g.url,
+				Suffix: source.ShortRepo(g.url),
 				Pick:   func(sh *core.Shared) core.Action { return core.Push(newSubmenuScreen(g, sh)) },
 			},
 		})
 	}
-	return out
+	return widgets.CategoryTree(leaves, reverse)
 }
