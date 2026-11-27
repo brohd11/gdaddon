@@ -2,11 +2,13 @@ package global
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/brohd11/gdaddon/internal/addon"
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
+	"github.com/brohd11/gdaddon/internal/tui/flows/setcategory"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
@@ -120,7 +122,7 @@ func TestGlobalTreeEmptyPlaceholder(t *testing.T) {
 }
 
 func TestSetCategoryMovesPluginAndPopsSubmenu(t *testing.T) {
-	seedGlobal(t, map[string]string{"demo": ""})
+	gp := seedGlobal(t, map[string]string{"demo": ""})
 	c := appctx.New(t.TempDir(), "dev")
 	sh := core.NewShared(c)
 	var tm tea.Model = core.NewRouter(sh, []core.TabEntry{{
@@ -133,7 +135,9 @@ func TestSetCategoryMovesPluginAndPopsSubmenu(t *testing.T) {
 	a := c.GlobalAddons[0]
 	g := globalItem{name: a.Name, display: a.Display, url: a.URL, path: a.Path}
 	tm = tuitest.Pump(tm, core.Push(newSubmenuScreen(g, sh)))
-	form := newCategoryForm(g)
+	form := setcategory.New(setcategory.Opts{
+		ManifestPath: gp, Name: g.name, Label: g.label(), Dirty: appctx.GlobalDirty{},
+	})
 	tm = tuitest.Pump(tm, core.Push(form))
 	form.SetValue("category", "tools/ editor")
 	tm = tuitest.Pump(tm, tuitest.KeyMsg("enter"))
@@ -146,5 +150,26 @@ func TestSetCategoryMovesPluginAndPopsSubmenu(t *testing.T) {
 	}
 	if got := rows(root); got != "tools" {
 		t.Fatalf("the plugin should move under a collapsed tools folder, got %s", got)
+	}
+}
+
+func TestImportToProjectLeavesCategoryToTheGlobalList(t *testing.T) {
+	seedGlobal(t, map[string]string{"demo": "tools"})
+	projectDir := t.TempDir()
+	manifest := filepath.Join(projectDir, "addon_manifest.yml")
+	if err := os.WriteFile(manifest, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := appctx.New(projectDir, "dev")
+	sh := core.NewShared(c)
+	a := c.GlobalAddons[0]
+	importToProject(sh, globalItem{name: a.Name, url: a.URL, path: a.Path, category: a.Category})
+
+	data, err := os.ReadFile(c.ManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "url:") || strings.Contains(string(data), "category") {
+		t.Fatalf("import should add the entry without a category override:\n%s", data)
 	}
 }

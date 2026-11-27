@@ -5,12 +5,12 @@ import (
 	"github.com/brohd11/gdaddon/internal/tui/appctx"
 	"github.com/brohd11/gdaddon/internal/tui/flows/editmanifest"
 	pck "github.com/brohd11/gdaddon/internal/tui/flows/packages"
+	"github.com/brohd11/gdaddon/internal/tui/flows/setcategory"
 	"github.com/brohd11/gdaddon/internal/tui/sysopen"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 )
 
@@ -54,7 +54,16 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 	items = append(items, components.Item{
 		Name: "▤ Set Category",
 		Desc: "file this plugin under a folder, e.g. tools/editor",
-		Pick: func(sh *core.Shared) core.Action { return core.Push(newCategoryForm(g)) },
+		Pick: func(sh *core.Shared) core.Action {
+			gp, err := addon.GlobalListPath()
+			if err != nil {
+				return core.StatusErr(err)
+			}
+			return core.Push(setcategory.New(setcategory.Opts{
+				ManifestPath: gp, Name: g.name, Label: g.label(), Current: g.category,
+				Dirty: appctx.GlobalDirty{},
+			}))
+		},
 	})
 	items = append(items, components.Item{
 		Name: "✎ Edit Manifest",
@@ -82,48 +91,12 @@ func newSubmenuScreen(g globalItem, sh *core.Shared) *components.PickerScreen {
 	})
 }
 
-// newCategoryForm edits the entry's category alone. Saving pops the submenu too, as Edit
-// Manifest does: its closures hold the pre-edit entry.
-func newCategoryForm(g globalItem) *components.FormScreen {
-	categoryF := components.NewTextField("category", "Category: ", editmanifest.CategoryPlaceholder)
-	categoryF.SetValue(g.category)
-	return components.NewForm(components.FormOpts{
-		Crumb: "Set Category",
-		Fields: []components.FormField{
-			components.NewHeading("Category for " + g.label()),
-			components.NewSpacer(),
-			categoryF,
-		},
-		Help: []key.Binding{
-			core.Hint("save", core.Keys.Select),
-			core.Hint("cancel", core.Keys.Back),
-		},
-		OnSubmit: func(sh *core.Shared, f *components.FormScreen) core.Action {
-			gp, err := addon.GlobalListPath()
-			if err != nil {
-				return core.StatusErr(err)
-			}
-			category := addon.NormalizeCategory(f.Value("category"))
-			if err := addon.SetCategory(gp, g.name, category); err != nil {
-				return core.SeqErr(err, core.Async(f.Focus("category")))
-			}
-			status := g.label() + ": category cleared"
-			if category != "" {
-				status = g.label() + ": category " + category
-			}
-			return core.Seq(
-				core.SetStatusAndLog(status),
-				core.PropagateAll(appctx.GlobalDirty{}),
-				core.Pop(2),
-			)
-		},
-	})
-}
-
 // importToProject copies the entry into the project manifest, broadcasts ProjectDirty (the
 // project list reloads without switching tabs) and pops back, so several can be imported.
 func importToProject(sh *core.Shared, g globalItem) core.Action {
 	a := g.entry()
+	// The project inherits the global category; a copy would freeze it as an override.
+	a.Category = ""
 	if err := addon.AddEntryFull(appctx.Of(sh).ManifestPath, a); err != nil {
 		return core.SeqErr(err, core.ResetToRoot())
 	}

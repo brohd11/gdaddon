@@ -142,6 +142,10 @@ func depsNeedAttention(statuses []addon.DepStatus) bool {
 	return false
 }
 
+// rowWarns reports whether the row draws a warning marker (addonItem shows none on a
+// never-inspected row); the tree flags folders above such rows.
+func rowWarns(r rowData) bool { return !r.unseen && rowMarker(r) != "" }
+
 // rowMarker combines the row's warnings (update, branch drift, divergence, deps, dirty)
 // into one suffix, e.g. "  ⚠ [behind origin 3]"; empty when all is well. Counts are as
 // fresh as the last fetch.

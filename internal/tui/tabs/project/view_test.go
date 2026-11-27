@@ -131,3 +131,60 @@ func TestProjectViewToggleKeepsSortAndPicks(t *testing.T) {
 		t.Fatalf("back in the list with the sort kept, title %q", list.List().Title)
 	}
 }
+
+func TestProjectCategoryOverride(t *testing.T) {
+	c, _ := viewFixture(t)
+	sh := core.NewShared(c)
+	tree := NewProjectTreeScreen(sh)
+	tree.SetSize(sh, 100, 30)
+
+	// local is not in the global list; hammer's own category beats the global "tools".
+	if err := addon.SetCategory(c.ManifestPath, "local", "mine"); err != nil {
+		t.Fatal(err)
+	}
+	if err := addon.SetCategory(c.ManifestPath, "hammer", "art"); err != nil {
+		t.Fatal(err)
+	}
+	tree.Receive(sh, appctx.ProjectDirty{})
+	if got := treeRows(tree); got != "art,mine,tools,brush" {
+		t.Fatalf("overrides should refile local and hammer; got %s", got)
+	}
+	tree.Tree().Select("cat:art") // the cursor stays on tools across the refresh
+	tree.Update(sh, tuitest.KeyMsg("right"))
+	if got := treeRows(tree); !strings.HasPrefix(got, "art,  hammer,") {
+		t.Fatalf("hammer should sit under its override; got %s", got)
+	}
+
+	// Clearing the override hands hammer back to the global category.
+	if err := addon.SetCategory(c.ManifestPath, "hammer", ""); err != nil {
+		t.Fatal(err)
+	}
+	tree.Receive(sh, appctx.ProjectDirty{})
+	if got := treeRows(tree); got != "mine,tools,brush" {
+		t.Fatalf("a cleared override falls back to the global category; got %s", got)
+	}
+}
+
+func TestProjectTreeFoldersBubbleWarnings(t *testing.T) {
+	c, _ := viewFixture(t)
+	c.GitDirty = map[string]bool{"deep": true}
+	sh := core.NewShared(c)
+	tree := NewProjectTreeScreen(sh)
+	tree.SetSize(sh, 100, 30)
+
+	if got := treeRows(tree); got != "tools  ⚠,brush,local" {
+		t.Fatalf("a folder holding a warning row shows a bare ⚠; got %s", got)
+	}
+	tree.Update(sh, tuitest.KeyMsg("right"))
+	rows := treeRows(tree)
+	if !strings.HasPrefix(rows, "tools  ⚠,  editor  ⚠,  hammer,") {
+		t.Fatalf("every folder above the row is marked, and only those; got %s", rows)
+	}
+
+	c.GitDirty = nil
+	tree.Update(sh, tuitest.KeyMsg(appctx.AppKeys.Sort.Keys()[0])) // any rebuild
+	tree.Update(sh, tuitest.KeyMsg(appctx.AppKeys.Sort.Keys()[0])) // back toward A→Z
+	if got := treeRows(tree); strings.Contains(got, "⚠") {
+		t.Fatalf("the marker should clear with the warning; got %s", got)
+	}
+}

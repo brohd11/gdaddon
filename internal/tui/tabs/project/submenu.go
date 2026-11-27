@@ -10,6 +10,7 @@ import (
 	"github.com/brohd11/gdaddon/internal/tui/flows/editmanifest"
 	"github.com/brohd11/gdaddon/internal/tui/flows/editversion"
 	"github.com/brohd11/gdaddon/internal/tui/flows/packages"
+	"github.com/brohd11/gdaddon/internal/tui/flows/setcategory"
 	"github.com/brohd11/gdaddon/internal/tui/sysopen"
 
 	"github.com/brohd11/bubblestack/components"
@@ -121,8 +122,19 @@ func newSubmenuScreen(st addon.Status, sh *core.Shared) *components.PickerScreen
 		}
 	}
 	items = append(items, components.Item{
+		Name: "▤ Set Category",
+		Desc: "override this plugin's category (blank uses the global one)",
+		Pick: func(sh *core.Shared) core.Action {
+			c := appctx.Of(sh)
+			return core.Push(setcategory.New(setcategory.Opts{
+				ManifestPath: c.ManifestPath, Name: a.Name, Label: a.Label(), Current: a.Category,
+				Inherited: c.GlobalCategory(a.URL), Inherits: true, Dirty: appctx.ProjectDirty{},
+			}))
+		},
+	})
+	items = append(items, components.Item{
 		Name: "✎ Edit Manifest",
-		Desc: "edit this plugin's manifest entry (url, path, version, tag, kind)",
+		Desc: "edit this plugin's manifest entry (url, path, category, version, tag, kind)",
 		Pick: func(sh *core.Shared) core.Action {
 			return core.Push(editmanifest.New(appctx.Of(sh).ManifestPath, a, appctx.ProjectDirty{}, false))
 		},

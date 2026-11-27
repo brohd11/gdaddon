@@ -120,8 +120,8 @@ func writeEntryFields(manifestPath, name, url, path, version, tag string, remove
 
 // AddEntryFull appends an entry from a full Addon (deduplicated by repo, creating the file
 // if needed): url and path, then a name line when it has one, version and tag lines when
-// set, and a kind line for non-package kinds. Every "add a complete entry" path uses it,
-// so they share one shape.
+// set, a kind line for non-package kinds, and a category when set. Every "add a complete
+// entry" path uses it, so they share one shape.
 func AddEntryFull(manifestPath string, a Addon) error {
 	if err := AddEntry(manifestPath, a.Name, a.URL, a.Path); err != nil {
 		return err
@@ -143,6 +143,11 @@ func AddEntryFull(manifestPath string, a Addon) error {
 	}
 	if a.Lock {
 		if err := SetLock(manifestPath, a.Name, true); err != nil {
+			return err
+		}
+	}
+	if NormalizeCategory(a.Category) != "" {
+		if err := SetCategory(manifestPath, a.Name, a.Category); err != nil {
 			return err
 		}
 	}

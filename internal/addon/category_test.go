@@ -73,3 +73,24 @@ func TestSetCategoryRoundTrip(t *testing.T) {
 		t.Fatalf("other entry gained a category %q", got)
 	}
 }
+
+func TestAddEntryFullWritesCategory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "addon_manifest.yml")
+	if err := AddEntryFull(path, Addon{Name: "demo", URL: "https://github.com/o/demo", Path: "addons/demo", Category: " tools//editor "}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddEntryFull(path, Addon{Name: "plain", URL: "https://github.com/o/plain", Path: "addons/plain"}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, e := range entries {
+		got[e.Name] = e.Category
+	}
+	if got["demo"] != "tools/editor" || got["plain"] != "" {
+		t.Fatalf("categories after AddEntryFull = %v", got)
+	}
+}

@@ -56,13 +56,18 @@ func TestProjectEditRefreshesMemoryAndDropsStaleSubmenu(t *testing.T) {
 		New:   func(sh *core.Shared) core.Screen { return projecttab.NewProjectScreen(sh) },
 	}})
 	root := r.Top()
-	r = submitEdit(t, r, editmanifest.New(manifestPath, c.ProjectAddons[0], appctx.ProjectDirty{}, false), "https://github.com/owner/new")
+	form := editmanifest.New(manifestPath, c.ProjectAddons[0], appctx.ProjectDirty{}, false)
+	form.SetValue("category", "local/ override")
+	r = submitEdit(t, r, form, "https://github.com/owner/new")
 
 	if r.Top() != root {
 		t.Fatalf("successful edit should return to refreshed project root, got %T", r.Top())
 	}
 	if got := c.ProjectAddons[0].URL; got != "https://github.com/owner/new" {
 		t.Fatalf("project cache was not refreshed after edit: got %q", got)
+	}
+	if got := c.ProjectAddons[0].Category; got != "local/override" {
+		t.Fatalf("a project edit should write the category override, got %q", got)
 	}
 }
 

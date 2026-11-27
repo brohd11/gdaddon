@@ -26,6 +26,7 @@ type projectState struct {
 	order  []string
 	rows   map[string]list.Item
 	shown  map[string]bool
+	warn   map[string]bool // rows drawing a ⚠ marker; the tree flags their folders
 }
 
 // NewProjectRoot builds the Project tab in the session's view: the list, or the category
@@ -239,10 +240,12 @@ func (s *projectState) rebuildItems(sh *core.Shared) []list.Item {
 	s.order = make([]string, 0, len(rows))
 	s.rows = make(map[string]list.Item, len(rows))
 	s.shown = make(map[string]bool, len(rows))
+	s.warn = make(map[string]bool, len(rows))
 	for _, row := range rows {
 		name := row.s.Addon.Name
 		s.order = append(s.order, name)
 		s.rows[name] = addonItem(row)
+		s.warn[name] = rowWarns(row)
 	}
 	for _, row := range visibleRows(rows, s.sort) {
 		s.shown[row.s.Addon.Name] = true
@@ -276,11 +279,12 @@ func (s *projectState) treeNodes(sh *core.Shared) []components.TreeNode {
 		}
 		category := ""
 		if status, ok := c.ProjectStatus(name); ok {
-			category = c.GlobalCategory(status.Addon.URL)
+			category = c.CategoryFor(status.Addon)
 		}
 		leaves = append(leaves, widgets.CategoryLeaf{
 			ID:       projectLeafPrefix + name,
 			Category: category,
+			Warn:     s.warn[name],
 			Item: components.CompactItem{
 				Name: item.Name, Suffix: item.Desc, Pending: item.Pending, Pick: item.Pick, Keys: item.Keys,
 			},
@@ -308,6 +312,10 @@ func (s *projectState) publish(sh *core.Shared) {
 		if status, ok := c.ProjectStatus(name); ok {
 			row := rowFor(c, status)
 			s.rows[name] = addonItem(row)
+			if s.warn == nil {
+				s.warn = make(map[string]bool)
+			}
+			s.warn[name] = rowWarns(row)
 			s.shown[name] = s.sort != appctx.SortStatusInstalled || row.s.Present() || row.unseen
 		}
 	}

@@ -1,22 +1,21 @@
 // Package editmanifest is the Edit Manifest flow: a form of an entry's raw fields (name,
-// url, path, version, tag, kind; category in global mode) written back to any flat
+// url, path, category; version, tag and kind outside global mode) written back to any flat
 // manifest (project, global list, or set). Blanking a field removes it (addon.EditEntry);
-// kind and category are written with addon.SetKind and addon.SetCategory.
+// kind and category are written with addon.SetKind and addon.SetCategory. A project or set
+// entry's category overrides the global one, so blank there means "use the global one".
 package editmanifest
 
 import (
 	"strings"
 
 	"github.com/brohd11/gdaddon/internal/addon"
+	"github.com/brohd11/gdaddon/internal/tui/flows/setcategory"
 
 	"github.com/brohd11/bubblestack/components"
 	"github.com/brohd11/bubblestack/core"
 
 	"charm.land/bubbles/v2/key"
 )
-
-// CategoryPlaceholder is the hint on every category input.
-const CategoryPlaceholder = "e.g. tools/editor (blank to clear)"
 
 // New builds the Edit Manifest form for entry a. dirty is broadcast on save so the owning
 // tab reloads. The key is read-only (it is the entry's identity); the name is the editable
@@ -42,13 +41,15 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 		core.Hint("cancel", core.Keys.Back),
 	}
 
+	placeholder := setcategory.PlaceholderInherit("")
+	if globalMode {
+		placeholder = setcategory.PlaceholderClear
+	}
+	fields = append(fields, setcategory.Field(a.Category, placeholder))
+
 	var versionF, tagF *components.TextField
 	var kindF *components.ToggleField
-	if globalMode {
-		categoryF := components.NewTextField("category", "Category: ", CategoryPlaceholder)
-		categoryF.SetValue(a.Category)
-		fields = append(fields, categoryF)
-	} else {
+	if !globalMode {
 		versionF = components.NewTextField("version", "Version:  ", "(blank to clear)")
 		tagF = components.NewTextField("tag", "Tag:      ", "(blank to clear)")
 		versionF.SetValue(a.Version)
@@ -83,11 +84,10 @@ func New(manifestPath string, a addon.Addon, dirty any, globalMode bool) *compon
 			if err := addon.SetDisplayName(manifestPath, a.Name, display); err != nil {
 				return core.SeqErr(err, core.Async(f.Focus("name")))
 			}
-			if globalMode {
-				if err := addon.SetCategory(manifestPath, a.Name, f.Value("category")); err != nil {
-					return core.SeqErr(err, core.Async(f.Focus("category")))
-				}
-			} else {
+			if err := addon.SetCategory(manifestPath, a.Name, f.Value("category")); err != nil {
+				return core.SeqErr(err, core.Async(f.Focus("category")))
+			}
+			if !globalMode {
 				if err := addon.SetKind(manifestPath, a.Name, addon.ParseKind(kindF.Value())); err != nil {
 					return core.SeqErr(err, core.Async(f.Focus("url")))
 				}

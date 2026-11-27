@@ -57,3 +57,26 @@ func TestCategoryTree(t *testing.T) {
 		t.Fatalf("reverse should flip folders only, got %v", got)
 	}
 }
+
+func TestCategoryTreeBubblesWarnings(t *testing.T) {
+	nodes := CategoryTree([]CategoryLeaf{
+		{ID: "deep", Category: "tools/editor", Warn: true, Item: components.CompactItem{Name: "deep  ⚠ [update]"}},
+		{ID: "fine", Category: "tools", Item: components.CompactItem{Name: "fine"}},
+		{ID: "calm", Category: "art", Item: components.CompactItem{Name: "calm"}},
+		{ID: "top", Warn: true, Item: components.CompactItem{Name: "top  ⚠ [update]"}},
+	}, false)
+	art, tools := nodes[0], nodes[1]
+	if art.Item.Title() != "art" {
+		t.Fatalf("a folder with no warnings stays plain, got %q", art.Item.Title())
+	}
+	if tools.Item.Title() != "tools  ⚠" || tools.Item.SuffixText() != "2" {
+		t.Fatalf("tools should carry a bare ⚠ and keep its count, got %q / %q", tools.Item.Title(), tools.Item.SuffixText())
+	}
+	editor := tools.Children[0]
+	if editor.Item.Title() != "editor  ⚠" {
+		t.Fatalf("every ancestor of a warning leaf is marked, got %q", editor.Item.Title())
+	}
+	if got := editor.Children[0].Item.Title(); got != "deep  ⚠ [update]" {
+		t.Fatalf("the leaf keeps its own text, got %q", got)
+	}
+}

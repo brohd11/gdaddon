@@ -153,6 +153,15 @@ func (c *Ctx) loadGlobal() {
 	c.globalCategories = nil // rebuilt from GlobalAddons on the next GlobalCategory
 }
 
+// CategoryFor is a project entry's effective category: its own (an override) when set,
+// else its global entry's.
+func (c *Ctx) CategoryFor(a addon.Addon) string {
+	if own := addon.NormalizeCategory(a.Category); own != "" {
+		return own
+	}
+	return c.GlobalCategory(a.URL)
+}
+
 // GlobalCategory is the category of the global entry for url's repo (matched by
 // source.RepoID, so url forms differ freely), or "" when it has none or isn't global.
 // Categories are set only in the global list; the Project tree reads them here.

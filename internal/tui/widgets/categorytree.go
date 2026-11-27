@@ -15,6 +15,9 @@ type CategoryLeaf struct {
 	ID       string // stable node ID; folds follow it
 	Category string // slash path ("tools/editor"); "" is the top level
 	Item     components.CompactItem
+	// Warn marks a leaf with a warning; every folder above it shows a bare ⚠ so the
+	// warning stays visible while folded.
+	Warn bool
 }
 
 // CategoryFolderPrefix starts every folder node's ID, keeping folders apart from leaves.
@@ -23,7 +26,7 @@ const CategoryFolderPrefix = "cat:"
 // CategoryTree files leaves into nested folders, one per category segment. Leaves keep the
 // given order inside each folder, so callers sort first; folders sort by name (reverse
 // flips) and come before leaves at every level. Folders start collapsed and show their
-// plugin count.
+// plugin count, plus a bare ⚠ when a Warn leaf sits anywhere beneath them.
 func CategoryTree(leaves []CategoryLeaf, reverse bool) []components.TreeNode {
 	root := newCategoryFolder("", "")
 	for _, l := range leaves {
@@ -62,6 +65,21 @@ func (f *categoryFolder) child(name string) *categoryFolder {
 	return c
 }
 
+// warns reports whether any leaf at or below f is marked Warn.
+func (f *categoryFolder) warns() bool {
+	for _, l := range f.leaves {
+		if l.Warn {
+			return true
+		}
+	}
+	for _, c := range f.folders {
+		if c.warns() {
+			return true
+		}
+	}
+	return false
+}
+
 // count is the number of leaves at and below f.
 func (f *categoryFolder) count() int {
 	n := len(f.leaves)
@@ -85,9 +103,13 @@ func (f *categoryFolder) nodes(reverse bool) []components.TreeNode {
 	})
 	out := make([]components.TreeNode, 0, len(subs)+len(f.leaves))
 	for _, c := range subs {
+		name := c.name
+		if c.warns() {
+			name += "  ⚠"
+		}
 		out = append(out, components.TreeNode{
 			ID:        CategoryFolderPrefix + c.path,
-			Item:      components.CompactItem{Name: c.name, Suffix: strconv.Itoa(c.count())},
+			Item:      components.CompactItem{Name: name, Suffix: strconv.Itoa(c.count())},
 			Children:  c.nodes(reverse),
 			Collapsed: true,
 		})

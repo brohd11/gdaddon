@@ -84,6 +84,7 @@ MyAddon:
     tag: "v1.2.3"                            # the release tag it was installed from
     # kind: clone                            # optional; a live git checkout (clone/submodule)
     # commit: "abc1234…"                     # optional; a branch package pinned to this HEAD sha
+    # category: "tools/editor"               # optional; Project tree folder, overrides the global one
 ```
 
 - **`url`** — where the package comes from. A release/raw `.zip` url downloads and
@@ -344,13 +345,17 @@ git-committable, so you can sync your library across machines.
   the submenu's **Set Category**, or the Category field in **Edit Manifest**) and the Global
   tab files it under nested folders, one per `/` segment. Folders start collapsed;
   `enter`/`→` open them, `←` closes, and `/` filters across closed folders. Folds are kept
-  for the session. Plugins without a category sit at the top level, after the folders. The
-  category lives only in the global list: importing to a project doesn't copy it.
+  for the session. Plugins without a category sit at the top level, after the folders.
+  Importing to a project doesn't copy the category; the project reads it from here.
 - **Project tree view**: press `b` on the Project tab to switch it between the list and
   the same folder tree. Each project addon takes the category of its global entry
-  (matched by repo, whatever form the url takes); addons not in the global list sit at
-  the top level. The sort mode carries across the switch and orders the addons inside
-  each folder. The view lasts for the session; gdaddon always opens in the list.
+  (matched by repo, whatever form the url takes). A `category:` line on the project entry
+  overrides it — set one with the project submenu's **Set Category** or **Edit Manifest**,
+  including for addons that aren't in the global list. Clearing the override falls back to
+  the global category; addons with neither sit at the top level. **Export to Global**
+  carries an override into the new global entry, and set entries can carry one too. The
+  sort mode carries across the switch and orders the addons inside each folder. The view
+  lasts for the session; gdaddon always opens in the list.
 
 This makes it easy to add commonly used plugins, one by one. For multiple, however...
 
